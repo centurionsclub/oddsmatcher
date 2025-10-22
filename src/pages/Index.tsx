@@ -332,7 +332,7 @@ const Index = () => {
 
               {/* Row 8: Partita */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Partita
                 </Label>
                 <Input 
@@ -344,7 +344,7 @@ const Index = () => {
 
               {/* Row 9: Campionato */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Campionato
                 </Label>
                 <Select>
@@ -360,28 +360,23 @@ const Index = () => {
               </div>
 
               {/* Row 10: Date */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
-                    Da data
-                  </Label>
-                  <Input 
-                    type="text" 
-                    placeholder="gg/mm/aaaa"
-                    className="h-9 flex-1 max-w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
-                  />
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[100px]">
-                    A data
-                  </Label>
-                  <Input 
-                    type="text" 
-                    placeholder="gg/mm/aaaa"
-                    className="h-9 flex-1 max-w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
-                  />
-                </div>
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                  Da data
+                </Label>
+                <Input 
+                  type="text" 
+                  placeholder="gg/mm/aaaa"
+                  className="h-9 w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
+                />
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                  A data
+                </Label>
+                <Input 
+                  type="text" 
+                  placeholder="gg/mm/aaaa"
+                  className="h-9 w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
+                />
               </div>
             </>
           ) : activeTab === "multipla" ? (
