@@ -499,7 +499,7 @@ const Index = () => {
                   <Trophy className="h-4 w-4" />
                   Sport
                 </div>
-                <Select defaultValue="tutti">
+                <Select value={multiplaFilters.sport} onValueChange={(value) => setMultiplaFilters({...multiplaFilters, sport: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -518,7 +518,7 @@ const Index = () => {
                   <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
-                <Select defaultValue="tutti">
+                <Select value={multiplaFilters.mercato} onValueChange={(value) => setMultiplaFilters({...multiplaFilters, mercato: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -553,7 +553,7 @@ const Index = () => {
                   <Building2 className="h-4 w-4" />
                   Bookmaker
                 </div>
-                <Select defaultValue="tutti">
+                <Select value={multiplaFilters.bookmaker} onValueChange={(value) => setMultiplaFilters({...multiplaFilters, bookmaker: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -586,7 +586,7 @@ const Index = () => {
                   <ArrowLeftRight className="h-4 w-4" />
                   Exchange
                 </div>
-                <Select defaultValue="tutti">
+                <Select value={multiplaFilters.exchange} onValueChange={(value) => setMultiplaFilters({...multiplaFilters, exchange: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 w-[200px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -634,7 +634,12 @@ const Index = () => {
                   </SelectContent>
                 </Select>
                 <div className="flex items-center gap-2 ml-4">
-                  <Checkbox id="filtro-liquidita" className="border-gray-400" />
+                  <Checkbox 
+                    id="filtro-liquidita" 
+                    className="border-gray-400"
+                    checked={multiplaFilters.filtroLiquidita}
+                    onCheckedChange={(checked) => setMultiplaFilters({...multiplaFilters, filtroLiquidita: !!checked})}
+                  />
                   <label htmlFor="filtro-liquidita" className="text-sm text-gray-600 cursor-pointer">
                     Filtro Liquidità
                   </label>
@@ -649,11 +654,17 @@ const Index = () => {
                 </div>
                 <Input 
                   type="text" 
-                  defaultValue="0 €" 
+                  value={multiplaFilters.stakeMultipla}
+                  onChange={(e) => setMultiplaFilters({...multiplaFilters, stakeMultipla: e.target.value})}
                   className="h-9 w-[100px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
-                  <Checkbox id="freebet-multi" className="border-gray-400" />
+                  <Checkbox 
+                    id="freebet-multi" 
+                    className="border-gray-400"
+                    checked={multiplaFilters.freebet}
+                    onCheckedChange={(checked) => setMultiplaFilters({...multiplaFilters, freebet: !!checked})}
+                  />
                   <label htmlFor="freebet-multi" className="text-sm text-gray-600 cursor-pointer">
                     Free Bet
                   </label>
@@ -668,11 +679,17 @@ const Index = () => {
                 </div>
                 <Input 
                   type="text" 
-                  defaultValue="0 €" 
+                  value={multiplaFilters.bonus}
+                  onChange={(e) => setMultiplaFilters({...multiplaFilters, bonus: e.target.value})}
                   className="h-9 w-[100px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
-                  <Checkbox id="rimborso-multi" className="border-gray-400" />
+                  <Checkbox 
+                    id="rimborso-multi" 
+                    className="border-gray-400"
+                    checked={multiplaFilters.rimborso}
+                    onCheckedChange={(checked) => setMultiplaFilters({...multiplaFilters, rimborso: !!checked})}
+                  />
                   <label htmlFor="rimborso-multi" className="text-sm text-gray-600 cursor-pointer">
                     Rimborso
                   </label>
@@ -690,7 +707,8 @@ const Index = () => {
                 <div className="relative w-[80px]">
                   <Input
                     type="text"
-                    defaultValue="0,00"
+                    value={multiplaFilters.quotaMinimaMultipla}
+                    onChange={(e) => setMultiplaFilters({...multiplaFilters, quotaMinimaMultipla: e.target.value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -707,7 +725,8 @@ const Index = () => {
                 </Label>
                 <Input
                   type="text"
-                  defaultValue="0"
+                  value={multiplaFilters.nEventi}
+                  onChange={(e) => setMultiplaFilters({...multiplaFilters, nEventi: e.target.value})}
                   className="h-9 w-[80px] bg-white border-gray-300"
                 />
               </div>
@@ -723,7 +742,8 @@ const Index = () => {
                 <div className="relative w-[80px]">
                   <Input
                     type="text"
-                    defaultValue="0,00"
+                    value={multiplaFilters.quotaPartitaMinima}
+                    onChange={(e) => setMultiplaFilters({...multiplaFilters, quotaPartitaMinima: e.target.value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -741,7 +761,8 @@ const Index = () => {
                 <div className="relative w-[80px]">
                   <Input
                     type="text"
-                    defaultValue="0,00"
+                    value={multiplaFilters.quotaPartitaMassima}
+                    onChange={(e) => setMultiplaFilters({...multiplaFilters, quotaPartitaMassima: e.target.value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -762,7 +783,9 @@ const Index = () => {
                 </div>
                 <Input 
                   type="text" 
-                  placeholder="Cerca per nome..." 
+                  placeholder="Cerca per nome..."
+                  value={multiplaFilters.partita}
+                  onChange={(e) => setMultiplaFilters({...multiplaFilters, partita: e.target.value})}
                   className="h-9 flex-1 max-w-[300px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
@@ -772,7 +795,7 @@ const Index = () => {
                 <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Campionato
                 </div>
-                <Select>
+                <Select value={multiplaFilters.campionato} onValueChange={(value) => setMultiplaFilters({...multiplaFilters, campionato: value})}>
                   <SelectTrigger className="h-9 flex-1 max-w-[300px] bg-white border-gray-300">
                     <SelectValue placeholder="Cerca Campionato..." />
                   </SelectTrigger>
@@ -792,6 +815,8 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="gg/mm/aaaa"
+                  value={multiplaFilters.daData}
+                  onChange={(e) => setMultiplaFilters({...multiplaFilters, daData: e.target.value})}
                   className="h-9 w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
                 <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
@@ -800,6 +825,8 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="gg/mm/aaaa"
+                  value={multiplaFilters.aData}
+                  onChange={(e) => setMultiplaFilters({...multiplaFilters, aData: e.target.value})}
                   className="h-9 w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
