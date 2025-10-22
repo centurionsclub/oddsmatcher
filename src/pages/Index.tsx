@@ -117,9 +117,9 @@ const Index = () => {
           {/* Row 2: Bookmaker & Exchange */}
           <div className="grid grid-cols-2 gap-4">
             <div className="flex items-center gap-3">
-              <Label className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap min-w-[80px] text-center">
+              <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap min-w-[80px] flex items-center justify-center">
                 Bookmaker
-              </Label>
+              </div>
               <Select defaultValue="tutti">
                 <SelectTrigger className="h-9 bg-white border-gray-300">
                   <SelectValue />
@@ -133,9 +133,9 @@ const Index = () => {
             </div>
 
             <div className="flex items-center gap-3">
-              <Label className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap min-w-[80px] text-center">
+              <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap min-w-[80px] flex items-center justify-center">
                 Exchange
-              </Label>
+              </div>
               <Select defaultValue="tutti">
                 <SelectTrigger className="h-9 bg-white border-gray-300">
                   <SelectValue />
@@ -169,9 +169,9 @@ const Index = () => {
 
           {/* Row 4: Bonus */}
           <div className="flex items-center gap-3">
-            <Label className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap min-w-[100px] text-center">
+            <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap min-w-[100px] flex items-center justify-center">
               Bonus
-            </Label>
+            </div>
             <Input 
               type="text" 
               defaultValue="0 €" 
