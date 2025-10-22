@@ -174,8 +174,8 @@ const Index = () => {
                 </SelectTrigger>
                 <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
                   <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
-                  <SelectItem value="betfair">Betfair Exchange - 4,50%</SelectItem>
-                  <SelectItem value="betflag">BetFlag Exchange - 5,00%</SelectItem>
+                  <SelectItem value="betfair">Betfair Exchange</SelectItem>
+                  <SelectItem value="betflag">BetFlag Exchange</SelectItem>
                   <div className="px-2 py-1.5 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
                     Bookmakers
                   </div>
@@ -197,6 +197,31 @@ const Index = () => {
                   <SelectItem value="williamhill">William Hill</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          {/* Row 2b: Exchange Commissions */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center gap-3">
+              <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                Comm. Betfair
+              </Label>
+              <Input 
+                type="text" 
+                defaultValue="4,50 %" 
+                className="h-9 w-32 bg-white border-gray-300"
+              />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                Comm. BetFlag
+              </Label>
+              <Input 
+                type="text" 
+                defaultValue="5,00 %" 
+                className="h-9 w-32 bg-white border-gray-300"
+              />
             </div>
           </div>
 
