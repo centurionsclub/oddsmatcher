@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/ui/decimal-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -630,10 +631,9 @@ const Index = () => {
                   Quota Minima
                 </div>
                 <div className="relative w-[100px]">
-                  <Input
-                    type="text"
+                  <DecimalInput
                     value={singolaFilters.quotaMinima}
-                    onChange={(e) => setSingolaFilters({...singolaFilters, quotaMinima: e.target.value})}
+                    onChange={(value) => setSingolaFilters({...singolaFilters, quotaMinima: value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -649,10 +649,9 @@ const Index = () => {
                   Quota Massima
                 </Label>
                 <div className="relative w-[100px]">
-                  <Input
-                    type="text"
+                  <DecimalInput
                     value={singolaFilters.quotaMassima}
-                    onChange={(e) => setSingolaFilters({...singolaFilters, quotaMassima: e.target.value})}
+                    onChange={(value) => setSingolaFilters({...singolaFilters, quotaMassima: value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -935,10 +934,9 @@ const Index = () => {
                   Multipla
                 </Label>
                 <div className="relative w-[80px]">
-                  <Input
-                    type="text"
+                  <DecimalInput
                     value={multiplaFilters.quotaMinimaMultipla}
-                    onChange={(e) => setMultiplaFilters({...multiplaFilters, quotaMinimaMultipla: e.target.value})}
+                    onChange={(value) => setMultiplaFilters({...multiplaFilters, quotaMinimaMultipla: value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -970,10 +968,9 @@ const Index = () => {
                   Minima
                 </Label>
                 <div className="relative w-[80px]">
-                  <Input
-                    type="text"
+                  <DecimalInput
                     value={multiplaFilters.quotaPartitaMinima}
-                    onChange={(e) => setMultiplaFilters({...multiplaFilters, quotaPartitaMinima: e.target.value})}
+                    onChange={(value) => setMultiplaFilters({...multiplaFilters, quotaPartitaMinima: value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -989,10 +986,9 @@ const Index = () => {
                   Massima
                 </Label>
                 <div className="relative w-[80px]">
-                  <Input
-                    type="text"
+                  <DecimalInput
                     value={multiplaFilters.quotaPartitaMassima}
-                    onChange={(e) => setMultiplaFilters({...multiplaFilters, quotaPartitaMassima: e.target.value})}
+                    onChange={(value) => setMultiplaFilters({...multiplaFilters, quotaPartitaMassima: value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -1212,10 +1208,9 @@ const Index = () => {
                   Minima
                 </Label>
                 <div className="relative w-[100px]">
-                  <Input
-                    type="text"
+                  <DecimalInput
                     value={trevieFilters.quotaMinima}
-                    onChange={(e) => setTrevieFilters({...trevieFilters, quotaMinima: e.target.value})}
+                    onChange={(value) => setTrevieFilters({...trevieFilters, quotaMinima: value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -1231,10 +1226,9 @@ const Index = () => {
                   Massima
                 </Label>
                 <div className="relative w-[100px]">
-                  <Input
-                    type="text"
+                  <DecimalInput
                     value={trevieFilters.quotaMassima}
-                    onChange={(e) => setTrevieFilters({...trevieFilters, quotaMassima: e.target.value})}
+                    onChange={(value) => setTrevieFilters({...trevieFilters, quotaMassima: value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
