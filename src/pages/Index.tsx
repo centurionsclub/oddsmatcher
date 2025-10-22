@@ -531,8 +531,8 @@ const Index = () => {
 
               {/* Row 5: Stake Multipla */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-1.5">
-                  <Coins className="h-3.5 w-3.5" />
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Coins size={16} className="text-gray-700" />
                   Stake Multipla
                 </div>
                 <Input 
