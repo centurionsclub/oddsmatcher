@@ -624,7 +624,7 @@ const Index = () => {
                     </button>
                   </div>
                 </div>
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded ml-6">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Massima
                 </Label>
                 <div className="relative w-[80px]">
