@@ -14,7 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      saved_filters: {
+        Row: {
+          created_at: string
+          filter_data: Json
+          id: string
+          name: string
+          tab_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          filter_data: Json
+          id?: string
+          name: string
+          tab_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          filter_data?: Json
+          id?: string
+          name?: string
+          tab_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
