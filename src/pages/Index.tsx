@@ -13,6 +13,102 @@ const Index = () => {
   const [betflagCommission, setBetflagCommission] = useState("5,00%");
   const { toast } = useToast();
 
+  // Stati per SINGOLA
+  const [singolaFilters, setSingolaFilters] = useState({
+    sport: "tutti",
+    mercato: "tutti",
+    bookmaker: "tutti",
+    exchange: "tutti",
+    stakePunta: "0 €",
+    bonus: "0 €",
+    quotaMinima: "0,00",
+    quotaMassima: "0,00",
+    partita: "",
+    campionato: "",
+    daData: "",
+    aData: "",
+    freebet: false,
+    rimborso: false,
+  });
+
+  // Stati per MULTIPLA
+  const [multiplaFilters, setMultiplaFilters] = useState({
+    sport: "tutti",
+    mercato: "tutti",
+    bookmaker: "tutti",
+    exchange: "tutti",
+    stakeMultipla: "0 €",
+    bonus: "0 €",
+    quotaMinimaMultipla: "0,00",
+    nEventi: "0",
+    quotaPartitaMinima: "0,00",
+    quotaPartitaMassima: "0,00",
+    partita: "",
+    campionato: "",
+    daData: "",
+    aData: "",
+    freebet: false,
+    rimborso: false,
+    filtroLiquidita: false,
+  });
+
+  // Stati per BEST ODDS
+  const [bestOddsFilters, setBestOddsFilters] = useState({
+    mercato: "nessuno",
+    partita: "",
+  });
+
+  const handlePulisci = () => {
+    if (activeTab === "singola") {
+      setSingolaFilters({
+        sport: "tutti",
+        mercato: "tutti",
+        bookmaker: "tutti",
+        exchange: "tutti",
+        stakePunta: "0 €",
+        bonus: "0 €",
+        quotaMinima: "0,00",
+        quotaMassima: "0,00",
+        partita: "",
+        campionato: "",
+        daData: "",
+        aData: "",
+        freebet: false,
+        rimborso: false,
+      });
+    } else if (activeTab === "multipla") {
+      setMultiplaFilters({
+        sport: "tutti",
+        mercato: "tutti",
+        bookmaker: "tutti",
+        exchange: "tutti",
+        stakeMultipla: "0 €",
+        bonus: "0 €",
+        quotaMinimaMultipla: "0,00",
+        nEventi: "0",
+        quotaPartitaMinima: "0,00",
+        quotaPartitaMassima: "0,00",
+        partita: "",
+        campionato: "",
+        daData: "",
+        aData: "",
+        freebet: false,
+        rimborso: false,
+        filtroLiquidita: false,
+      });
+    } else if (activeTab === "bestodds") {
+      setBestOddsFilters({
+        mercato: "nessuno",
+        partita: "",
+      });
+    }
+    
+    toast({
+      description: "Filtri resettati",
+      duration: 2000,
+    });
+  };
+
   useEffect(() => {
     const savedBetfair = localStorage.getItem("betfairCommission");
     const savedBetflag = localStorage.getItem("betflagCommission");
@@ -78,6 +174,7 @@ const Index = () => {
           <Button 
             size="sm" 
             className="gap-2 bg-[#DC3545] hover:bg-[#C82333] text-white text-sm font-medium"
+            onClick={handlePulisci}
           >
             PULISCI <Trash2 className="h-3.5 w-3.5" />
           </Button>
