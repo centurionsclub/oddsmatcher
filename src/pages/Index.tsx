@@ -296,6 +296,44 @@ const Index = () => {
     { id: "surebet", label: "SURE BET" }
   ];
 
+  // Helper per formattare i valori selezionati
+  const formatSportValue = (value: string) => {
+    const labels: Record<string, string> = {
+      tutti: "Sport: Tutti",
+      calcio: "Sport: ⚽ Calcio",
+      tennis: "Sport: 🎾 Tennis",
+      basket: "Sport: 🏀 Basket"
+    };
+    return labels[value] || `Sport: ${value}`;
+  };
+
+  const formatMercatoValue = (value: string) => {
+    const labels: Record<string, string> = {
+      tutti: "Mercato: Tutti",
+      nessuno: "Mercato: Nessuno",
+      "1": "Mercato: ⚽ 1",
+      "2": "Mercato: ⚽ 2",
+      "x": "Mercato: ⚽ X",
+      goal: "Mercato: ⚽ Goal",
+      nogoal: "Mercato: ⚽ No Goal",
+      under05: "Mercato: ⚽ Under 0.5",
+      over05: "Mercato: ⚽ Over 0.5",
+      under15: "Mercato: ⚽ Under 1.5",
+      over15: "Mercato: ⚽ Over 1.5",
+      under25: "Mercato: ⚽ Under 2.5",
+      over25: "Mercato: ⚽ Over 2.5",
+      under35: "Mercato: ⚽ Under 3.5",
+      over35: "Mercato: ⚽ Over 3.5",
+      under45: "Mercato: ⚽ Under 4.5",
+      over45: "Mercato: ⚽ Over 4.5",
+      "1-tennis": "Mercato: 🎾 1",
+      "2-tennis": "Mercato: 🎾 2",
+      "1-basket": "Mercato: 🏀 1",
+      "2-basket": "Mercato: 🏀 2"
+    };
+    return labels[value] || `Mercato: ${value}`;
+  };
+
   return (
     <div className="min-h-screen bg-[#F5F5F5]">
       {/* Header */}
@@ -445,7 +483,9 @@ const Index = () => {
                 </div>
                 <Select value={singolaFilters.sport} onValueChange={(value) => setSingolaFilters({...singolaFilters, sport: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
-                    <SelectValue />
+                    <SelectValue>
+                      {formatSportValue(singolaFilters.sport)}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white">
                     <SelectItem value="tutti">Tutti</SelectItem>
@@ -464,7 +504,9 @@ const Index = () => {
                 </div>
                 <Select value={singolaFilters.mercato} onValueChange={(value) => setSingolaFilters({...singolaFilters, mercato: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
-                    <SelectValue />
+                    <SelectValue>
+                      {formatMercatoValue(singolaFilters.mercato)}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
                     <SelectItem value="tutti">Tutti</SelectItem>
@@ -692,7 +734,9 @@ const Index = () => {
                 </div>
                 <Select value={multiplaFilters.sport} onValueChange={(value) => setMultiplaFilters({...multiplaFilters, sport: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
-                    <SelectValue />
+                    <SelectValue>
+                      {formatSportValue(multiplaFilters.sport)}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white">
                     <SelectItem value="tutti">Tutti</SelectItem>
@@ -711,7 +755,9 @@ const Index = () => {
                 </div>
                 <Select value={multiplaFilters.mercato} onValueChange={(value) => setMultiplaFilters({...multiplaFilters, mercato: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
-                    <SelectValue />
+                    <SelectValue>
+                      {formatMercatoValue(multiplaFilters.mercato)}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
                     <SelectItem value="tutti">Tutti</SelectItem>
@@ -1225,7 +1271,9 @@ const Index = () => {
                 </div>
                 <Select value={bestOddsFilters.mercato} onValueChange={(value) => setBestOddsFilters({...bestOddsFilters, mercato: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
-                    <SelectValue />
+                    <SelectValue>
+                      {formatMercatoValue(bestOddsFilters.mercato)}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
                     <SelectItem value="nessuno">Nessuno</SelectItem>
