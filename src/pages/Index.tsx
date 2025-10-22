@@ -537,9 +537,9 @@ const Index = () => {
 
               {/* Row 5: Stake Multipla */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Stake Multipla
-                </Label>
+                </div>
                 <Input 
                   type="text" 
                   defaultValue="0 €" 
