@@ -683,7 +683,7 @@ const Index = () => {
                   placeholder="gg/mm/aaaa"
                   className="h-9 w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded ml-6">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   A data
                 </Label>
                 <Input 
