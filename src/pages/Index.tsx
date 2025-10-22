@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Wallet, Save, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import logoCenturion from "@/assets/logo_centurion.png";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("singola");
@@ -310,10 +311,13 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-secondary py-3 shadow-md">
-        <h1 className="text-[26px] font-bold text-foreground text-center tracking-wider">
-          ODDSMATCHER
-        </h1>
+      <header className="bg-[#243b55] py-3 shadow-md">
+        <div className="flex items-center justify-center gap-4">
+          <img src={logoCenturion} alt="Centurion Club" className="h-12 w-auto" />
+          <h1 className="text-[26px] font-bold text-foreground tracking-wider">
+            ODDSMATCHER
+          </h1>
+        </div>
       </header>
 
       {/* Main Container */}
