@@ -1126,7 +1126,7 @@ const Index = () => {
                   <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
-                <Select defaultValue="nessuno">
+                <Select value={bestOddsFilters.mercato} onValueChange={(value) => setBestOddsFilters({...bestOddsFilters, mercato: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -1162,7 +1162,9 @@ const Index = () => {
                 </div>
                 <Input 
                   type="text" 
-                  placeholder="Cerca per nome..." 
+                  placeholder="Cerca per nome..."
+                  value={bestOddsFilters.partita}
+                  onChange={(e) => setBestOddsFilters({...bestOddsFilters, partita: e.target.value})}
                   className="h-9 flex-1 max-w-[300px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
