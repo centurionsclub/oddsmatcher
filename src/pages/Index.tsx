@@ -311,8 +311,8 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-[#243b55] py-3 shadow-md">
-        <div className="flex items-center justify-center gap-4">
+      <header className="bg-[#1f3447] py-3 shadow-md">
+        <div className="max-w-[1400px] mx-auto px-6 flex items-center gap-4">
           <img src={logoCenturion} alt="Centurion Club" className="h-12 w-auto" />
           <h1 className="text-[26px] font-bold text-foreground tracking-wider">
             ODDSMATCHER
