@@ -176,6 +176,22 @@ const Index = () => {
                   <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
                   <SelectItem value="betfair">Betfair Exchange</SelectItem>
                   <SelectItem value="betflag">BetFlag Exchange</SelectItem>
+                  <SelectItem value="888sport">888sport</SelectItem>
+                  <SelectItem value="admiral">Admiral</SelectItem>
+                  <SelectItem value="bet365">Bet365</SelectItem>
+                  <SelectItem value="betfair-book">Betfair</SelectItem>
+                  <SelectItem value="betflag-book">Betflag</SelectItem>
+                  <SelectItem value="betsson">Betsson</SelectItem>
+                  <SelectItem value="better">Better</SelectItem>
+                  <SelectItem value="betway">Betway</SelectItem>
+                  <SelectItem value="eurobet">Eurobet</SelectItem>
+                  <SelectItem value="goldbet">Goldbet</SelectItem>
+                  <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                  <SelectItem value="netbet">NetBet</SelectItem>
+                  <SelectItem value="sisal">Sisal</SelectItem>
+                  <SelectItem value="snai">Snai</SelectItem>
+                  <SelectItem value="unibet">Unibet</SelectItem>
+                  <SelectItem value="williamhill">William Hill</SelectItem>
                 </SelectContent>
               </Select>
             </div>
