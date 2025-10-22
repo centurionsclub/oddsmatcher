@@ -91,8 +91,9 @@ const Index = () => {
                 </SelectTrigger>
                 <SelectContent className="bg-white">
                   <SelectItem value="tutti">Tutti</SelectItem>
-                  <SelectItem value="calcio">Calcio</SelectItem>
-                  <SelectItem value="tennis">Tennis</SelectItem>
+                  <SelectItem value="calcio">⚽ Calcio</SelectItem>
+                  <SelectItem value="tennis">🎾 Tennis</SelectItem>
+                  <SelectItem value="basket">🏀 Basket</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -105,10 +106,27 @@ const Index = () => {
                 <SelectTrigger className="h-9 bg-white border-gray-300">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-white">
+                <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
                   <SelectItem value="tutti">Tutti</SelectItem>
-                  <SelectItem value="1x2">1X2</SelectItem>
-                  <SelectItem value="over">Over/Under</SelectItem>
+                  <SelectItem value="1">⚽ 1</SelectItem>
+                  <SelectItem value="2">⚽ 2</SelectItem>
+                  <SelectItem value="x">⚽ X</SelectItem>
+                  <SelectItem value="goal">⚽ Goal</SelectItem>
+                  <SelectItem value="nogoal">⚽ No Goal</SelectItem>
+                  <SelectItem value="under05">⚽ Under 0.5</SelectItem>
+                  <SelectItem value="over05">⚽ Over 0.5</SelectItem>
+                  <SelectItem value="under15">⚽ Under 1.5</SelectItem>
+                  <SelectItem value="over15">⚽ Over 1.5</SelectItem>
+                  <SelectItem value="under25">⚽ Under 2.5</SelectItem>
+                  <SelectItem value="over25">⚽ Over 2.5</SelectItem>
+                  <SelectItem value="under35">⚽ Under 3.5</SelectItem>
+                  <SelectItem value="over35">⚽ Over 3.5</SelectItem>
+                  <SelectItem value="under45">⚽ Under 4.5</SelectItem>
+                  <SelectItem value="over45">⚽ Over 4.5</SelectItem>
+                  <SelectItem value="1-tennis">🎾 1</SelectItem>
+                  <SelectItem value="2-tennis">🎾 2</SelectItem>
+                  <SelectItem value="1-basket">🏀 1</SelectItem>
+                  <SelectItem value="2-basket">🏀 2</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -124,10 +142,24 @@ const Index = () => {
                 <SelectTrigger className="h-9 bg-white border-gray-300">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-white">
+                <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
                   <SelectItem value="tutti">Tutti</SelectItem>
+                  <SelectItem value="888sport">888sport</SelectItem>
+                  <SelectItem value="admiral">Admiral</SelectItem>
                   <SelectItem value="bet365">Bet365</SelectItem>
+                  <SelectItem value="betfair">Betfair</SelectItem>
+                  <SelectItem value="betflag">Betflag</SelectItem>
+                  <SelectItem value="betsson">Betsson</SelectItem>
+                  <SelectItem value="better">Better</SelectItem>
+                  <SelectItem value="betway">Betway</SelectItem>
+                  <SelectItem value="eurobet">Eurobet</SelectItem>
+                  <SelectItem value="goldbet">Goldbet</SelectItem>
+                  <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                  <SelectItem value="netbet">NetBet</SelectItem>
                   <SelectItem value="sisal">Sisal</SelectItem>
+                  <SelectItem value="snai">Snai</SelectItem>
+                  <SelectItem value="unibet">Unibet</SelectItem>
+                  <SelectItem value="williamhill">William Hill</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -140,10 +172,10 @@ const Index = () => {
                 <SelectTrigger className="h-9 bg-white border-gray-300">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-white">
+                <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
                   <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
-                  <SelectItem value="betfair">Betfair</SelectItem>
-                  <SelectItem value="betflag">Betflag</SelectItem>
+                  <SelectItem value="betfair">Betfair Exchange</SelectItem>
+                  <SelectItem value="betflag">BetFlag Exchange</SelectItem>
                 </SelectContent>
               </Select>
             </div>
