@@ -174,8 +174,11 @@ const Index = () => {
                 </SelectTrigger>
                 <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
                   <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
-                  <SelectItem value="betfair">Betfair Exchange</SelectItem>
-                  <SelectItem value="betflag">BetFlag Exchange</SelectItem>
+                  <SelectItem value="betfair">Betfair Exchange - 4,50%</SelectItem>
+                  <SelectItem value="betflag">BetFlag Exchange - 5,00%</SelectItem>
+                  <div className="px-2 py-1.5 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
+                    Bookmakers
+                  </div>
                   <SelectItem value="888sport">888sport</SelectItem>
                   <SelectItem value="admiral">Admiral</SelectItem>
                   <SelectItem value="bet365">Bet365</SelectItem>
