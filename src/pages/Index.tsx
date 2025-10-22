@@ -172,10 +172,26 @@ const Index = () => {
                 <SelectTrigger className="h-9 bg-white border-gray-300">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]">
                   <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
-                  <SelectItem value="betfair">Betfair Exchange</SelectItem>
-                  <SelectItem value="betflag">BetFlag Exchange</SelectItem>
+                  <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
+                    <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
+                    <Input 
+                      type="text" 
+                      defaultValue="4,50%" 
+                      className="h-7 w-20 text-xs"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
+                    <SelectItem value="betflag" className="flex-1 border-none">BetFlag Exchange</SelectItem>
+                    <Input 
+                      type="text" 
+                      defaultValue="5,00%" 
+                      className="h-7 w-20 text-xs"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
                   <div className="px-2 py-1.5 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
                     Bookmakers
                   </div>
@@ -197,31 +213,6 @@ const Index = () => {
                   <SelectItem value="williamhill">William Hill</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-          </div>
-
-          {/* Row 2b: Exchange Commissions */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
-                Comm. Betfair
-              </Label>
-              <Input 
-                type="text" 
-                defaultValue="4,50 %" 
-                className="h-9 w-32 bg-white border-gray-300"
-              />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
-                Comm. BetFlag
-              </Label>
-              <Input 
-                type="text" 
-                defaultValue="5,00 %" 
-                className="h-9 w-32 bg-white border-gray-300"
-              />
             </div>
           </div>
 
