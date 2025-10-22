@@ -692,6 +692,55 @@ const Index = () => {
                 />
               </div>
             </>
+          ) : activeTab === "bestodds" ? (
+            <>
+              {/* Row 1: Mercato */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#FFE0B2] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <ShoppingCart className="h-4 w-4" />
+                  Mercato
+                </div>
+                <Select defaultValue="nessuno">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                    <SelectItem value="nessuno">Nessuno</SelectItem>
+                    <SelectItem value="1">⚽ 1</SelectItem>
+                    <SelectItem value="2">⚽ 2</SelectItem>
+                    <SelectItem value="x">⚽ X</SelectItem>
+                    <SelectItem value="goal">⚽ Goal</SelectItem>
+                    <SelectItem value="nogoal">⚽ No Goal</SelectItem>
+                    <SelectItem value="under05">⚽ Under 0.5</SelectItem>
+                    <SelectItem value="over05">⚽ Over 0.5</SelectItem>
+                    <SelectItem value="under15">⚽ Under 1.5</SelectItem>
+                    <SelectItem value="over15">⚽ Over 1.5</SelectItem>
+                    <SelectItem value="under25">⚽ Under 2.5</SelectItem>
+                    <SelectItem value="over25">⚽ Over 2.5</SelectItem>
+                    <SelectItem value="under35">⚽ Under 3.5</SelectItem>
+                    <SelectItem value="over35">⚽ Over 3.5</SelectItem>
+                    <SelectItem value="under45">⚽ Under 4.5</SelectItem>
+                    <SelectItem value="over45">⚽ Over 4.5</SelectItem>
+                    <SelectItem value="1-tennis">🎾 1</SelectItem>
+                    <SelectItem value="2-tennis">🎾 2</SelectItem>
+                    <SelectItem value="1-basket">🏀 1</SelectItem>
+                    <SelectItem value="2-basket">🏀 2</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 2: Partita */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                  Partita
+                </div>
+                <Input 
+                  type="text" 
+                  placeholder="Cerca per nome..." 
+                  className="h-9 flex-1 max-w-[300px] bg-white border-gray-300 placeholder:text-gray-400"
+                />
+              </div>
+            </>
           ) : null}
         </div>
 
