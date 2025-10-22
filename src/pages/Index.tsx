@@ -569,9 +569,9 @@ const Index = () => {
 
               {/* Row 7: Quota Minima Multipla & N° Eventi */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Quota Minima Multipla
-                </Label>
+                </div>
                 <div className="relative w-[80px]">
                   <Input
                     type="text"
@@ -599,9 +599,9 @@ const Index = () => {
 
               {/* Row 8: Quota Partita */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Quota Partita
-                </Label>
+                </div>
                 <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Minima
                 </Label>
