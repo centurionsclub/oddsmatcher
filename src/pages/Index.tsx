@@ -571,7 +571,7 @@ const Index = () => {
                     checked={singolaFilters.freebet}
                     onCheckedChange={(checked) => setSingolaFilters({...singolaFilters, freebet: !!checked})}
                   />
-                  <label htmlFor="freebet" className="text-sm text-muted-foreground cursor-pointer">
+                  <label htmlFor="freebet" className="text-sm text-foreground cursor-pointer">
                     Free Bet
                   </label>
                 </div>
@@ -595,7 +595,7 @@ const Index = () => {
                     checked={singolaFilters.rimborso}
                     onCheckedChange={(checked) => setSingolaFilters({...singolaFilters, rimborso: !!checked})}
                   />
-                  <label htmlFor="rimborso" className="text-sm text-muted-foreground cursor-pointer">
+                  <label htmlFor="rimborso" className="text-sm text-foreground cursor-pointer">
                     Rimborso
                   </label>
                 </div>
@@ -805,7 +805,7 @@ const Index = () => {
                     checked={multiplaFilters.filtroLiquidita}
                     onCheckedChange={(checked) => setMultiplaFilters({...multiplaFilters, filtroLiquidita: !!checked})}
                   />
-                  <label htmlFor="filtro-liquidita" className="text-sm text-muted-foreground cursor-pointer">
+                  <label htmlFor="filtro-liquidita" className="text-sm text-foreground cursor-pointer">
                     Filtro Liquidità
                   </label>
                 </div>
@@ -829,7 +829,7 @@ const Index = () => {
                     checked={multiplaFilters.freebet}
                     onCheckedChange={(checked) => setMultiplaFilters({...multiplaFilters, freebet: !!checked})}
                   />
-                  <label htmlFor="freebet-multi" className="text-sm text-muted-foreground cursor-pointer">
+                  <label htmlFor="freebet-multi" className="text-sm text-foreground cursor-pointer">
                     Free Bet
                   </label>
                 </div>
@@ -853,7 +853,7 @@ const Index = () => {
                     checked={multiplaFilters.rimborso}
                     onCheckedChange={(checked) => setMultiplaFilters({...multiplaFilters, rimborso: !!checked})}
                   />
-                  <label htmlFor="rimborso-multi" className="text-sm text-muted-foreground cursor-pointer">
+                  <label htmlFor="rimborso-multi" className="text-sm text-foreground cursor-pointer">
                     Rimborso
                   </label>
                 </div>
@@ -1125,7 +1125,7 @@ const Index = () => {
                     checked={trevieFilters.rimborso}
                     onCheckedChange={(checked) => setTrevieFilters({...trevieFilters, rimborso: !!checked})}
                   />
-                  <label htmlFor="rimborso-trevie" className="text-sm cursor-pointer">
+                  <label htmlFor="rimborso-trevie" className="text-sm text-foreground cursor-pointer">
                     Rimborso
                   </label>
                 </div>
