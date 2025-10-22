@@ -49,10 +49,10 @@ export function MultiSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn(
-            "justify-between h-9",
-            className
-          )}
+            className={cn(
+              "justify-between h-9 bg-background border border-border text-foreground hover:bg-background/90",
+              className
+            )}
         >
           {displayText}
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
