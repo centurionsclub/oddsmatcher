@@ -114,7 +114,7 @@ const Index = () => {
             <>
               {/* Row 1: Sport */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Sport
                 </Label>
                 <Select defaultValue="tutti">
@@ -132,7 +132,7 @@ const Index = () => {
 
               {/* Row 2: Mercato */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Mercato
                 </Label>
                 <Select defaultValue="tutti">
@@ -251,7 +251,7 @@ const Index = () => {
 
               {/* Row 5: Stake Punta */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Stake Punta
                 </Label>
                 <Input 
@@ -286,46 +286,41 @@ const Index = () => {
               </div>
 
               {/* Row 7: Quota Minima & Massima */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
-                    Quota Minima
-                  </Label>
-                  <div className="relative w-[100px]">
-                    <Input
-                      type="text"
-                      defaultValue="0,00"
-                      className="h-9 pr-8 bg-white border-gray-300"
-                    />
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
-                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
-                        <ChevronUp className="h-3 w-3 text-gray-600" />
-                      </button>
-                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
-                        <ChevronDown className="h-3 w-3 text-gray-600" />
-                      </button>
-                    </div>
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                  Quota Minima
+                </Label>
+                <div className="relative w-[100px]">
+                  <Input
+                    type="text"
+                    defaultValue="0,00"
+                    className="h-9 pr-8 bg-white border-gray-300"
+                  />
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+                    <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                      <ChevronUp className="h-3 w-3 text-gray-600" />
+                    </button>
+                    <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                      <ChevronDown className="h-3 w-3 text-gray-600" />
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
-                    Quota Massima
-                  </Label>
-                  <div className="relative w-[100px]">
-                    <Input
-                      type="text"
-                      defaultValue="0,00"
-                      className="h-9 pr-8 bg-white border-gray-300"
-                    />
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
-                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
-                        <ChevronUp className="h-3 w-3 text-gray-600" />
-                      </button>
-                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
-                        <ChevronDown className="h-3 w-3 text-gray-600" />
-                      </button>
-                    </div>
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded ml-6">
+                  Quota Massima
+                </Label>
+                <div className="relative w-[100px]">
+                  <Input
+                    type="text"
+                    defaultValue="0,00"
+                    className="h-9 pr-8 bg-white border-gray-300"
+                  />
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+                    <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                      <ChevronUp className="h-3 w-3 text-gray-600" />
+                    </button>
+                    <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                      <ChevronDown className="h-3 w-3 text-gray-600" />
+                    </button>
                   </div>
                 </div>
               </div>
