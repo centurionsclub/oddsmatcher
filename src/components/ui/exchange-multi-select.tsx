@@ -82,6 +82,8 @@ export function ExchangeMultiSelect({
         className="w-[400px] p-0 bg-white z-50" 
         align="start"
         side="bottom"
+        sideOffset={4}
+        avoidCollisions={false}
       >
         <div className="max-h-[400px] overflow-y-auto">
           <div className="p-2">
