@@ -338,7 +338,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="Cerca per nome..." 
-                  className="h-9 w-[200px] bg-white border-gray-300 placeholder:text-gray-400"
+                  className="h-9 flex-1 max-w-[300px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
 
@@ -348,7 +348,7 @@ const Index = () => {
                   Campionato
                 </Label>
                 <Select>
-                  <SelectTrigger className="h-9 w-[200px] bg-white border-gray-300">
+                  <SelectTrigger className="h-9 flex-1 max-w-[300px] bg-white border-gray-300">
                     <SelectValue placeholder="Cerca Campionato..." />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
@@ -360,23 +360,28 @@ const Index = () => {
               </div>
 
               {/* Row 10: Date */}
-              <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
-                  Da data
-                </Label>
-                <Input 
-                  type="text" 
-                  placeholder="gg/mm/aaaa"
-                  className="h-9 w-[100px] bg-white border-gray-300 placeholder:text-gray-400"
-                />
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap ml-6">
-                  A data
-                </Label>
-                <Input 
-                  type="text" 
-                  placeholder="gg/mm/aaaa"
-                  className="h-9 w-[100px] bg-white border-gray-300 placeholder:text-gray-400"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                    Da data
+                  </Label>
+                  <Input 
+                    type="text" 
+                    placeholder="gg/mm/aaaa"
+                    className="h-9 flex-1 max-w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[100px]">
+                    A data
+                  </Label>
+                  <Input 
+                    type="text" 
+                    placeholder="gg/mm/aaaa"
+                    className="h-9 flex-1 max-w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
+                  />
+                </div>
               </div>
             </>
           ) : activeTab === "multipla" ? (
@@ -647,7 +652,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="Cerca per nome..." 
-                  className="h-9 w-[200px] bg-white border-gray-300 placeholder:text-gray-400"
+                  className="h-9 flex-1 max-w-[300px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
 
@@ -657,7 +662,7 @@ const Index = () => {
                   Campionato
                 </Label>
                 <Select>
-                  <SelectTrigger className="h-9 w-[200px] bg-white border-gray-300">
+                  <SelectTrigger className="h-9 flex-1 max-w-[300px] bg-white border-gray-300">
                     <SelectValue placeholder="Cerca Campionato..." />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
@@ -669,23 +674,28 @@ const Index = () => {
               </div>
 
               {/* Row 11: Date */}
-              <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
-                  Da data
-                </Label>
-                <Input 
-                  type="text" 
-                  placeholder="gg/mm/aaaa"
-                  className="h-9 w-[100px] bg-white border-gray-300 placeholder:text-gray-400"
-                />
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap ml-6">
-                  A data
-                </Label>
-                <Input 
-                  type="text" 
-                  placeholder="gg/mm/aaaa"
-                  className="h-9 w-[100px] bg-white border-gray-300 placeholder:text-gray-400"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                    Da data
+                  </Label>
+                  <Input 
+                    type="text" 
+                    placeholder="gg/mm/aaaa"
+                    className="h-9 flex-1 max-w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[100px]">
+                    A data
+                  </Label>
+                  <Input 
+                    type="text" 
+                    placeholder="gg/mm/aaaa"
+                    className="h-9 flex-1 max-w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
+                  />
+                </div>
               </div>
             </>
           ) : null}
