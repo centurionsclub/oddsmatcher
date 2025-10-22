@@ -52,6 +52,21 @@ const Index = () => {
     filtroLiquidita: false,
   });
 
+  // Stati per TRE VIE
+  const [trevieFilters, setTrevieFilters] = useState({
+    bookmakerPrincipale: "nessuno",
+    bookmakersSecondari: "nessuno",
+    stakePunta: "0 €",
+    bonus: "0 €",
+    quotaMinima: "0,00",
+    quotaMassima: "0,00",
+    partita: "",
+    campionato: "",
+    daData: "",
+    aData: "",
+    rimborso: false,
+  });
+
   // Stati per BEST ODDS
   const [bestOddsFilters, setBestOddsFilters] = useState({
     mercato: "nessuno",
@@ -95,6 +110,20 @@ const Index = () => {
         freebet: false,
         rimborso: false,
         filtroLiquidita: false,
+      });
+    } else if (activeTab === "trevie") {
+      setTrevieFilters({
+        bookmakerPrincipale: "nessuno",
+        bookmakersSecondari: "nessuno",
+        stakePunta: "0 €",
+        bonus: "0 €",
+        quotaMinima: "0,00",
+        quotaMassima: "0,00",
+        partita: "",
+        campionato: "",
+        daData: "",
+        aData: "",
+        rimborso: false,
       });
     } else if (activeTab === "bestodds") {
       setBestOddsFilters({
@@ -827,6 +856,218 @@ const Index = () => {
                   placeholder="gg/mm/aaaa"
                   value={multiplaFilters.aData}
                   onChange={(e) => setMultiplaFilters({...multiplaFilters, aData: e.target.value})}
+                  className="h-9 w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
+                />
+              </div>
+            </>
+          ) : activeTab === "trevie" ? (
+            <>
+              {/* Row 1: Bookmaker Principale */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Bookmaker Principale
+                </div>
+                <Select value={trevieFilters.bookmakerPrincipale} onValueChange={(value) => setTrevieFilters({...trevieFilters, bookmakerPrincipale: value})}>
+                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                    <SelectItem value="nessuno">Nessuno</SelectItem>
+                    <SelectItem value="888sport">888sport</SelectItem>
+                    <SelectItem value="admiral">Admiral</SelectItem>
+                    <SelectItem value="bet365">Bet365</SelectItem>
+                    <SelectItem value="betfair">Betfair</SelectItem>
+                    <SelectItem value="betflag">Betflag</SelectItem>
+                    <SelectItem value="betsson">Betsson</SelectItem>
+                    <SelectItem value="better">Better</SelectItem>
+                    <SelectItem value="betway">Betway</SelectItem>
+                    <SelectItem value="eurobet">Eurobet</SelectItem>
+                    <SelectItem value="goldbet">Goldbet</SelectItem>
+                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                    <SelectItem value="netbet">NetBet</SelectItem>
+                    <SelectItem value="sisal">Sisal</SelectItem>
+                    <SelectItem value="snai">Snai</SelectItem>
+                    <SelectItem value="unibet">Unibet</SelectItem>
+                    <SelectItem value="williamhill">William Hill</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 2: Bookmakers Secondari */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Bookmakers Secondari
+                </div>
+                <Select value={trevieFilters.bookmakersSecondari} onValueChange={(value) => setTrevieFilters({...trevieFilters, bookmakersSecondari: value})}>
+                  <SelectTrigger className="h-9 bg-white border-gray-300 w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                    <SelectItem value="nessuno">Nessuno</SelectItem>
+                    <SelectItem value="888sport">888sport</SelectItem>
+                    <SelectItem value="admiral">Admiral</SelectItem>
+                    <SelectItem value="bet365">Bet365</SelectItem>
+                    <SelectItem value="betfair">Betfair</SelectItem>
+                    <SelectItem value="betflag">Betflag</SelectItem>
+                    <SelectItem value="betsson">Betsson</SelectItem>
+                    <SelectItem value="better">Better</SelectItem>
+                    <SelectItem value="betway">Betway</SelectItem>
+                    <SelectItem value="eurobet">Eurobet</SelectItem>
+                    <SelectItem value="goldbet">Goldbet</SelectItem>
+                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                    <SelectItem value="netbet">NetBet</SelectItem>
+                    <SelectItem value="sisal">Sisal</SelectItem>
+                    <SelectItem value="snai">Snai</SelectItem>
+                    <SelectItem value="unibet">Unibet</SelectItem>
+                    <SelectItem value="williamhill">William Hill</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="bg-white border-gray-300 hover:bg-gray-50 text-sm font-medium"
+                >
+                  Seleziona Top
+                </Button>
+              </div>
+
+              {/* Row 3: Stake Punta */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
+                  <Coins className="h-4 w-4" />
+                  Stake Punta
+                </div>
+                <Input 
+                  type="text" 
+                  value={trevieFilters.stakePunta}
+                  onChange={(e) => setTrevieFilters({...trevieFilters, stakePunta: e.target.value})}
+                  className="h-9 w-[100px] bg-white border-gray-300"
+                />
+              </div>
+
+              {/* Row 4: Bonus */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
+                  <Gift className="h-4 w-4" />
+                  Bonus
+                </div>
+                <Input 
+                  type="text" 
+                  value={trevieFilters.bonus}
+                  onChange={(e) => setTrevieFilters({...trevieFilters, bonus: e.target.value})}
+                  className="h-9 w-[100px] bg-white border-gray-300"
+                />
+                <div className="flex items-center gap-2 ml-4">
+                  <Checkbox 
+                    id="rimborso-trevie" 
+                    className="border-gray-400"
+                    checked={trevieFilters.rimborso}
+                    onCheckedChange={(checked) => setTrevieFilters({...trevieFilters, rimborso: !!checked})}
+                  />
+                  <label htmlFor="rimborso-trevie" className="text-sm text-gray-600 cursor-pointer">
+                    Rimborso
+                  </label>
+                </div>
+              </div>
+
+              {/* Row 5: Quota Minima & Massima */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center">
+                  Quota
+                </div>
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                  Minima
+                </Label>
+                <div className="relative w-[100px]">
+                  <Input
+                    type="text"
+                    value={trevieFilters.quotaMinima}
+                    onChange={(e) => setTrevieFilters({...trevieFilters, quotaMinima: e.target.value})}
+                    className="h-9 pr-8 bg-white border-gray-300"
+                  />
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+                    <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                      <ChevronUp className="h-3 w-3 text-gray-600" />
+                    </button>
+                    <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                      <ChevronDown className="h-3 w-3 text-gray-600" />
+                    </button>
+                  </div>
+                </div>
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                  Massima
+                </Label>
+                <div className="relative w-[100px]">
+                  <Input
+                    type="text"
+                    value={trevieFilters.quotaMassima}
+                    onChange={(e) => setTrevieFilters({...trevieFilters, quotaMassima: e.target.value})}
+                    className="h-9 pr-8 bg-white border-gray-300"
+                  />
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+                    <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                      <ChevronUp className="h-3 w-3 text-gray-600" />
+                    </button>
+                    <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                      <ChevronDown className="h-3 w-3 text-gray-600" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 6: Partita */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center">
+                  Partita
+                </div>
+                <Input 
+                  type="text" 
+                  placeholder="Cerca per nome..."
+                  value={trevieFilters.partita}
+                  onChange={(e) => setTrevieFilters({...trevieFilters, partita: e.target.value})}
+                  className="h-9 flex-1 max-w-[300px] bg-white border-gray-300 placeholder:text-gray-400"
+                />
+              </div>
+
+              {/* Row 7: Campionato */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center">
+                  Campionato
+                </div>
+                <Select value={trevieFilters.campionato} onValueChange={(value) => setTrevieFilters({...trevieFilters, campionato: value})}>
+                  <SelectTrigger className="h-9 flex-1 max-w-[300px] bg-white border-gray-300">
+                    <SelectValue placeholder="Cerca Campionato..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="seriea">Serie A</SelectItem>
+                    <SelectItem value="premierleague">Premier League</SelectItem>
+                    <SelectItem value="laliga">La Liga</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 8: Date */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center">
+                  Da data
+                </div>
+                <Input 
+                  type="text" 
+                  placeholder="gg/mm/aaaa"
+                  value={trevieFilters.daData}
+                  onChange={(e) => setTrevieFilters({...trevieFilters, daData: e.target.value})}
+                  className="h-9 w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
+                />
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                  A data
+                </Label>
+                <Input 
+                  type="text" 
+                  placeholder="gg/mm/aaaa"
+                  value={trevieFilters.aData}
+                  onChange={(e) => setTrevieFilters({...trevieFilters, aData: e.target.value})}
                   className="h-9 w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
