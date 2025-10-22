@@ -132,7 +132,7 @@ const Index = () => {
 
               {/* Row 2: Mercato */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#C8E6C9] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#FFE0B2] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Mercato
                 </div>
                 <Select defaultValue="tutti">
@@ -378,9 +378,9 @@ const Index = () => {
             <>
               {/* Row 1: Sport */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <div className="text-sm font-normal text-gray-700 bg-[#C8E6C9] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Sport
-                </Label>
+                </div>
                 <Select defaultValue="tutti">
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
@@ -396,9 +396,9 @@ const Index = () => {
 
               {/* Row 2: Mercato */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <div className="text-sm font-normal text-gray-700 bg-[#FFE0B2] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Mercato
-                </Label>
+                </div>
                 <Select defaultValue="tutti">
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
