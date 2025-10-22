@@ -646,7 +646,7 @@ const Index = () => {
 
               {/* Row 9: Partita */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Partita
                 </Label>
                 <Input 
@@ -658,7 +658,7 @@ const Index = () => {
 
               {/* Row 10: Campionato */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Campionato
                 </Label>
                 <Select>
@@ -675,7 +675,7 @@ const Index = () => {
 
               {/* Row 11: Date */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Da data
                 </Label>
                 <Input 
