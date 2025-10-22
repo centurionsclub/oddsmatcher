@@ -5,14 +5,22 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Wallet } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Wallet, Save, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("singola");
   const [betfairCommission, setBetfairCommission] = useState("4,50%");
   const [betflagCommission, setBetflagCommission] = useState("5,00%");
   const { toast } = useToast();
+  
+  // Stati per salvare filtri
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [filterName, setFilterName] = useState("");
+  const [savedFilters, setSavedFilters] = useState<any[]>([]);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   // Stati per SINGOLA
   const [singolaFilters, setSingolaFilters] = useState({
@@ -154,7 +162,107 @@ const Index = () => {
     const savedBetflag = localStorage.getItem("betflagCommission");
     if (savedBetfair) setBetfairCommission(savedBetfair);
     if (savedBetflag) setBetflagCommission(savedBetflag);
+    loadSavedFilters();
   }, []);
+
+  const loadSavedFilters = async () => {
+    const { data, error } = await supabase
+      .from('saved_filters')
+      .select('*')
+      .eq('tab_type', activeTab)
+      .order('created_at', { ascending: false });
+    
+    if (!error && data) {
+      setSavedFilters(data);
+    }
+  };
+
+  const handleSaveFilter = async () => {
+    if (!filterName.trim()) {
+      toast({
+        description: "Inserisci un nome per il filtro",
+        variant: "destructive",
+        duration: 2000,
+      });
+      return;
+    }
+
+    const currentFilters = {
+      singola: singolaFilters,
+      multipla: multiplaFilters,
+      trevie: trevieFilters,
+      bestodds: bestOddsFilters,
+      surebet: surebetFilters,
+    }[activeTab];
+
+    const { error } = await supabase
+      .from('saved_filters')
+      .insert({
+        name: filterName,
+        tab_type: activeTab,
+        filter_data: currentFilters,
+      });
+
+    if (error) {
+      toast({
+        description: "Errore nel salvare il filtro",
+        variant: "destructive",
+        duration: 2000,
+      });
+    } else {
+      toast({
+        description: "Filtro salvato con successo",
+        duration: 2000,
+      });
+      setFilterName("");
+      setSaveDialogOpen(false);
+      loadSavedFilters();
+    }
+  };
+
+  const handleLoadFilter = (filterData: any) => {
+    if (activeTab === "singola") {
+      setSingolaFilters(filterData);
+    } else if (activeTab === "multipla") {
+      setMultiplaFilters(filterData);
+    } else if (activeTab === "trevie") {
+      setTrevieFilters(filterData);
+    } else if (activeTab === "bestodds") {
+      setBestOddsFilters(filterData);
+    } else if (activeTab === "surebet") {
+      setSurebetFilters(filterData);
+    }
+    setArchiveOpen(false);
+    toast({
+      description: "Filtro caricato",
+      duration: 2000,
+    });
+  };
+
+  const handleDeleteFilter = async (id: string) => {
+    const { error } = await supabase
+      .from('saved_filters')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      toast({
+        description: "Errore nell'eliminare il filtro",
+        variant: "destructive",
+        duration: 2000,
+      });
+    } else {
+      toast({
+        description: "Filtro eliminato",
+        duration: 2000,
+      });
+      loadSavedFilters();
+    }
+  };
+
+  useEffect(() => {
+    loadSavedFilters();
+  }, [activeTab]);
 
   const handleBetfairChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -218,13 +326,90 @@ const Index = () => {
           >
             PULISCI <Trash2 className="h-3.5 w-3.5" />
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="gap-2 bg-white border-gray-300 hover:bg-gray-50 text-sm font-medium"
-          >
-            ARCHIVIO <Archive className="h-3.5 w-3.5" />
-          </Button>
+          
+          <Popover open={archiveOpen} onOpenChange={setArchiveOpen}>
+            <PopoverTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2 bg-white border-gray-300 hover:bg-gray-50 text-sm font-medium"
+              >
+                ARCHIVIO <Archive className="h-3.5 w-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[300px] bg-white p-4" align="start">
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm mb-3">Filtri salvati</h4>
+                {savedFilters.length === 0 ? (
+                  <p className="text-sm text-gray-500">Nessun filtro salvato</p>
+                ) : (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {savedFilters.map((filter) => (
+                      <div 
+                        key={filter.id} 
+                        className="flex items-center justify-between p-2 hover:bg-gray-50 rounded border border-gray-200"
+                      >
+                        <button
+                          onClick={() => handleLoadFilter(filter.filter_data)}
+                          className="flex-1 text-left text-sm"
+                        >
+                          {filter.name}
+                        </button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteFilter(filter.id)}
+                          className="h-7 w-7 p-0"
+                        >
+                          <X className="h-4 w-4 text-gray-500" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2 bg-white border-gray-300 hover:bg-gray-50 text-sm font-medium"
+              >
+                SALVA FILTRO <Save className="h-3.5 w-3.5" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-white">
+              <DialogHeader>
+                <DialogTitle>Salva filtro</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="filter-name">Nome filtro</Label>
+                  <Input
+                    id="filter-name"
+                    value={filterName}
+                    onChange={(e) => setFilterName(e.target.value)}
+                    placeholder="Es. Calcio Serie A Multipla"
+                    className="bg-white"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setSaveDialogOpen(false)}
+                >
+                  Annulla
+                </Button>
+                <Button onClick={handleSaveFilter}>
+                  Salva
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Tabs */}
