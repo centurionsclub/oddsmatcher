@@ -572,6 +572,9 @@ const Index = () => {
                 <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[180px] flex items-center justify-center">
                   Quota Minima Multipla
                 </div>
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded opacity-0 select-none">
+                  Minima
+                </Label>
                 <div className="relative w-[80px]">
                   <Input
                     type="text"
