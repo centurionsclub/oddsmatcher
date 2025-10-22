@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DecimalInput } from "@/components/ui/decimal-input";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,7 +29,7 @@ const Index = () => {
   const [singolaFilters, setSingolaFilters] = useState({
     sport: "tutti",
     mercato: "tutti",
-    bookmaker: "tutti",
+    bookmaker: [] as string[],
     exchange: "tutti",
     stakePunta: "0",
     bonus: "0",
@@ -46,7 +47,7 @@ const Index = () => {
   const [multiplaFilters, setMultiplaFilters] = useState({
     sport: "tutti",
     mercato: "tutti",
-    bookmaker: "tutti",
+    bookmaker: [] as string[],
     exchange: "tutti",
     stakeMultipla: "0",
     bonus: "0",
@@ -97,7 +98,7 @@ const Index = () => {
       setSingolaFilters({
         sport: "tutti",
         mercato: "tutti",
-        bookmaker: "tutti",
+        bookmaker: [],
         exchange: "tutti",
         stakePunta: "0",
         bonus: "0",
@@ -114,7 +115,7 @@ const Index = () => {
       setMultiplaFilters({
         sport: "tutti",
         mercato: "tutti",
-        bookmaker: "tutti",
+        bookmaker: [],
         exchange: "tutti",
         stakeMultipla: "0",
         bonus: "0",
@@ -495,30 +496,29 @@ const Index = () => {
                   <Building2 className="h-4 w-4" />
                   Bookmaker
                 </div>
-                <Select value={singolaFilters.bookmaker} onValueChange={(value) => setSingolaFilters({...singolaFilters, bookmaker: value})}>
-                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                    <SelectItem value="tutti">Tutti</SelectItem>
-                    <SelectItem value="888sport">888sport</SelectItem>
-                    <SelectItem value="admiral">Admiral</SelectItem>
-                    <SelectItem value="bet365">Bet365</SelectItem>
-                    <SelectItem value="betfair">Betfair</SelectItem>
-                    <SelectItem value="betflag">Betflag</SelectItem>
-                    <SelectItem value="betsson">Betsson</SelectItem>
-                    <SelectItem value="better">Better</SelectItem>
-                    <SelectItem value="betway">Betway</SelectItem>
-                    <SelectItem value="eurobet">Eurobet</SelectItem>
-                    <SelectItem value="goldbet">Goldbet</SelectItem>
-                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
-                    <SelectItem value="netbet">NetBet</SelectItem>
-                    <SelectItem value="sisal">Sisal</SelectItem>
-                    <SelectItem value="snai">Snai</SelectItem>
-                    <SelectItem value="unibet">Unibet</SelectItem>
-                    <SelectItem value="williamhill">William Hill</SelectItem>
-                  </SelectContent>
-                </Select>
+                <MultiSelect
+                  options={[
+                    { value: "888sport", label: "888sport" },
+                    { value: "admiral", label: "Admiral" },
+                    { value: "bet365", label: "Bet365" },
+                    { value: "betfair", label: "Betfair" },
+                    { value: "betflag", label: "Betflag" },
+                    { value: "betsson", label: "Betsson" },
+                    { value: "better", label: "Better" },
+                    { value: "betway", label: "Betway" },
+                    { value: "eurobet", label: "Eurobet" },
+                    { value: "goldbet", label: "Goldbet" },
+                    { value: "lottomatica", label: "Lottomatica" },
+                    { value: "netbet", label: "NetBet" },
+                    { value: "sisal", label: "Sisal" },
+                    { value: "snai", label: "Snai" },
+                    { value: "unibet", label: "Unibet" },
+                    { value: "williamhill", label: "William Hill" },
+                  ]}
+                  selected={singolaFilters.bookmaker}
+                  onChange={(selected) => setSingolaFilters({...singolaFilters, bookmaker: selected})}
+                  className="flex-1 max-w-[300px]"
+                />
               </div>
 
               {/* Row 4: Exchange */}
@@ -531,7 +531,7 @@ const Index = () => {
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]">
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]" side="bottom">
                     <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
                     <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
                       <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
@@ -781,31 +781,29 @@ const Index = () => {
                   <Building2 className="h-4 w-4" />
                   Bookmaker
                 </div>
-                <Select value={multiplaFilters.bookmaker} onValueChange={(value) => setMultiplaFilters({...multiplaFilters, bookmaker: value})}>
-                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                    <SelectItem value="tutti">Tutti</SelectItem>
-                    <SelectItem value="nessuno">Nessuno</SelectItem>
-                    <SelectItem value="888sport">888sport</SelectItem>
-                    <SelectItem value="admiral">Admiral</SelectItem>
-                    <SelectItem value="bet365">Bet365</SelectItem>
-                    <SelectItem value="betfair">Betfair</SelectItem>
-                    <SelectItem value="betflag">Betflag</SelectItem>
-                    <SelectItem value="betsson">Betsson</SelectItem>
-                    <SelectItem value="better">Better</SelectItem>
-                    <SelectItem value="betway">Betway</SelectItem>
-                    <SelectItem value="eurobet">Eurobet</SelectItem>
-                    <SelectItem value="goldbet">Goldbet</SelectItem>
-                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
-                    <SelectItem value="netbet">NetBet</SelectItem>
-                    <SelectItem value="sisal">Sisal</SelectItem>
-                    <SelectItem value="snai">Snai</SelectItem>
-                    <SelectItem value="unibet">Unibet</SelectItem>
-                    <SelectItem value="williamhill">William Hill</SelectItem>
-                  </SelectContent>
-                </Select>
+                <MultiSelect
+                  options={[
+                    { value: "888sport", label: "888sport" },
+                    { value: "admiral", label: "Admiral" },
+                    { value: "bet365", label: "Bet365" },
+                    { value: "betfair", label: "Betfair" },
+                    { value: "betflag", label: "Betflag" },
+                    { value: "betsson", label: "Betsson" },
+                    { value: "better", label: "Better" },
+                    { value: "betway", label: "Betway" },
+                    { value: "eurobet", label: "Eurobet" },
+                    { value: "goldbet", label: "Goldbet" },
+                    { value: "lottomatica", label: "Lottomatica" },
+                    { value: "netbet", label: "NetBet" },
+                    { value: "sisal", label: "Sisal" },
+                    { value: "snai", label: "Snai" },
+                    { value: "unibet", label: "Unibet" },
+                    { value: "williamhill", label: "William Hill" },
+                  ]}
+                  selected={multiplaFilters.bookmaker}
+                  onChange={(selected) => setMultiplaFilters({...multiplaFilters, bookmaker: selected})}
+                  className="flex-1 max-w-[300px]"
+                />
               </div>
 
               {/* Row 4: Exchange with Filtro Liquidità */}
@@ -818,7 +816,7 @@ const Index = () => {
                   <SelectTrigger className="h-9 bg-white border-gray-300 w-[200px]">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]">
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]" side="bottom">
                     <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
                     <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
                       <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
