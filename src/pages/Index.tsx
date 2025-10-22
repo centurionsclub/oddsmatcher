@@ -441,11 +441,12 @@ const Index = () => {
                   <Building2 className="h-4 w-4" />
                   Bookmaker
                 </div>
-                <Select defaultValue="nessuno">
+                <Select defaultValue="tutti">
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                    <SelectItem value="tutti">Tutti</SelectItem>
                     <SelectItem value="nessuno">Nessuno</SelectItem>
                     <SelectItem value="888sport">888sport</SelectItem>
                     <SelectItem value="admiral">Admiral</SelectItem>
