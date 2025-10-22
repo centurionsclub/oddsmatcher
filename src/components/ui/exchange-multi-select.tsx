@@ -70,7 +70,7 @@ export function ExchangeMultiSelect({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "justify-between bg-white border-gray-300 h-9",
+            "justify-between h-9",
             className
           )}
         >
@@ -79,7 +79,7 @@ export function ExchangeMultiSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-[400px] p-0 bg-white z-50" 
+        className="w-[400px] p-0 z-50" 
         align="start"
         side="bottom"
         sideOffset={4}
@@ -89,7 +89,7 @@ export function ExchangeMultiSelect({
           <div className="p-2">
             {/* Opzione "Tutti" */}
             <div
-              className="flex items-center space-x-2 px-2 py-2 hover:bg-gray-100 cursor-pointer rounded"
+              className="flex items-center space-x-2 px-2 py-2 hover:bg-secondary/50 cursor-pointer rounded"
               onClick={() => onChange([])}
             >
               <Checkbox
@@ -100,10 +100,10 @@ export function ExchangeMultiSelect({
             </div>
             
             {/* Separatore */}
-            <div className="my-1 h-px bg-gray-200" />
+            <div className="my-1 h-px bg-border" />
             
             {/* Betfair con commissione */}
-            <div className="flex items-center justify-between px-2 py-2 hover:bg-gray-100 rounded">
+            <div className="flex items-center justify-between px-2 py-2 hover:bg-secondary/50 rounded">
               <div 
                 className="flex items-center space-x-2 flex-1 cursor-pointer"
                 onClick={() => handleToggle("betfair")}
@@ -124,7 +124,7 @@ export function ExchangeMultiSelect({
             </div>
             
             {/* Betflag con commissione */}
-            <div className="flex items-center justify-between px-2 py-2 hover:bg-gray-100 rounded">
+            <div className="flex items-center justify-between px-2 py-2 hover:bg-secondary/50 rounded">
               <div 
                 className="flex items-center space-x-2 flex-1 cursor-pointer"
                 onClick={() => handleToggle("betflag")}
@@ -145,7 +145,7 @@ export function ExchangeMultiSelect({
             </div>
             
             {/* Separatore Bookmakers */}
-            <div className="px-2 py-2 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
+            <div className="px-2 py-2 text-sm font-semibold bg-secondary border-t border-b border-border mt-1 mb-1">
               Bookmakers
             </div>
             
@@ -153,7 +153,7 @@ export function ExchangeMultiSelect({
             {bookmakers.map((bookmaker) => (
               <div
                 key={bookmaker.value}
-                className="flex items-center space-x-2 px-2 py-2 hover:bg-gray-100 cursor-pointer rounded"
+                className="flex items-center space-x-2 px-2 py-2 hover:bg-secondary/50 cursor-pointer rounded"
                 onClick={() => handleToggle(bookmaker.value)}
               >
                 <Checkbox

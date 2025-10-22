@@ -50,7 +50,7 @@ export function MultiSelect({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "justify-between bg-white border-gray-300 h-9",
+            "justify-between h-9",
             className
           )}
         >
@@ -59,7 +59,7 @@ export function MultiSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-[300px] p-0 bg-white z-50" 
+        className="w-[300px] p-0 z-50" 
         align="start"
         side="bottom"
         sideOffset={4}
@@ -69,7 +69,7 @@ export function MultiSelect({
           <div className="p-2">
             {/* Opzione "Tutti" */}
             <div
-              className="flex items-center space-x-2 px-2 py-2 hover:bg-gray-100 cursor-pointer rounded"
+              className="flex items-center space-x-2 px-2 py-2 hover:bg-secondary/50 cursor-pointer rounded"
               onClick={() => onChange([])}
             >
               <Checkbox
@@ -80,13 +80,13 @@ export function MultiSelect({
             </div>
             
             {/* Separatore */}
-            <div className="my-1 h-px bg-gray-200" />
+            <div className="my-1 h-px bg-border" />
             
             {/* Opzioni multiple */}
             {options.map((option) => (
               <div
                 key={option.value}
-                className="flex items-center space-x-2 px-2 py-2 hover:bg-gray-100 cursor-pointer rounded"
+                className="flex items-center space-x-2 px-2 py-2 hover:bg-secondary/50 cursor-pointer rounded"
                 onClick={() => handleToggle(option.value)}
               >
                 <Checkbox

@@ -161,12 +161,12 @@ const Index = () => {
     }
   };
 
-  const handleBetfairChange = (value: string) => {
-    setBetfairCommission(value);
+  const handleBetfairChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBetfairCommission(e.target.value);
   };
 
-  const handleBetflagChange = (value: string) => {
-    setBetflagCommission(value);
+  const handleBetflagChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBetflagCommission(e.target.value);
   };
 
   // Supabase handlers
@@ -217,7 +217,7 @@ const Index = () => {
       .from('saved_filters')
       .insert({
         name: filterName,
-        filter_type: activeTab,
+        tab_type: activeTab,
         filter_data: filterData,
       });
 
@@ -1078,7 +1078,7 @@ const Index = () => {
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  className="hover:bg-gray-50 text-sm font-medium"
+                  className="text-sm font-medium"
                   onClick={() => {
                     setTrevieFilters({
                       ...trevieFilters,
