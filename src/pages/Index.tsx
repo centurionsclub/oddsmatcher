@@ -699,60 +699,6 @@ const Index = () => {
               </div>
             </>
           ) : null}
-
-          {/* Row 6: Partita */}
-          <div className="flex items-center gap-3">
-            <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
-              Partita
-            </Label>
-            <Input 
-              type="text" 
-              placeholder="Cerca per nome..." 
-              className="h-9 flex-1 bg-white border-gray-300 placeholder:text-gray-400"
-            />
-          </div>
-
-          {/* Row 7: Campionato */}
-          <div className="flex items-center gap-3">
-            <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
-              Campionato
-            </Label>
-            <Select>
-              <SelectTrigger className="h-9 flex-1 bg-white border-gray-300">
-                <SelectValue placeholder="Cerca Campionato..." />
-              </SelectTrigger>
-              <SelectContent className="bg-white">
-                <SelectItem value="seriea">Serie A</SelectItem>
-                <SelectItem value="premierleague">Premier League</SelectItem>
-                <SelectItem value="laliga">La Liga</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Row 8: Date */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
-                Da data
-              </Label>
-              <Input 
-                type="text" 
-                placeholder="gg/mm/aaaa"
-                className="h-9 bg-white border-gray-300 placeholder:text-gray-400"
-              />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
-                A data
-              </Label>
-              <Input 
-                type="text" 
-                placeholder="gg/mm/aaaa"
-                className="h-9 bg-white border-gray-300 placeholder:text-gray-400"
-              />
-            </div>
-          </div>
         </div>
 
         {/* Empty Results */}
