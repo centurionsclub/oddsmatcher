@@ -257,7 +257,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   defaultValue="0 €" 
-                  className="h-9 w-[200px] bg-white border-gray-300"
+                  className="h-9 w-[100px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox id="freebet" className="border-gray-400" />
@@ -275,7 +275,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   defaultValue="0 €" 
-                  className="h-9 w-[200px] bg-white border-gray-300"
+                  className="h-9 w-[100px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox id="rimborso" className="border-gray-400" />
@@ -291,7 +291,7 @@ const Index = () => {
                   <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                     Quota Minima
                   </Label>
-                  <div className="relative w-[200px]">
+                  <div className="relative w-[100px]">
                     <Input
                       type="text"
                       defaultValue="0,00"
@@ -312,7 +312,7 @@ const Index = () => {
                   <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                     Quota Massima
                   </Label>
-                  <div className="relative w-[200px]">
+                  <div className="relative w-[100px]">
                     <Input
                       type="text"
                       defaultValue="0,00"
@@ -338,7 +338,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="Cerca per nome..." 
-                  className="h-9 w-[400px] bg-white border-gray-300 placeholder:text-gray-400"
+                  className="h-9 w-[200px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
 
@@ -348,7 +348,7 @@ const Index = () => {
                   Campionato
                 </Label>
                 <Select>
-                  <SelectTrigger className="h-9 w-[400px] bg-white border-gray-300">
+                  <SelectTrigger className="h-9 w-[200px] bg-white border-gray-300">
                     <SelectValue placeholder="Cerca Campionato..." />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
@@ -367,7 +367,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="gg/mm/aaaa"
-                  className="h-9 w-[180px] bg-white border-gray-300 placeholder:text-gray-400"
+                  className="h-9 w-[100px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
                 <Label className="text-sm font-normal text-gray-700 whitespace-nowrap ml-6">
                   A data
@@ -375,7 +375,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="gg/mm/aaaa"
-                  className="h-9 w-[180px] bg-white border-gray-300 placeholder:text-gray-400"
+                  className="h-9 w-[100px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
             </>
@@ -538,7 +538,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   defaultValue="0 €" 
-                  className="h-9 w-[200px] bg-white border-gray-300"
+                  className="h-9 w-[100px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox id="freebet-multi" className="border-gray-400" />
@@ -556,7 +556,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   defaultValue="0 €" 
-                  className="h-9 w-[200px] bg-white border-gray-300"
+                  className="h-9 w-[100px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox id="rimborso-multi" className="border-gray-400" />
@@ -571,7 +571,7 @@ const Index = () => {
                 <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Quota Minima Multipla
                 </Label>
-                <div className="relative w-[150px]">
+                <div className="relative w-[80px]">
                   <Input
                     type="text"
                     defaultValue="0,00"
@@ -592,7 +592,7 @@ const Index = () => {
                 <Input
                   type="text"
                   defaultValue="0"
-                  className="h-9 w-[150px] bg-white border-gray-300"
+                  className="h-9 w-[80px] bg-white border-gray-300"
                 />
               </div>
 
@@ -604,7 +604,7 @@ const Index = () => {
                 <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
                   Minima
                 </Label>
-                <div className="relative w-[150px]">
+                <div className="relative w-[80px]">
                   <Input
                     type="text"
                     defaultValue="0,00"
@@ -622,7 +622,7 @@ const Index = () => {
                 <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded ml-6">
                   Massima
                 </Label>
-                <div className="relative w-[150px]">
+                <div className="relative w-[80px]">
                   <Input
                     type="text"
                     defaultValue="0,00"
@@ -647,7 +647,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="Cerca per nome..." 
-                  className="h-9 w-[400px] bg-white border-gray-300 placeholder:text-gray-400"
+                  className="h-9 w-[200px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
 
@@ -657,7 +657,7 @@ const Index = () => {
                   Campionato
                 </Label>
                 <Select>
-                  <SelectTrigger className="h-9 w-[400px] bg-white border-gray-300">
+                  <SelectTrigger className="h-9 w-[200px] bg-white border-gray-300">
                     <SelectValue placeholder="Cerca Campionato..." />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
@@ -676,7 +676,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="gg/mm/aaaa"
-                  className="h-9 w-[180px] bg-white border-gray-300 placeholder:text-gray-400"
+                  className="h-9 w-[100px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
                 <Label className="text-sm font-normal text-gray-700 whitespace-nowrap ml-6">
                   A data
@@ -684,7 +684,7 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="gg/mm/aaaa"
-                  className="h-9 w-[180px] bg-white border-gray-300 placeholder:text-gray-400"
+                  className="h-9 w-[100px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
             </>
