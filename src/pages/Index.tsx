@@ -534,7 +534,7 @@ const Index = () => {
 
               {/* Row 4: Exchange */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#ffb6c1] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#e89fad] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <ArrowLeftRight className="h-4 w-4" />
                   Exchange
                 </div>
@@ -781,7 +781,7 @@ const Index = () => {
 
               {/* Row 4: Exchange with Filtro Liquidità */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#ffb6c1] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#e89fad] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <ArrowLeftRight className="h-4 w-4" />
                   Exchange
                 </div>
