@@ -214,7 +214,7 @@ const Index = () => {
                   <Trophy className="h-4 w-4" />
                   Sport
                 </div>
-                <Select defaultValue="tutti">
+                <Select value={singolaFilters.sport} onValueChange={(value) => setSingolaFilters({...singolaFilters, sport: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -233,7 +233,7 @@ const Index = () => {
                   <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
-                <Select defaultValue="tutti">
+                <Select value={singolaFilters.mercato} onValueChange={(value) => setSingolaFilters({...singolaFilters, mercato: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -268,7 +268,7 @@ const Index = () => {
                   <Building2 className="h-4 w-4" />
                   Bookmaker
                 </div>
-                <Select defaultValue="tutti">
+                <Select value={singolaFilters.bookmaker} onValueChange={(value) => setSingolaFilters({...singolaFilters, bookmaker: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -300,7 +300,7 @@ const Index = () => {
                   <ArrowLeftRight className="h-4 w-4" />
                   Exchange
                 </div>
-                <Select defaultValue="tutti">
+                <Select value={singolaFilters.exchange} onValueChange={(value) => setSingolaFilters({...singolaFilters, exchange: value})}>
                   <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -357,11 +357,17 @@ const Index = () => {
                 </div>
                 <Input 
                   type="text" 
-                  defaultValue="0 €" 
+                  value={singolaFilters.stakePunta}
+                  onChange={(e) => setSingolaFilters({...singolaFilters, stakePunta: e.target.value})}
                   className="h-9 w-[100px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
-                  <Checkbox id="freebet" className="border-gray-400" />
+                  <Checkbox 
+                    id="freebet" 
+                    className="border-gray-400"
+                    checked={singolaFilters.freebet}
+                    onCheckedChange={(checked) => setSingolaFilters({...singolaFilters, freebet: !!checked})}
+                  />
                   <label htmlFor="freebet" className="text-sm text-gray-600 cursor-pointer">
                     Free Bet
                   </label>
@@ -376,11 +382,17 @@ const Index = () => {
                 </div>
                 <Input 
                   type="text" 
-                  defaultValue="0 €" 
+                  value={singolaFilters.bonus}
+                  onChange={(e) => setSingolaFilters({...singolaFilters, bonus: e.target.value})}
                   className="h-9 w-[100px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
-                  <Checkbox id="rimborso" className="border-gray-400" />
+                  <Checkbox 
+                    id="rimborso" 
+                    className="border-gray-400"
+                    checked={singolaFilters.rimborso}
+                    onCheckedChange={(checked) => setSingolaFilters({...singolaFilters, rimborso: !!checked})}
+                  />
                   <label htmlFor="rimborso" className="text-sm text-gray-600 cursor-pointer">
                     Rimborso
                   </label>
@@ -395,7 +407,8 @@ const Index = () => {
                 <div className="relative w-[100px]">
                   <Input
                     type="text"
-                    defaultValue="0,00"
+                    value={singolaFilters.quotaMinima}
+                    onChange={(e) => setSingolaFilters({...singolaFilters, quotaMinima: e.target.value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -413,7 +426,8 @@ const Index = () => {
                 <div className="relative w-[100px]">
                   <Input
                     type="text"
-                    defaultValue="0,00"
+                    value={singolaFilters.quotaMassima}
+                    onChange={(e) => setSingolaFilters({...singolaFilters, quotaMassima: e.target.value})}
                     className="h-9 pr-8 bg-white border-gray-300"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
@@ -434,7 +448,9 @@ const Index = () => {
                 </div>
                 <Input 
                   type="text" 
-                  placeholder="Cerca per nome..." 
+                  placeholder="Cerca per nome..."
+                  value={singolaFilters.partita}
+                  onChange={(e) => setSingolaFilters({...singolaFilters, partita: e.target.value})}
                   className="h-9 flex-1 max-w-[300px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
@@ -444,7 +460,7 @@ const Index = () => {
                 <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Campionato
                 </div>
-                <Select>
+                <Select value={singolaFilters.campionato} onValueChange={(value) => setSingolaFilters({...singolaFilters, campionato: value})}>
                   <SelectTrigger className="h-9 flex-1 max-w-[300px] bg-white border-gray-300">
                     <SelectValue placeholder="Cerca Campionato..." />
                   </SelectTrigger>
@@ -464,6 +480,8 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="gg/mm/aaaa"
+                  value={singolaFilters.daData}
+                  onChange={(e) => setSingolaFilters({...singolaFilters, daData: e.target.value})}
                   className="h-9 w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
                 <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
@@ -472,6 +490,8 @@ const Index = () => {
                 <Input 
                   type="text" 
                   placeholder="gg/mm/aaaa"
+                  value={singolaFilters.aData}
+                  onChange={(e) => setSingolaFilters({...singolaFilters, aData: e.target.value})}
                   className="h-9 w-[150px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
