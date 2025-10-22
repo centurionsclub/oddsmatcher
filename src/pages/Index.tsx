@@ -569,7 +569,7 @@ const Index = () => {
 
               {/* Row 7: Quota Minima Multipla & N° Eventi */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[180px] flex items-center justify-center">
+              <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Quota Minima Multipla
                 </div>
                 <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded opacity-0 select-none">
