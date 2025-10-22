@@ -1,13 +1,44 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("singola");
+  const [betfairCommission, setBetfairCommission] = useState("4,50%");
+  const [betflagCommission, setBetflagCommission] = useState("5,00%");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const savedBetfair = localStorage.getItem("betfairCommission");
+    const savedBetflag = localStorage.getItem("betflagCommission");
+    if (savedBetfair) setBetfairCommission(savedBetfair);
+    if (savedBetflag) setBetflagCommission(savedBetflag);
+  }, []);
+
+  const handleBetfairChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setBetfairCommission(value);
+    localStorage.setItem("betfairCommission", value);
+    toast({
+      description: "Commissione Betfair salvata",
+      duration: 2000,
+    });
+  };
+
+  const handleBetflagChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setBetflagCommission(value);
+    localStorage.setItem("betflagCommission", value);
+    toast({
+      description: "Commissione BetFlag salvata",
+      duration: 2000,
+    });
+  };
 
   const tabs = [
     { id: "singola", label: "SINGOLA" },
@@ -178,7 +209,8 @@ const Index = () => {
                     <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
                     <Input 
                       type="text" 
-                      defaultValue="4,50%" 
+                      value={betfairCommission}
+                      onChange={handleBetfairChange}
                       className="h-7 w-20 text-xs"
                       onClick={(e) => e.stopPropagation()}
                     />
@@ -187,7 +219,8 @@ const Index = () => {
                     <SelectItem value="betflag" className="flex-1 border-none">BetFlag Exchange</SelectItem>
                     <Input 
                       type="text" 
-                      defaultValue="5,00%" 
+                      value={betflagCommission}
+                      onChange={handleBetflagChange}
                       className="h-7 w-20 text-xs"
                       onClick={(e) => e.stopPropagation()}
                     />
