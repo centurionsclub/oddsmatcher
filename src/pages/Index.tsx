@@ -251,9 +251,9 @@ const Index = () => {
 
               {/* Row 5: Stake Punta */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Stake Punta
-                </Label>
+                </div>
                 <Input 
                   type="text" 
                   defaultValue="0 €" 
@@ -287,9 +287,9 @@ const Index = () => {
 
               {/* Row 7: Quota Minima & Massima */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Quota Minima
-                </Label>
+                </div>
                 <div className="relative w-[100px]">
                   <Input
                     type="text"
