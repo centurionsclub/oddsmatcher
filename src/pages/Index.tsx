@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift } from "lucide-react";
+import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
@@ -532,7 +532,7 @@ const Index = () => {
               {/* Row 5: Stake Multipla */}
               <div className="flex items-center gap-3">
                 <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
-                  <Coins size={16} className="text-gray-700" />
+                  <Wallet size={16} className="text-gray-700" />
                   Stake Multipla
                 </div>
                 <Input 
