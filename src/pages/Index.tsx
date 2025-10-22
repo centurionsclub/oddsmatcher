@@ -532,7 +532,7 @@ const Index = () => {
               {/* Row 5: Stake Multipla */}
               <div className="flex items-center gap-3">
                 <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
-                  <Wallet size={16} className="text-gray-700" />
+                  <Coins size={16} strokeWidth={2} className="text-gray-700 shrink-0" />
                   Stake Multipla
                 </div>
                 <Input 
