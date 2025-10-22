@@ -37,7 +37,7 @@ export function MultiSelect({
   };
 
   const displayText = selected.length === 0 
-    ? "Tutti" 
+    ? "Tutti i bookmakers" 
     : selected.length === 1
     ? options.find(opt => opt.value === selected[0])?.label || "Selezionati"
     : `${selected.length} selezionati`;
@@ -76,7 +76,7 @@ export function MultiSelect({
                 checked={selected.length === 0}
                 onCheckedChange={() => onChange([])}
               />
-              <span className="text-sm font-medium">Tutti</span>
+              <span className="text-sm font-medium">Tutti i bookmakers</span>
             </div>
             
             {/* Separatore */}

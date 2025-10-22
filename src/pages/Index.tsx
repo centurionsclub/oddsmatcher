@@ -448,7 +448,7 @@ const Index = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
-                    <SelectItem value="tutti">Tutti</SelectItem>
+                    <SelectItem value="tutti">Tutti gli sport</SelectItem>
                     <SelectItem value="calcio">⚽ Calcio</SelectItem>
                     <SelectItem value="tennis">🎾 Tennis</SelectItem>
                     <SelectItem value="basket">🏀 Basket</SelectItem>
@@ -467,7 +467,7 @@ const Index = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                    <SelectItem value="tutti">Tutti</SelectItem>
+                    <SelectItem value="tutti">Tutti i mercati</SelectItem>
                     <SelectItem value="1">⚽ 1</SelectItem>
                     <SelectItem value="2">⚽ 2</SelectItem>
                     <SelectItem value="x">⚽ X</SelectItem>
@@ -695,7 +695,7 @@ const Index = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
-                    <SelectItem value="tutti">Tutti</SelectItem>
+                    <SelectItem value="tutti">Tutti gli sport</SelectItem>
                     <SelectItem value="calcio">⚽ Calcio</SelectItem>
                     <SelectItem value="tennis">🎾 Tennis</SelectItem>
                     <SelectItem value="basket">🏀 Basket</SelectItem>
@@ -714,7 +714,7 @@ const Index = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                    <SelectItem value="tutti">Tutti</SelectItem>
+                    <SelectItem value="tutti">Tutti i mercati</SelectItem>
                     <SelectItem value="1">⚽ 1</SelectItem>
                     <SelectItem value="2">⚽ 2</SelectItem>
                     <SelectItem value="x">⚽ X</SelectItem>
@@ -990,7 +990,7 @@ const Index = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                    <SelectItem value="nessuno">Nessuno</SelectItem>
+                    <SelectItem value="nessuno">Tutti i bookmakers</SelectItem>
                     <SelectItem value="888sport">888sport</SelectItem>
                     <SelectItem value="admiral">Admiral</SelectItem>
                     <SelectItem value="bet365">Bet365</SelectItem>
@@ -1228,7 +1228,7 @@ const Index = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                    <SelectItem value="nessuno">Nessuno</SelectItem>
+                    <SelectItem value="nessuno">Tutti i mercati</SelectItem>
                     <SelectItem value="1">⚽ 1</SelectItem>
                     <SelectItem value="2">⚽ 2</SelectItem>
                     <SelectItem value="x">⚽ X</SelectItem>
