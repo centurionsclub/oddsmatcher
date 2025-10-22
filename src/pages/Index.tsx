@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DecimalInput } from "@/components/ui/decimal-input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,8 +30,8 @@ const Index = () => {
     mercato: "tutti",
     bookmaker: "tutti",
     exchange: "tutti",
-    stakePunta: "0 €",
-    bonus: "0 €",
+    stakePunta: "0",
+    bonus: "0",
     quotaMinima: "0,00",
     quotaMassima: "0,00",
     partita: "",
@@ -47,8 +48,8 @@ const Index = () => {
     mercato: "tutti",
     bookmaker: "tutti",
     exchange: "tutti",
-    stakeMultipla: "0 €",
-    bonus: "0 €",
+    stakeMultipla: "0",
+    bonus: "0",
     quotaMinimaMultipla: "0,00",
     nEventi: "0",
     quotaPartitaMinima: "0,00",
@@ -66,8 +67,8 @@ const Index = () => {
   const [trevieFilters, setTrevieFilters] = useState({
     bookmakerPrincipale: "nessuno",
     bookmakersSecondari: [] as string[],
-    stakePunta: "0 €",
-    bonus: "0 €",
+    stakePunta: "0",
+    bonus: "0",
     quotaMinima: "0,00",
     quotaMassima: "0,00",
     partita: "",
@@ -98,8 +99,8 @@ const Index = () => {
         mercato: "tutti",
         bookmaker: "tutti",
         exchange: "tutti",
-        stakePunta: "0 €",
-        bonus: "0 €",
+        stakePunta: "0",
+        bonus: "0",
         quotaMinima: "0,00",
         quotaMassima: "0,00",
         partita: "",
@@ -115,8 +116,8 @@ const Index = () => {
         mercato: "tutti",
         bookmaker: "tutti",
         exchange: "tutti",
-        stakeMultipla: "0 €",
-        bonus: "0 €",
+        stakeMultipla: "0",
+        bonus: "0",
         quotaMinimaMultipla: "0,00",
         nEventi: "0",
         quotaPartitaMinima: "0,00",
@@ -133,8 +134,8 @@ const Index = () => {
       setTrevieFilters({
         bookmakerPrincipale: "nessuno",
         bookmakersSecondari: [],
-        stakePunta: "0 €",
-        bonus: "0 €",
+        stakePunta: "0",
+        bonus: "0",
         quotaMinima: "0,00",
         quotaMassima: "0,00",
         partita: "",
@@ -581,11 +582,10 @@ const Index = () => {
                   <Coins className="h-4 w-4" />
                   Stake Punta
                 </div>
-                <Input 
-                  type="text" 
+                <CurrencyInput 
                   value={singolaFilters.stakePunta}
-                  onChange={(e) => setSingolaFilters({...singolaFilters, stakePunta: e.target.value})}
-                  className="h-9 w-[100px] bg-white border-gray-300"
+                  onChange={(value) => setSingolaFilters({...singolaFilters, stakePunta: value})}
+                  className="h-9 w-[120px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox 
@@ -606,11 +606,10 @@ const Index = () => {
                   <Gift className="h-4 w-4" />
                   Bonus
                 </div>
-                <Input 
-                  type="text" 
+                <CurrencyInput 
                   value={singolaFilters.bonus}
-                  onChange={(e) => setSingolaFilters({...singolaFilters, bonus: e.target.value})}
-                  className="h-9 w-[100px] bg-white border-gray-300"
+                  onChange={(value) => setSingolaFilters({...singolaFilters, bonus: value})}
+                  className="h-9 w-[120px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox 
@@ -881,11 +880,10 @@ const Index = () => {
                   <Coins size={16} strokeWidth={2} className="text-gray-700 shrink-0" />
                   Stake Multipla
                 </div>
-                <Input 
-                  type="text" 
+                <CurrencyInput 
                   value={multiplaFilters.stakeMultipla}
-                  onChange={(e) => setMultiplaFilters({...multiplaFilters, stakeMultipla: e.target.value})}
-                  className="h-9 w-[100px] bg-white border-gray-300"
+                  onChange={(value) => setMultiplaFilters({...multiplaFilters, stakeMultipla: value})}
+                  className="h-9 w-[120px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox 
@@ -906,11 +904,10 @@ const Index = () => {
                   <Gift className="h-4 w-4" />
                   Bonus
                 </div>
-                <Input 
-                  type="text" 
+                <CurrencyInput 
                   value={multiplaFilters.bonus}
-                  onChange={(e) => setMultiplaFilters({...multiplaFilters, bonus: e.target.value})}
-                  className="h-9 w-[100px] bg-white border-gray-300"
+                  onChange={(value) => setMultiplaFilters({...multiplaFilters, bonus: value})}
+                  className="h-9 w-[120px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox 
@@ -1166,11 +1163,10 @@ const Index = () => {
                   <Coins className="h-4 w-4" />
                   Stake Punta
                 </div>
-                <Input 
-                  type="text" 
+                <CurrencyInput 
                   value={trevieFilters.stakePunta}
-                  onChange={(e) => setTrevieFilters({...trevieFilters, stakePunta: e.target.value})}
-                  className="h-9 w-[100px] bg-white border-gray-300"
+                  onChange={(value) => setTrevieFilters({...trevieFilters, stakePunta: value})}
+                  className="h-9 w-[120px] bg-white border-gray-300"
                 />
               </div>
 
@@ -1180,11 +1176,10 @@ const Index = () => {
                   <Gift className="h-4 w-4" />
                   Bonus
                 </div>
-                <Input 
-                  type="text" 
+                <CurrencyInput 
                   value={trevieFilters.bonus}
-                  onChange={(e) => setTrevieFilters({...trevieFilters, bonus: e.target.value})}
-                  className="h-9 w-[100px] bg-white border-gray-300"
+                  onChange={(value) => setTrevieFilters({...trevieFilters, bonus: value})}
+                  className="h-9 w-[120px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox 
