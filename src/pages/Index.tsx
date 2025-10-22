@@ -438,13 +438,13 @@ const Index = () => {
                 </Select>
               </div>
 
-              {/* Row 3: Bookmaker with Multipla Opposta */}
+              {/* Row 3: Bookmaker */}
               <div className="flex items-center gap-3">
                 <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Bookmaker
                 </div>
                 <Select defaultValue="nessuno">
-                  <SelectTrigger className="h-9 bg-white border-gray-300 w-[200px]">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
@@ -467,12 +467,6 @@ const Index = () => {
                     <SelectItem value="williamhill">William Hill</SelectItem>
                   </SelectContent>
                 </Select>
-                <div className="flex items-center gap-2 ml-4">
-                  <Checkbox id="multipla-opposta" className="border-gray-400" />
-                  <label htmlFor="multipla-opposta" className="text-sm text-gray-600 cursor-pointer">
-                    Multipla Opposta
-                  </label>
-                </div>
               </div>
 
               {/* Row 4: Exchange with Filtro Liquidità */}
