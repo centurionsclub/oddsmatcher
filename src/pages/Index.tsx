@@ -687,7 +687,7 @@ const Index = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[100px]">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap">
                     A data
                   </Label>
                   <Input 
