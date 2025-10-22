@@ -74,6 +74,14 @@ const Index = () => {
     partita: "",
   });
 
+  // Stati per SURE BET
+  const [surebetFilters, setSurebetFilters] = useState({
+    sport: "tutti",
+    partita: "",
+    bookmaker1: "tutti",
+    bookmaker2: "tutti",
+  });
+
   const handlePulisci = () => {
     if (activeTab === "singola") {
       setSingolaFilters({
@@ -130,6 +138,13 @@ const Index = () => {
       setBestOddsFilters({
         mercato: "nessuno",
         partita: "",
+      });
+    } else if (activeTab === "surebet") {
+      setSurebetFilters({
+        sport: "tutti",
+        partita: "",
+        bookmaker1: "tutti",
+        bookmaker2: "tutti",
       });
     }
   };
