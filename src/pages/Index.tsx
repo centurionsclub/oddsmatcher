@@ -110,225 +110,608 @@ const Index = () => {
 
         {/* Filters */}
         <div className="bg-white rounded-lg border border-gray-300 p-6 space-y-4">
-          {/* Row 1: Sport & Mercato */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
-                Sport
-              </Label>
-              <Select defaultValue="tutti">
-                <SelectTrigger className="h-9 bg-white border-gray-300">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  <SelectItem value="tutti">Tutti</SelectItem>
-                  <SelectItem value="calcio">⚽ Calcio</SelectItem>
-                  <SelectItem value="tennis">🎾 Tennis</SelectItem>
-                  <SelectItem value="basket">🏀 Basket</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {activeTab === "singola" ? (
+            <>
+              {/* Row 1: Sport & Mercato */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                    Sport
+                  </Label>
+                  <Select defaultValue="tutti">
+                    <SelectTrigger className="h-9 bg-white border-gray-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="tutti">Tutti</SelectItem>
+                      <SelectItem value="calcio">⚽ Calcio</SelectItem>
+                      <SelectItem value="tennis">🎾 Tennis</SelectItem>
+                      <SelectItem value="basket">🏀 Basket</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
-                Mercato
-              </Label>
-              <Select defaultValue="tutti">
-                <SelectTrigger className="h-9 bg-white border-gray-300">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                  <SelectItem value="tutti">Tutti</SelectItem>
-                  <SelectItem value="1">⚽ 1</SelectItem>
-                  <SelectItem value="2">⚽ 2</SelectItem>
-                  <SelectItem value="x">⚽ X</SelectItem>
-                  <SelectItem value="goal">⚽ Goal</SelectItem>
-                  <SelectItem value="nogoal">⚽ No Goal</SelectItem>
-                  <SelectItem value="under05">⚽ Under 0.5</SelectItem>
-                  <SelectItem value="over05">⚽ Over 0.5</SelectItem>
-                  <SelectItem value="under15">⚽ Under 1.5</SelectItem>
-                  <SelectItem value="over15">⚽ Over 1.5</SelectItem>
-                  <SelectItem value="under25">⚽ Under 2.5</SelectItem>
-                  <SelectItem value="over25">⚽ Over 2.5</SelectItem>
-                  <SelectItem value="under35">⚽ Under 3.5</SelectItem>
-                  <SelectItem value="over35">⚽ Over 3.5</SelectItem>
-                  <SelectItem value="under45">⚽ Under 4.5</SelectItem>
-                  <SelectItem value="over45">⚽ Over 4.5</SelectItem>
-                  <SelectItem value="1-tennis">🎾 1</SelectItem>
-                  <SelectItem value="2-tennis">🎾 2</SelectItem>
-                  <SelectItem value="1-basket">🏀 1</SelectItem>
-                  <SelectItem value="2-basket">🏀 2</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Row 2: Bookmaker & Exchange */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-3">
-              <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap min-w-[80px] flex items-center justify-center">
-                Bookmaker
-              </div>
-              <Select defaultValue="tutti">
-                <SelectTrigger className="h-9 bg-white border-gray-300">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                  <SelectItem value="tutti">Tutti</SelectItem>
-                  <SelectItem value="888sport">888sport</SelectItem>
-                  <SelectItem value="admiral">Admiral</SelectItem>
-                  <SelectItem value="bet365">Bet365</SelectItem>
-                  <SelectItem value="betfair">Betfair</SelectItem>
-                  <SelectItem value="betflag">Betflag</SelectItem>
-                  <SelectItem value="betsson">Betsson</SelectItem>
-                  <SelectItem value="better">Better</SelectItem>
-                  <SelectItem value="betway">Betway</SelectItem>
-                  <SelectItem value="eurobet">Eurobet</SelectItem>
-                  <SelectItem value="goldbet">Goldbet</SelectItem>
-                  <SelectItem value="lottomatica">Lottomatica</SelectItem>
-                  <SelectItem value="netbet">NetBet</SelectItem>
-                  <SelectItem value="sisal">Sisal</SelectItem>
-                  <SelectItem value="snai">Snai</SelectItem>
-                  <SelectItem value="unibet">Unibet</SelectItem>
-                  <SelectItem value="williamhill">William Hill</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap min-w-[80px] flex items-center justify-center">
-                Exchange
-              </div>
-              <Select defaultValue="tutti">
-                <SelectTrigger className="h-9 bg-white border-gray-300">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]">
-                  <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
-                  <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
-                    <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
-                    <Input 
-                      type="text" 
-                      value={betfairCommission}
-                      onChange={handleBetfairChange}
-                      className="h-7 w-20 text-xs"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
-                    <SelectItem value="betflag" className="flex-1 border-none">BetFlag Exchange</SelectItem>
-                    <Input 
-                      type="text" 
-                      value={betflagCommission}
-                      onChange={handleBetflagChange}
-                      className="h-7 w-20 text-xs"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </div>
-                  <div className="px-2 py-1.5 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
-                    Bookmakers
-                  </div>
-                  <SelectItem value="888sport">888sport</SelectItem>
-                  <SelectItem value="admiral">Admiral</SelectItem>
-                  <SelectItem value="bet365">Bet365</SelectItem>
-                  <SelectItem value="betfair-book">Betfair</SelectItem>
-                  <SelectItem value="betflag-book">Betflag</SelectItem>
-                  <SelectItem value="betsson">Betsson</SelectItem>
-                  <SelectItem value="better">Better</SelectItem>
-                  <SelectItem value="betway">Betway</SelectItem>
-                  <SelectItem value="eurobet">Eurobet</SelectItem>
-                  <SelectItem value="goldbet">Goldbet</SelectItem>
-                  <SelectItem value="lottomatica">Lottomatica</SelectItem>
-                  <SelectItem value="netbet">NetBet</SelectItem>
-                  <SelectItem value="sisal">Sisal</SelectItem>
-                  <SelectItem value="snai">Snai</SelectItem>
-                  <SelectItem value="unibet">Unibet</SelectItem>
-                  <SelectItem value="williamhill">William Hill</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Row 3: Stake Punta */}
-          <div className="flex items-center gap-3">
-            <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
-              Stake Punta
-            </Label>
-            <Input 
-              type="text" 
-              defaultValue="0 €" 
-              className="h-9 w-32 bg-white border-gray-300"
-            />
-            <div className="flex items-center gap-2 ml-4">
-              <Checkbox id="freebet" className="border-gray-400" />
-              <label htmlFor="freebet" className="text-sm text-gray-600 cursor-pointer">
-                Free Bet
-              </label>
-            </div>
-          </div>
-
-          {/* Row 4: Bonus */}
-          <div className="flex items-center gap-3">
-            <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap min-w-[100px] flex items-center justify-center">
-              Bonus
-            </div>
-            <Input 
-              type="text" 
-              defaultValue="0 €" 
-              className="h-9 w-32 bg-white border-gray-300"
-            />
-            <div className="flex items-center gap-2 ml-4">
-              <Checkbox id="rimborso" className="border-gray-400" />
-              <label htmlFor="rimborso" className="text-sm text-gray-600 cursor-pointer">
-                Rimborso
-              </label>
-            </div>
-          </div>
-
-          {/* Row 5: Quota Minima & Massima */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
-                Quota Minima
-              </Label>
-              <div className="relative flex-1 max-w-[200px]">
-                <Input
-                  type="text"
-                  defaultValue="0,00"
-                  className="h-9 pr-8 bg-white border-gray-300"
-                />
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
-                  <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
-                    <ChevronUp className="h-3 w-3 text-gray-600" />
-                  </button>
-                  <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
-                    <ChevronDown className="h-3 w-3 text-gray-600" />
-                  </button>
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                    Mercato
+                  </Label>
+                  <Select defaultValue="tutti">
+                    <SelectTrigger className="h-9 bg-white border-gray-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                      <SelectItem value="tutti">Tutti</SelectItem>
+                      <SelectItem value="1">⚽ 1</SelectItem>
+                      <SelectItem value="2">⚽ 2</SelectItem>
+                      <SelectItem value="x">⚽ X</SelectItem>
+                      <SelectItem value="goal">⚽ Goal</SelectItem>
+                      <SelectItem value="nogoal">⚽ No Goal</SelectItem>
+                      <SelectItem value="under05">⚽ Under 0.5</SelectItem>
+                      <SelectItem value="over05">⚽ Over 0.5</SelectItem>
+                      <SelectItem value="under15">⚽ Under 1.5</SelectItem>
+                      <SelectItem value="over15">⚽ Over 1.5</SelectItem>
+                      <SelectItem value="under25">⚽ Under 2.5</SelectItem>
+                      <SelectItem value="over25">⚽ Over 2.5</SelectItem>
+                      <SelectItem value="under35">⚽ Under 3.5</SelectItem>
+                      <SelectItem value="over35">⚽ Over 3.5</SelectItem>
+                      <SelectItem value="under45">⚽ Under 4.5</SelectItem>
+                      <SelectItem value="over45">⚽ Over 4.5</SelectItem>
+                      <SelectItem value="1-tennis">🎾 1</SelectItem>
+                      <SelectItem value="2-tennis">🎾 2</SelectItem>
+                      <SelectItem value="1-basket">🏀 1</SelectItem>
+                      <SelectItem value="2-basket">🏀 2</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-3">
-              <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
-                Quota Massima
-              </Label>
-              <div className="relative flex-1 max-w-[200px]">
-                <Input
-                  type="text"
-                  defaultValue="0,00"
-                  className="h-9 pr-8 bg-white border-gray-300"
-                />
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
-                  <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
-                    <ChevronUp className="h-3 w-3 text-gray-600" />
-                  </button>
-                  <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
-                    <ChevronDown className="h-3 w-3 text-gray-600" />
-                  </button>
+              {/* Row 2: Bookmaker & Exchange */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap min-w-[80px] flex items-center justify-center">
+                    Bookmaker
+                  </div>
+                  <Select defaultValue="tutti">
+                    <SelectTrigger className="h-9 bg-white border-gray-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                      <SelectItem value="tutti">Tutti</SelectItem>
+                      <SelectItem value="888sport">888sport</SelectItem>
+                      <SelectItem value="admiral">Admiral</SelectItem>
+                      <SelectItem value="bet365">Bet365</SelectItem>
+                      <SelectItem value="betfair">Betfair</SelectItem>
+                      <SelectItem value="betflag">Betflag</SelectItem>
+                      <SelectItem value="betsson">Betsson</SelectItem>
+                      <SelectItem value="better">Better</SelectItem>
+                      <SelectItem value="betway">Betway</SelectItem>
+                      <SelectItem value="eurobet">Eurobet</SelectItem>
+                      <SelectItem value="goldbet">Goldbet</SelectItem>
+                      <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                      <SelectItem value="netbet">NetBet</SelectItem>
+                      <SelectItem value="sisal">Sisal</SelectItem>
+                      <SelectItem value="snai">Snai</SelectItem>
+                      <SelectItem value="unibet">Unibet</SelectItem>
+                      <SelectItem value="williamhill">William Hill</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap min-w-[80px] flex items-center justify-center">
+                    Exchange
+                  </div>
+                  <Select defaultValue="tutti">
+                    <SelectTrigger className="h-9 bg-white border-gray-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]">
+                      <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
+                      <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
+                        <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
+                        <Input 
+                          type="text" 
+                          value={betfairCommission}
+                          onChange={handleBetfairChange}
+                          className="h-7 w-20 text-xs"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
+                        <SelectItem value="betflag" className="flex-1 border-none">BetFlag Exchange</SelectItem>
+                        <Input 
+                          type="text" 
+                          value={betflagCommission}
+                          onChange={handleBetflagChange}
+                          className="h-7 w-20 text-xs"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <div className="px-2 py-1.5 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
+                        Bookmakers
+                      </div>
+                      <SelectItem value="888sport">888sport</SelectItem>
+                      <SelectItem value="admiral">Admiral</SelectItem>
+                      <SelectItem value="bet365">Bet365</SelectItem>
+                      <SelectItem value="betfair-book">Betfair</SelectItem>
+                      <SelectItem value="betflag-book">Betflag</SelectItem>
+                      <SelectItem value="betsson">Betsson</SelectItem>
+                      <SelectItem value="better">Better</SelectItem>
+                      <SelectItem value="betway">Betway</SelectItem>
+                      <SelectItem value="eurobet">Eurobet</SelectItem>
+                      <SelectItem value="goldbet">Goldbet</SelectItem>
+                      <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                      <SelectItem value="netbet">NetBet</SelectItem>
+                      <SelectItem value="sisal">Sisal</SelectItem>
+                      <SelectItem value="snai">Snai</SelectItem>
+                      <SelectItem value="unibet">Unibet</SelectItem>
+                      <SelectItem value="williamhill">William Hill</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            </div>
-          </div>
+
+              {/* Row 3: Stake Punta */}
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                  Stake Punta
+                </Label>
+                <Input 
+                  type="text" 
+                  defaultValue="0 €" 
+                  className="h-9 w-32 bg-white border-gray-300"
+                />
+                <div className="flex items-center gap-2 ml-4">
+                  <Checkbox id="freebet" className="border-gray-400" />
+                  <label htmlFor="freebet" className="text-sm text-gray-600 cursor-pointer">
+                    Free Bet
+                  </label>
+                </div>
+              </div>
+
+              {/* Row 4: Bonus */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap min-w-[100px] flex items-center justify-center">
+                  Bonus
+                </div>
+                <Input 
+                  type="text" 
+                  defaultValue="0 €" 
+                  className="h-9 w-32 bg-white border-gray-300"
+                />
+                <div className="flex items-center gap-2 ml-4">
+                  <Checkbox id="rimborso" className="border-gray-400" />
+                  <label htmlFor="rimborso" className="text-sm text-gray-600 cursor-pointer">
+                    Rimborso
+                  </label>
+                </div>
+              </div>
+
+              {/* Row 5: Quota Minima & Massima */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                    Quota Minima
+                  </Label>
+                  <div className="relative flex-1 max-w-[200px]">
+                    <Input
+                      type="text"
+                      defaultValue="0,00"
+                      className="h-9 pr-8 bg-white border-gray-300"
+                    />
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                        <ChevronUp className="h-3 w-3 text-gray-600" />
+                      </button>
+                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                        <ChevronDown className="h-3 w-3 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                    Quota Massima
+                  </Label>
+                  <div className="relative flex-1 max-w-[200px]">
+                    <Input
+                      type="text"
+                      defaultValue="0,00"
+                      className="h-9 pr-8 bg-white border-gray-300"
+                    />
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                        <ChevronUp className="h-3 w-3 text-gray-600" />
+                      </button>
+                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                        <ChevronDown className="h-3 w-3 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 6: Partita */}
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                  Partita
+                </Label>
+                <Input 
+                  type="text" 
+                  placeholder="Cerca per nome..." 
+                  className="h-9 flex-1 bg-white border-gray-300 placeholder:text-gray-400"
+                />
+              </div>
+
+              {/* Row 7: Campionato */}
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                  Campionato
+                </Label>
+                <Select>
+                  <SelectTrigger className="h-9 flex-1 bg-white border-gray-300">
+                    <SelectValue placeholder="Cerca Campionato..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="seriea">Serie A</SelectItem>
+                    <SelectItem value="premierleague">Premier League</SelectItem>
+                    <SelectItem value="laliga">La Liga</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 8: Date */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                    Da data
+                  </Label>
+                  <Input 
+                    type="text" 
+                    placeholder="gg/mm/aaaa"
+                    className="h-9 bg-white border-gray-300 placeholder:text-gray-400"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                    A data
+                  </Label>
+                  <Input 
+                    type="text" 
+                    placeholder="gg/mm/aaaa"
+                    className="h-9 bg-white border-gray-300 placeholder:text-gray-400"
+                  />
+                </div>
+              </div>
+            </>
+          ) : activeTab === "multipla" ? (
+            <>
+              {/* Row 1: Sport & Mercato */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                    Sport
+                  </Label>
+                  <Select defaultValue="tutti">
+                    <SelectTrigger className="h-9 bg-white border-gray-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="tutti">Tutti</SelectItem>
+                      <SelectItem value="calcio">⚽ Calcio</SelectItem>
+                      <SelectItem value="tennis">🎾 Tennis</SelectItem>
+                      <SelectItem value="basket">🏀 Basket</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                    Mercato
+                  </Label>
+                  <Select defaultValue="tutti">
+                    <SelectTrigger className="h-9 bg-white border-gray-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                      <SelectItem value="tutti">Tutti</SelectItem>
+                      <SelectItem value="1">⚽ 1</SelectItem>
+                      <SelectItem value="2">⚽ 2</SelectItem>
+                      <SelectItem value="x">⚽ X</SelectItem>
+                      <SelectItem value="goal">⚽ Goal</SelectItem>
+                      <SelectItem value="nogoal">⚽ No Goal</SelectItem>
+                      <SelectItem value="under05">⚽ Under 0.5</SelectItem>
+                      <SelectItem value="over05">⚽ Over 0.5</SelectItem>
+                      <SelectItem value="under15">⚽ Under 1.5</SelectItem>
+                      <SelectItem value="over15">⚽ Over 1.5</SelectItem>
+                      <SelectItem value="under25">⚽ Under 2.5</SelectItem>
+                      <SelectItem value="over25">⚽ Over 2.5</SelectItem>
+                      <SelectItem value="under35">⚽ Under 3.5</SelectItem>
+                      <SelectItem value="over35">⚽ Over 3.5</SelectItem>
+                      <SelectItem value="under45">⚽ Under 4.5</SelectItem>
+                      <SelectItem value="over45">⚽ Over 4.5</SelectItem>
+                      <SelectItem value="1-tennis">🎾 1</SelectItem>
+                      <SelectItem value="2-tennis">🎾 2</SelectItem>
+                      <SelectItem value="1-basket">🏀 1</SelectItem>
+                      <SelectItem value="2-basket">🏀 2</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Row 2: Bookmaker with Multipla Opposta */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap min-w-[100px] flex items-center justify-center">
+                  Bookmaker
+                </div>
+                <Select defaultValue="nessuno">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                    <SelectItem value="nessuno">Nessuno</SelectItem>
+                    <SelectItem value="888sport">888sport</SelectItem>
+                    <SelectItem value="admiral">Admiral</SelectItem>
+                    <SelectItem value="bet365">Bet365</SelectItem>
+                    <SelectItem value="betfair">Betfair</SelectItem>
+                    <SelectItem value="betflag">Betflag</SelectItem>
+                    <SelectItem value="betsson">Betsson</SelectItem>
+                    <SelectItem value="better">Better</SelectItem>
+                    <SelectItem value="betway">Betway</SelectItem>
+                    <SelectItem value="eurobet">Eurobet</SelectItem>
+                    <SelectItem value="goldbet">Goldbet</SelectItem>
+                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                    <SelectItem value="netbet">NetBet</SelectItem>
+                    <SelectItem value="sisal">Sisal</SelectItem>
+                    <SelectItem value="snai">Snai</SelectItem>
+                    <SelectItem value="unibet">Unibet</SelectItem>
+                    <SelectItem value="williamhill">William Hill</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2 ml-4">
+                  <Checkbox id="multipla-opposta" className="border-gray-400" />
+                  <label htmlFor="multipla-opposta" className="text-sm text-gray-600 cursor-pointer">
+                    Multipla Opposta
+                  </label>
+                </div>
+              </div>
+
+              {/* Row 3: Exchange with Filtro Liquidità */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap min-w-[100px] flex items-center justify-center">
+                  Exchange
+                </div>
+                <Select defaultValue="tutti">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]">
+                    <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
+                    <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
+                      <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
+                      <Input 
+                        type="text" 
+                        value={betfairCommission}
+                        onChange={handleBetfairChange}
+                        className="h-7 w-20 text-xs"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
+                      <SelectItem value="betflag" className="flex-1 border-none">BetFlag Exchange</SelectItem>
+                      <Input 
+                        type="text" 
+                        value={betflagCommission}
+                        onChange={handleBetflagChange}
+                        className="h-7 w-20 text-xs"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="px-2 py-1.5 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
+                      Bookmakers
+                    </div>
+                    <SelectItem value="888sport">888sport</SelectItem>
+                    <SelectItem value="admiral">Admiral</SelectItem>
+                    <SelectItem value="bet365">Bet365</SelectItem>
+                    <SelectItem value="betfair-book">Betfair</SelectItem>
+                    <SelectItem value="betflag-book">Betflag</SelectItem>
+                    <SelectItem value="betsson">Betsson</SelectItem>
+                    <SelectItem value="better">Better</SelectItem>
+                    <SelectItem value="betway">Betway</SelectItem>
+                    <SelectItem value="eurobet">Eurobet</SelectItem>
+                    <SelectItem value="goldbet">Goldbet</SelectItem>
+                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                    <SelectItem value="netbet">NetBet</SelectItem>
+                    <SelectItem value="sisal">Sisal</SelectItem>
+                    <SelectItem value="snai">Snai</SelectItem>
+                    <SelectItem value="unibet">Unibet</SelectItem>
+                    <SelectItem value="williamhill">William Hill</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2 ml-4">
+                  <Checkbox id="filtro-liquidita" className="border-gray-400" />
+                  <label htmlFor="filtro-liquidita" className="text-sm text-gray-600 cursor-pointer">
+                    Filtro Liquidità
+                  </label>
+                </div>
+              </div>
+
+              {/* Row 4: Stake Multipla */}
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[130px]">
+                  Stake Multipla
+                </Label>
+                <Input 
+                  type="text" 
+                  defaultValue="0 €" 
+                  className="h-9 w-48 bg-white border-gray-300"
+                />
+                <div className="flex items-center gap-2 ml-4">
+                  <Checkbox id="freebet-multi" className="border-gray-400" />
+                  <label htmlFor="freebet-multi" className="text-sm text-gray-600 cursor-pointer">
+                    Free Bet
+                  </label>
+                </div>
+              </div>
+
+              {/* Row 5: Bonus */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap min-w-[130px] flex items-center justify-center">
+                  Bonus
+                </div>
+                <Input 
+                  type="text" 
+                  defaultValue="0 €" 
+                  className="h-9 w-48 bg-white border-gray-300"
+                />
+                <div className="flex items-center gap-2 ml-4">
+                  <Checkbox id="rimborso-multi" className="border-gray-400" />
+                  <label htmlFor="rimborso-multi" className="text-sm text-gray-600 cursor-pointer">
+                    Rimborso
+                  </label>
+                </div>
+              </div>
+
+              {/* Row 6: Quota Minima Multipla & N° Eventi */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[150px]">
+                    Quota Minima Multipla
+                  </Label>
+                  <div className="relative flex-1 max-w-[150px]">
+                    <Input
+                      type="text"
+                      defaultValue="0,00"
+                      className="h-9 pr-8 bg-white border-gray-300"
+                    />
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                        <ChevronUp className="h-3 w-3 text-gray-600" />
+                      </button>
+                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                        <ChevronDown className="h-3 w-3 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                    N° Eventi
+                  </Label>
+                  <Input
+                    type="text"
+                    defaultValue="0"
+                    className="h-9 w-32 bg-white border-gray-300"
+                  />
+                </div>
+              </div>
+
+              {/* Row 7: Quota Partita Minima & Massima */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap">
+                    Quota Partita
+                  </Label>
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap">
+                    Minima
+                  </Label>
+                  <div className="relative flex-1 max-w-[150px]">
+                    <Input
+                      type="text"
+                      defaultValue="0,00"
+                      className="h-9 pr-8 bg-white border-gray-300"
+                    />
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                        <ChevronUp className="h-3 w-3 text-gray-600" />
+                      </button>
+                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                        <ChevronDown className="h-3 w-3 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap">
+                    Massima
+                  </Label>
+                  <div className="relative flex-1 max-w-[150px]">
+                    <Input
+                      type="text"
+                      defaultValue="0,00"
+                      className="h-9 pr-8 bg-white border-gray-300"
+                    />
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                        <ChevronUp className="h-3 w-3 text-gray-600" />
+                      </button>
+                      <button className="h-4 w-6 hover:bg-gray-100 rounded flex items-center justify-center">
+                        <ChevronDown className="h-3 w-3 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 8: Partita */}
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                  Partita
+                </Label>
+                <Input 
+                  type="text" 
+                  placeholder="Cerca per nome..." 
+                  className="h-9 flex-1 bg-white border-gray-300 placeholder:text-gray-400"
+                />
+              </div>
+
+              {/* Row 9: Campionato */}
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                  Campionato
+                </Label>
+                <Select>
+                  <SelectTrigger className="h-9 flex-1 bg-white border-gray-300">
+                    <SelectValue placeholder="Cerca Campionato..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="seriea">Serie A</SelectItem>
+                    <SelectItem value="premierleague">Premier League</SelectItem>
+                    <SelectItem value="laliga">La Liga</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 10: Date */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                    Da data
+                  </Label>
+                  <Input 
+                    type="text" 
+                    placeholder="gg/mm/aaaa"
+                    className="h-9 bg-white border-gray-300 placeholder:text-gray-400"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                    A data
+                  </Label>
+                  <Input 
+                    type="text" 
+                    placeholder="gg/mm/aaaa"
+                    className="h-9 bg-white border-gray-300 placeholder:text-gray-400"
+                  />
+                </div>
+              </div>
+            </>
+          ) : null}
 
           {/* Row 6: Partita */}
           <div className="flex items-center gap-3">
