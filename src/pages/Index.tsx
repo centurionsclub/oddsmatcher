@@ -109,157 +109,155 @@ const Index = () => {
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-lg border border-gray-300 p-6 space-y-4">
+        <div className="bg-white rounded-lg border border-gray-300 p-6 space-y-3">
           {activeTab === "singola" ? (
             <>
-              {/* Row 1: Sport & Mercato */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
-                    Sport
-                  </Label>
-                  <Select defaultValue="tutti">
-                    <SelectTrigger className="h-9 bg-white border-gray-300">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white">
-                      <SelectItem value="tutti">Tutti</SelectItem>
-                      <SelectItem value="calcio">⚽ Calcio</SelectItem>
-                      <SelectItem value="tennis">🎾 Tennis</SelectItem>
-                      <SelectItem value="basket">🏀 Basket</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
-                    Mercato
-                  </Label>
-                  <Select defaultValue="tutti">
-                    <SelectTrigger className="h-9 bg-white border-gray-300">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                      <SelectItem value="tutti">Tutti</SelectItem>
-                      <SelectItem value="1">⚽ 1</SelectItem>
-                      <SelectItem value="2">⚽ 2</SelectItem>
-                      <SelectItem value="x">⚽ X</SelectItem>
-                      <SelectItem value="goal">⚽ Goal</SelectItem>
-                      <SelectItem value="nogoal">⚽ No Goal</SelectItem>
-                      <SelectItem value="under05">⚽ Under 0.5</SelectItem>
-                      <SelectItem value="over05">⚽ Over 0.5</SelectItem>
-                      <SelectItem value="under15">⚽ Under 1.5</SelectItem>
-                      <SelectItem value="over15">⚽ Over 1.5</SelectItem>
-                      <SelectItem value="under25">⚽ Under 2.5</SelectItem>
-                      <SelectItem value="over25">⚽ Over 2.5</SelectItem>
-                      <SelectItem value="under35">⚽ Under 3.5</SelectItem>
-                      <SelectItem value="over35">⚽ Over 3.5</SelectItem>
-                      <SelectItem value="under45">⚽ Under 4.5</SelectItem>
-                      <SelectItem value="over45">⚽ Over 4.5</SelectItem>
-                      <SelectItem value="1-tennis">🎾 1</SelectItem>
-                      <SelectItem value="2-tennis">🎾 2</SelectItem>
-                      <SelectItem value="1-basket">🏀 1</SelectItem>
-                      <SelectItem value="2-basket">🏀 2</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Row 2: Bookmaker & Exchange */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap min-w-[80px] flex items-center justify-center">
-                    Bookmaker
-                  </div>
-                  <Select defaultValue="tutti">
-                    <SelectTrigger className="h-9 bg-white border-gray-300">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                      <SelectItem value="tutti">Tutti</SelectItem>
-                      <SelectItem value="888sport">888sport</SelectItem>
-                      <SelectItem value="admiral">Admiral</SelectItem>
-                      <SelectItem value="bet365">Bet365</SelectItem>
-                      <SelectItem value="betfair">Betfair</SelectItem>
-                      <SelectItem value="betflag">Betflag</SelectItem>
-                      <SelectItem value="betsson">Betsson</SelectItem>
-                      <SelectItem value="better">Better</SelectItem>
-                      <SelectItem value="betway">Betway</SelectItem>
-                      <SelectItem value="eurobet">Eurobet</SelectItem>
-                      <SelectItem value="goldbet">Goldbet</SelectItem>
-                      <SelectItem value="lottomatica">Lottomatica</SelectItem>
-                      <SelectItem value="netbet">NetBet</SelectItem>
-                      <SelectItem value="sisal">Sisal</SelectItem>
-                      <SelectItem value="snai">Snai</SelectItem>
-                      <SelectItem value="unibet">Unibet</SelectItem>
-                      <SelectItem value="williamhill">William Hill</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap min-w-[80px] flex items-center justify-center">
-                    Exchange
-                  </div>
-                  <Select defaultValue="tutti">
-                    <SelectTrigger className="h-9 bg-white border-gray-300">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]">
-                      <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
-                      <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
-                        <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
-                        <Input 
-                          type="text" 
-                          value={betfairCommission}
-                          onChange={handleBetfairChange}
-                          className="h-7 w-20 text-xs"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
-                        <SelectItem value="betflag" className="flex-1 border-none">BetFlag Exchange</SelectItem>
-                        <Input 
-                          type="text" 
-                          value={betflagCommission}
-                          onChange={handleBetflagChange}
-                          className="h-7 w-20 text-xs"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                      <div className="px-2 py-1.5 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
-                        Bookmakers
-                      </div>
-                      <SelectItem value="888sport">888sport</SelectItem>
-                      <SelectItem value="admiral">Admiral</SelectItem>
-                      <SelectItem value="bet365">Bet365</SelectItem>
-                      <SelectItem value="betfair-book">Betfair</SelectItem>
-                      <SelectItem value="betflag-book">Betflag</SelectItem>
-                      <SelectItem value="betsson">Betsson</SelectItem>
-                      <SelectItem value="better">Better</SelectItem>
-                      <SelectItem value="betway">Betway</SelectItem>
-                      <SelectItem value="eurobet">Eurobet</SelectItem>
-                      <SelectItem value="goldbet">Goldbet</SelectItem>
-                      <SelectItem value="lottomatica">Lottomatica</SelectItem>
-                      <SelectItem value="netbet">NetBet</SelectItem>
-                      <SelectItem value="sisal">Sisal</SelectItem>
-                      <SelectItem value="snai">Snai</SelectItem>
-                      <SelectItem value="unibet">Unibet</SelectItem>
-                      <SelectItem value="williamhill">William Hill</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Row 3: Stake Punta */}
+              {/* Row 1: Sport */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                  Sport
+                </Label>
+                <Select defaultValue="tutti">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="tutti">Tutti</SelectItem>
+                    <SelectItem value="calcio">⚽ Calcio</SelectItem>
+                    <SelectItem value="tennis">🎾 Tennis</SelectItem>
+                    <SelectItem value="basket">🏀 Basket</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 2: Mercato */}
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                  Mercato
+                </Label>
+                <Select defaultValue="tutti">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                    <SelectItem value="tutti">Tutti</SelectItem>
+                    <SelectItem value="1">⚽ 1</SelectItem>
+                    <SelectItem value="2">⚽ 2</SelectItem>
+                    <SelectItem value="x">⚽ X</SelectItem>
+                    <SelectItem value="goal">⚽ Goal</SelectItem>
+                    <SelectItem value="nogoal">⚽ No Goal</SelectItem>
+                    <SelectItem value="under05">⚽ Under 0.5</SelectItem>
+                    <SelectItem value="over05">⚽ Over 0.5</SelectItem>
+                    <SelectItem value="under15">⚽ Under 1.5</SelectItem>
+                    <SelectItem value="over15">⚽ Over 1.5</SelectItem>
+                    <SelectItem value="under25">⚽ Under 2.5</SelectItem>
+                    <SelectItem value="over25">⚽ Over 2.5</SelectItem>
+                    <SelectItem value="under35">⚽ Under 3.5</SelectItem>
+                    <SelectItem value="over35">⚽ Over 3.5</SelectItem>
+                    <SelectItem value="under45">⚽ Under 4.5</SelectItem>
+                    <SelectItem value="over45">⚽ Over 4.5</SelectItem>
+                    <SelectItem value="1-tennis">🎾 1</SelectItem>
+                    <SelectItem value="2-tennis">🎾 2</SelectItem>
+                    <SelectItem value="1-basket">🏀 1</SelectItem>
+                    <SelectItem value="2-basket">🏀 2</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 3: Bookmaker */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                  Bookmaker
+                </div>
+                <Select defaultValue="tutti">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                    <SelectItem value="tutti">Tutti</SelectItem>
+                    <SelectItem value="888sport">888sport</SelectItem>
+                    <SelectItem value="admiral">Admiral</SelectItem>
+                    <SelectItem value="bet365">Bet365</SelectItem>
+                    <SelectItem value="betfair">Betfair</SelectItem>
+                    <SelectItem value="betflag">Betflag</SelectItem>
+                    <SelectItem value="betsson">Betsson</SelectItem>
+                    <SelectItem value="better">Better</SelectItem>
+                    <SelectItem value="betway">Betway</SelectItem>
+                    <SelectItem value="eurobet">Eurobet</SelectItem>
+                    <SelectItem value="goldbet">Goldbet</SelectItem>
+                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                    <SelectItem value="netbet">NetBet</SelectItem>
+                    <SelectItem value="sisal">Sisal</SelectItem>
+                    <SelectItem value="snai">Snai</SelectItem>
+                    <SelectItem value="unibet">Unibet</SelectItem>
+                    <SelectItem value="williamhill">William Hill</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 4: Exchange */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                  Exchange
+                </div>
+                <Select defaultValue="tutti">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]">
+                    <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
+                    <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
+                      <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
+                      <Input 
+                        type="text" 
+                        value={betfairCommission}
+                        onChange={handleBetfairChange}
+                        className="h-7 w-20 text-xs"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
+                      <SelectItem value="betflag" className="flex-1 border-none">BetFlag Exchange</SelectItem>
+                      <Input 
+                        type="text" 
+                        value={betflagCommission}
+                        onChange={handleBetflagChange}
+                        className="h-7 w-20 text-xs"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="px-2 py-1.5 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
+                      Bookmakers
+                    </div>
+                    <SelectItem value="888sport">888sport</SelectItem>
+                    <SelectItem value="admiral">Admiral</SelectItem>
+                    <SelectItem value="bet365">Bet365</SelectItem>
+                    <SelectItem value="betfair-book">Betfair</SelectItem>
+                    <SelectItem value="betflag-book">Betflag</SelectItem>
+                    <SelectItem value="betsson">Betsson</SelectItem>
+                    <SelectItem value="better">Better</SelectItem>
+                    <SelectItem value="betway">Betway</SelectItem>
+                    <SelectItem value="eurobet">Eurobet</SelectItem>
+                    <SelectItem value="goldbet">Goldbet</SelectItem>
+                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                    <SelectItem value="netbet">NetBet</SelectItem>
+                    <SelectItem value="sisal">Sisal</SelectItem>
+                    <SelectItem value="snai">Snai</SelectItem>
+                    <SelectItem value="unibet">Unibet</SelectItem>
+                    <SelectItem value="williamhill">William Hill</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 5: Stake Punta */}
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                   Stake Punta
                 </Label>
                 <Input 
                   type="text" 
                   defaultValue="0 €" 
-                  className="h-9 w-32 bg-white border-gray-300"
+                  className="h-9 w-[200px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox id="freebet" className="border-gray-400" />
@@ -269,15 +267,15 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Row 4: Bonus */}
+              {/* Row 6: Bonus */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap min-w-[100px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Bonus
                 </div>
                 <Input 
                   type="text" 
                   defaultValue="0 €" 
-                  className="h-9 w-32 bg-white border-gray-300"
+                  className="h-9 w-[200px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox id="rimborso" className="border-gray-400" />
@@ -287,13 +285,13 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Row 5: Quota Minima & Massima */}
+              {/* Row 7: Quota Minima & Massima */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                     Quota Minima
                   </Label>
-                  <div className="relative flex-1 max-w-[200px]">
+                  <div className="relative w-[200px]">
                     <Input
                       type="text"
                       defaultValue="0,00"
@@ -311,10 +309,10 @@ const Index = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                     Quota Massima
                   </Label>
-                  <div className="relative flex-1 max-w-[200px]">
+                  <div className="relative w-[200px]">
                     <Input
                       type="text"
                       defaultValue="0,00"
@@ -332,25 +330,25 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Row 6: Partita */}
+              {/* Row 8: Partita */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                   Partita
                 </Label>
                 <Input 
                   type="text" 
                   placeholder="Cerca per nome..." 
-                  className="h-9 flex-1 bg-white border-gray-300 placeholder:text-gray-400"
+                  className="h-9 flex-1 max-w-[500px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
 
-              {/* Row 7: Campionato */}
+              {/* Row 9: Campionato */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                   Campionato
                 </Label>
                 <Select>
-                  <SelectTrigger className="h-9 flex-1 bg-white border-gray-300">
+                  <SelectTrigger className="h-9 flex-1 max-w-[500px] bg-white border-gray-300">
                     <SelectValue placeholder="Cerca Campionato..." />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
@@ -361,93 +359,92 @@ const Index = () => {
                 </Select>
               </div>
 
-              {/* Row 8: Date */}
+              {/* Row 10: Date */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                     Da data
                   </Label>
                   <Input 
                     type="text" 
                     placeholder="gg/mm/aaaa"
-                    className="h-9 bg-white border-gray-300 placeholder:text-gray-400"
+                    className="h-9 w-[200px] bg-white border-gray-300 placeholder:text-gray-400"
                   />
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                     A data
                   </Label>
                   <Input 
                     type="text" 
                     placeholder="gg/mm/aaaa"
-                    className="h-9 bg-white border-gray-300 placeholder:text-gray-400"
+                    className="h-9 w-[200px] bg-white border-gray-300 placeholder:text-gray-400"
                   />
                 </div>
               </div>
             </>
           ) : activeTab === "multipla" ? (
             <>
-              {/* Row 1: Sport & Mercato */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
-                    Sport
-                  </Label>
-                  <Select defaultValue="tutti">
-                    <SelectTrigger className="h-9 bg-white border-gray-300">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white">
-                      <SelectItem value="tutti">Tutti</SelectItem>
-                      <SelectItem value="calcio">⚽ Calcio</SelectItem>
-                      <SelectItem value="tennis">🎾 Tennis</SelectItem>
-                      <SelectItem value="basket">🏀 Basket</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
-                    Mercato
-                  </Label>
-                  <Select defaultValue="tutti">
-                    <SelectTrigger className="h-9 bg-white border-gray-300">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                      <SelectItem value="tutti">Tutti</SelectItem>
-                      <SelectItem value="1">⚽ 1</SelectItem>
-                      <SelectItem value="2">⚽ 2</SelectItem>
-                      <SelectItem value="x">⚽ X</SelectItem>
-                      <SelectItem value="goal">⚽ Goal</SelectItem>
-                      <SelectItem value="nogoal">⚽ No Goal</SelectItem>
-                      <SelectItem value="under05">⚽ Under 0.5</SelectItem>
-                      <SelectItem value="over05">⚽ Over 0.5</SelectItem>
-                      <SelectItem value="under15">⚽ Under 1.5</SelectItem>
-                      <SelectItem value="over15">⚽ Over 1.5</SelectItem>
-                      <SelectItem value="under25">⚽ Under 2.5</SelectItem>
-                      <SelectItem value="over25">⚽ Over 2.5</SelectItem>
-                      <SelectItem value="under35">⚽ Under 3.5</SelectItem>
-                      <SelectItem value="over35">⚽ Over 3.5</SelectItem>
-                      <SelectItem value="under45">⚽ Under 4.5</SelectItem>
-                      <SelectItem value="over45">⚽ Over 4.5</SelectItem>
-                      <SelectItem value="1-tennis">🎾 1</SelectItem>
-                      <SelectItem value="2-tennis">🎾 2</SelectItem>
-                      <SelectItem value="1-basket">🏀 1</SelectItem>
-                      <SelectItem value="2-basket">🏀 2</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              {/* Row 1: Sport */}
+              <div className="flex items-center gap-3">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                  Sport
+                </Label>
+                <Select defaultValue="tutti">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="tutti">Tutti</SelectItem>
+                    <SelectItem value="calcio">⚽ Calcio</SelectItem>
+                    <SelectItem value="tennis">🎾 Tennis</SelectItem>
+                    <SelectItem value="basket">🏀 Basket</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              {/* Row 2: Bookmaker with Multipla Opposta */}
+              {/* Row 2: Mercato */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap min-w-[100px] flex items-center justify-center">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                  Mercato
+                </Label>
+                <Select defaultValue="tutti">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
+                    <SelectItem value="tutti">Tutti</SelectItem>
+                    <SelectItem value="1">⚽ 1</SelectItem>
+                    <SelectItem value="2">⚽ 2</SelectItem>
+                    <SelectItem value="x">⚽ X</SelectItem>
+                    <SelectItem value="goal">⚽ Goal</SelectItem>
+                    <SelectItem value="nogoal">⚽ No Goal</SelectItem>
+                    <SelectItem value="under05">⚽ Under 0.5</SelectItem>
+                    <SelectItem value="over05">⚽ Over 0.5</SelectItem>
+                    <SelectItem value="under15">⚽ Under 1.5</SelectItem>
+                    <SelectItem value="over15">⚽ Over 1.5</SelectItem>
+                    <SelectItem value="under25">⚽ Under 2.5</SelectItem>
+                    <SelectItem value="over25">⚽ Over 2.5</SelectItem>
+                    <SelectItem value="under35">⚽ Under 3.5</SelectItem>
+                    <SelectItem value="over35">⚽ Over 3.5</SelectItem>
+                    <SelectItem value="under45">⚽ Under 4.5</SelectItem>
+                    <SelectItem value="over45">⚽ Over 4.5</SelectItem>
+                    <SelectItem value="1-tennis">🎾 1</SelectItem>
+                    <SelectItem value="2-tennis">🎾 2</SelectItem>
+                    <SelectItem value="1-basket">🏀 1</SelectItem>
+                    <SelectItem value="2-basket">🏀 2</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 3: Bookmaker with Multipla Opposta */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Bookmaker
                 </div>
                 <Select defaultValue="nessuno">
-                  <SelectTrigger className="h-9 bg-white border-gray-300 w-48">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 w-[200px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
@@ -478,13 +475,13 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Row 3: Exchange with Filtro Liquidità */}
+              {/* Row 4: Exchange with Filtro Liquidità */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap min-w-[100px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Exchange
                 </div>
                 <Select defaultValue="tutti">
-                  <SelectTrigger className="h-9 bg-white border-gray-300 w-48">
+                  <SelectTrigger className="h-9 bg-white border-gray-300 w-[200px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]">
@@ -538,15 +535,15 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Row 4: Stake Multipla */}
+              {/* Row 5: Stake Multipla */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[130px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                   Stake Multipla
                 </Label>
                 <Input 
                   type="text" 
                   defaultValue="0 €" 
-                  className="h-9 w-48 bg-white border-gray-300"
+                  className="h-9 w-[200px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox id="freebet-multi" className="border-gray-400" />
@@ -556,15 +553,15 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Row 5: Bonus */}
+              {/* Row 6: Bonus */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap min-w-[130px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Bonus
                 </div>
                 <Input 
                   type="text" 
                   defaultValue="0 €" 
-                  className="h-9 w-48 bg-white border-gray-300"
+                  className="h-9 w-[200px] bg-white border-gray-300"
                 />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox id="rimborso-multi" className="border-gray-400" />
@@ -574,13 +571,13 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Row 6: Quota Minima Multipla & N° Eventi */}
+              {/* Row 7: Quota Minima Multipla & N° Eventi */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[150px]">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[170px]">
                     Quota Minima Multipla
                   </Label>
-                  <div className="relative flex-1 max-w-[150px]">
+                  <div className="relative w-[150px]">
                     <Input
                       type="text"
                       defaultValue="0,00"
@@ -598,27 +595,24 @@ const Index = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[80px]">
                     N° Eventi
                   </Label>
                   <Input
                     type="text"
                     defaultValue="0"
-                    className="h-9 w-32 bg-white border-gray-300"
+                    className="h-9 w-[150px] bg-white border-gray-300"
                   />
                 </div>
               </div>
 
-              {/* Row 7: Quota Partita Minima & Massima */}
+              {/* Row 8: Quota Partita Minima & Massima */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap">
-                    Quota Partita
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                    Quota Partita Minima
                   </Label>
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap">
-                    Minima
-                  </Label>
-                  <div className="relative flex-1 max-w-[150px]">
+                  <div className="relative w-[150px]">
                     <Input
                       type="text"
                       defaultValue="0,00"
@@ -636,10 +630,10 @@ const Index = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap">
-                    Massima
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
+                    Quota Partita Massima
                   </Label>
-                  <div className="relative flex-1 max-w-[150px]">
+                  <div className="relative w-[150px]">
                     <Input
                       type="text"
                       defaultValue="0,00"
@@ -657,25 +651,25 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Row 8: Partita */}
+              {/* Row 9: Partita */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                   Partita
                 </Label>
                 <Input 
                   type="text" 
                   placeholder="Cerca per nome..." 
-                  className="h-9 flex-1 bg-white border-gray-300 placeholder:text-gray-400"
+                  className="h-9 flex-1 max-w-[500px] bg-white border-gray-300 placeholder:text-gray-400"
                 />
               </div>
 
-              {/* Row 9: Campionato */}
+              {/* Row 10: Campionato */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[100px]">
+                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                   Campionato
                 </Label>
                 <Select>
-                  <SelectTrigger className="h-9 flex-1 bg-white border-gray-300">
+                  <SelectTrigger className="h-9 flex-1 max-w-[500px] bg-white border-gray-300">
                     <SelectValue placeholder="Cerca Campionato..." />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
@@ -686,27 +680,27 @@ const Index = () => {
                 </Select>
               </div>
 
-              {/* Row 10: Date */}
+              {/* Row 11: Date */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                     Da data
                   </Label>
                   <Input 
                     type="text" 
                     placeholder="gg/mm/aaaa"
-                    className="h-9 bg-white border-gray-300 placeholder:text-gray-400"
+                    className="h-9 w-[200px] bg-white border-gray-300 placeholder:text-gray-400"
                   />
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap min-w-[80px]">
+                  <Label className="text-sm font-normal text-gray-700 whitespace-nowrap w-[120px]">
                     A data
                   </Label>
                   <Input 
                     type="text" 
                     placeholder="gg/mm/aaaa"
-                    className="h-9 bg-white border-gray-300 placeholder:text-gray-400"
+                    className="h-9 w-[200px] bg-white border-gray-300 placeholder:text-gray-400"
                   />
                 </div>
               </div>
