@@ -102,11 +102,6 @@ const Index = () => {
         partita: "",
       });
     }
-    
-    toast({
-      description: "Filtri resettati",
-      duration: 2000,
-    });
   };
 
   useEffect(() => {
