@@ -45,7 +45,6 @@ const Index = () => {
     { id: "multipla", label: "MULTIPLA" },
     { id: "trevie", label: "TRE VIE" },
     { id: "bestodds", label: "BEST ODDS" },
-    { id: "bestopposite", label: "BEST OPPOSITE" },
     { id: "surebet", label: "SURE BET" }
   ];
 
