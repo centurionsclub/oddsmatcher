@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { DecimalInput } from "@/components/ui/decimal-input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { ExchangeMultiSelect } from "@/components/ui/exchange-multi-select";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,7 +31,7 @@ const Index = () => {
     sport: "tutti",
     mercato: "tutti",
     bookmaker: [] as string[],
-    exchange: "tutti",
+    exchange: [] as string[],
     stakePunta: "0",
     bonus: "0",
     quotaMinima: "0,00",
@@ -48,7 +49,7 @@ const Index = () => {
     sport: "tutti",
     mercato: "tutti",
     bookmaker: [] as string[],
-    exchange: "tutti",
+    exchange: [] as string[],
     stakeMultipla: "0",
     bonus: "0",
     quotaMinimaMultipla: "0,00",
@@ -99,7 +100,7 @@ const Index = () => {
         sport: "tutti",
         mercato: "tutti",
         bookmaker: [],
-        exchange: "tutti",
+        exchange: [],
         stakePunta: "0",
         bonus: "0",
         quotaMinima: "0,00",
@@ -116,7 +117,7 @@ const Index = () => {
         sport: "tutti",
         mercato: "tutti",
         bookmaker: [],
-        exchange: "tutti",
+        exchange: [],
         stakeMultipla: "0",
         bonus: "0",
         quotaMinimaMultipla: "0,00",
@@ -527,53 +528,15 @@ const Index = () => {
                   <ArrowLeftRight className="h-4 w-4" />
                   Exchange
                 </div>
-                <Select value={singolaFilters.exchange} onValueChange={(value) => setSingolaFilters({...singolaFilters, exchange: value})}>
-                  <SelectTrigger className="h-9 bg-white border-gray-300 flex-1 max-w-[300px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]" side="bottom">
-                    <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
-                    <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
-                      <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
-                      <Input 
-                        type="text" 
-                        value={betfairCommission}
-                        onChange={handleBetfairChange}
-                        className="h-7 w-20 text-xs"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
-                      <SelectItem value="betflag" className="flex-1 border-none">BetFlag Exchange</SelectItem>
-                      <Input 
-                        type="text" 
-                        value={betflagCommission}
-                        onChange={handleBetflagChange}
-                        className="h-7 w-20 text-xs"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    <div className="px-2 py-1.5 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
-                      Bookmakers
-                    </div>
-                    <SelectItem value="888sport">888sport</SelectItem>
-                    <SelectItem value="admiral">Admiral</SelectItem>
-                    <SelectItem value="bet365">Bet365</SelectItem>
-                    <SelectItem value="betfair-book">Betfair</SelectItem>
-                    <SelectItem value="betflag-book">Betflag</SelectItem>
-                    <SelectItem value="betsson">Betsson</SelectItem>
-                    <SelectItem value="better">Better</SelectItem>
-                    <SelectItem value="betway">Betway</SelectItem>
-                    <SelectItem value="eurobet">Eurobet</SelectItem>
-                    <SelectItem value="goldbet">Goldbet</SelectItem>
-                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
-                    <SelectItem value="netbet">NetBet</SelectItem>
-                    <SelectItem value="sisal">Sisal</SelectItem>
-                    <SelectItem value="snai">Snai</SelectItem>
-                    <SelectItem value="unibet">Unibet</SelectItem>
-                    <SelectItem value="williamhill">William Hill</SelectItem>
-                  </SelectContent>
-                </Select>
+                <ExchangeMultiSelect
+                  selected={singolaFilters.exchange}
+                  onChange={(selected) => setSingolaFilters({...singolaFilters, exchange: selected})}
+                  betfairCommission={betfairCommission}
+                  betflagCommission={betflagCommission}
+                  onBetfairChange={handleBetfairChange}
+                  onBetflagChange={handleBetflagChange}
+                  className="flex-1 max-w-[300px]"
+                />
               </div>
 
               {/* Row 5: Stake Punta */}
@@ -812,53 +775,15 @@ const Index = () => {
                   <ArrowLeftRight className="h-4 w-4" />
                   Exchange
                 </div>
-                <Select value={multiplaFilters.exchange} onValueChange={(value) => setMultiplaFilters({...multiplaFilters, exchange: value})}>
-                  <SelectTrigger className="h-9 bg-white border-gray-300 w-[200px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto w-[400px]" side="bottom">
-                    <SelectItem value="tutti">Tutti gli Exchange</SelectItem>
-                    <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
-                      <SelectItem value="betfair" className="flex-1 border-none">Betfair Exchange</SelectItem>
-                      <Input 
-                        type="text" 
-                        value={betfairCommission}
-                        onChange={handleBetfairChange}
-                        className="h-7 w-20 text-xs"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-100">
-                      <SelectItem value="betflag" className="flex-1 border-none">BetFlag Exchange</SelectItem>
-                      <Input 
-                        type="text" 
-                        value={betflagCommission}
-                        onChange={handleBetflagChange}
-                        className="h-7 w-20 text-xs"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    <div className="px-2 py-1.5 text-sm font-semibold text-gray-700 bg-gray-100 border-t border-b border-gray-200 mt-1 mb-1">
-                      Bookmakers
-                    </div>
-                    <SelectItem value="888sport">888sport</SelectItem>
-                    <SelectItem value="admiral">Admiral</SelectItem>
-                    <SelectItem value="bet365">Bet365</SelectItem>
-                    <SelectItem value="betfair-book">Betfair</SelectItem>
-                    <SelectItem value="betflag-book">Betflag</SelectItem>
-                    <SelectItem value="betsson">Betsson</SelectItem>
-                    <SelectItem value="better">Better</SelectItem>
-                    <SelectItem value="betway">Betway</SelectItem>
-                    <SelectItem value="eurobet">Eurobet</SelectItem>
-                    <SelectItem value="goldbet">Goldbet</SelectItem>
-                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
-                    <SelectItem value="netbet">NetBet</SelectItem>
-                    <SelectItem value="sisal">Sisal</SelectItem>
-                    <SelectItem value="snai">Snai</SelectItem>
-                    <SelectItem value="unibet">Unibet</SelectItem>
-                    <SelectItem value="williamhill">William Hill</SelectItem>
-                  </SelectContent>
-                </Select>
+                <ExchangeMultiSelect
+                  selected={multiplaFilters.exchange}
+                  onChange={(selected) => setMultiplaFilters({...multiplaFilters, exchange: selected})}
+                  betfairCommission={betfairCommission}
+                  betflagCommission={betflagCommission}
+                  onBetfairChange={handleBetfairChange}
+                  onBetflagChange={handleBetflagChange}
+                  className="w-[200px]"
+                />
                 <div className="flex items-center gap-2 ml-4">
                   <Checkbox 
                     id="filtro-liquidita" 
