@@ -327,9 +327,9 @@ const Index = () => {
 
               {/* Row 8: Partita */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Partita
-                </Label>
+                </div>
                 <Input 
                   type="text" 
                   placeholder="Cerca per nome..." 
@@ -339,9 +339,9 @@ const Index = () => {
 
               {/* Row 9: Campionato */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Campionato
-                </Label>
+                </div>
                 <Select>
                   <SelectTrigger className="h-9 flex-1 max-w-[300px] bg-white border-gray-300">
                     <SelectValue placeholder="Cerca Campionato..." />
@@ -356,9 +356,9 @@ const Index = () => {
 
               {/* Row 10: Date */}
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-normal text-gray-700 whitespace-nowrap bg-gray-100 px-3 py-2 rounded">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Da data
-                </Label>
+                </div>
                 <Input 
                   type="text" 
                   placeholder="gg/mm/aaaa"
