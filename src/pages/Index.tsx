@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -55,7 +56,7 @@ const Index = () => {
   // Stati per TRE VIE
   const [trevieFilters, setTrevieFilters] = useState({
     bookmakerPrincipale: "nessuno",
-    bookmakersSecondari: "nessuno",
+    bookmakersSecondari: [] as string[],
     stakePunta: "0 €",
     bonus: "0 €",
     quotaMinima: "0,00",
@@ -114,7 +115,7 @@ const Index = () => {
     } else if (activeTab === "trevie") {
       setTrevieFilters({
         bookmakerPrincipale: "nessuno",
-        bookmakersSecondari: "nessuno",
+        bookmakersSecondari: [],
         stakePunta: "0 €",
         bonus: "0 €",
         quotaMinima: "0,00",
@@ -900,34 +901,64 @@ const Index = () => {
                   <Building2 className="h-4 w-4" />
                   Bookmakers Secondari
                 </div>
-                <Select value={trevieFilters.bookmakersSecondari} onValueChange={(value) => setTrevieFilters({...trevieFilters, bookmakersSecondari: value})}>
-                  <SelectTrigger className="h-9 bg-white border-gray-300 w-[200px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white max-h-[400px] overflow-y-auto">
-                    <SelectItem value="nessuno">Nessuno</SelectItem>
-                    <SelectItem value="888sport">888sport</SelectItem>
-                    <SelectItem value="admiral">Admiral</SelectItem>
-                    <SelectItem value="bet365">Bet365</SelectItem>
-                    <SelectItem value="betfair">Betfair</SelectItem>
-                    <SelectItem value="betflag">Betflag</SelectItem>
-                    <SelectItem value="betsson">Betsson</SelectItem>
-                    <SelectItem value="better">Better</SelectItem>
-                    <SelectItem value="betway">Betway</SelectItem>
-                    <SelectItem value="eurobet">Eurobet</SelectItem>
-                    <SelectItem value="goldbet">Goldbet</SelectItem>
-                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
-                    <SelectItem value="netbet">NetBet</SelectItem>
-                    <SelectItem value="sisal">Sisal</SelectItem>
-                    <SelectItem value="snai">Snai</SelectItem>
-                    <SelectItem value="unibet">Unibet</SelectItem>
-                    <SelectItem value="williamhill">William Hill</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className="h-9 bg-white border-gray-300 w-[400px] justify-start text-left font-normal"
+                    >
+                      {trevieFilters.bookmakersSecondari.length === 0 
+                        ? "Nessuno" 
+                        : `${trevieFilters.bookmakersSecondari.length} selezionati`}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] bg-white p-4" align="start">
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                      {[
+                        "888sport", "admiral", "bet365", "betfair", "betflag", "betsson", 
+                        "better", "betway", "eurobet", "goldbet", "lottomatica", "netbet", 
+                        "planetwin365", "sisal", "snai", "unibet", "williamhill"
+                      ].map((bookmaker) => (
+                        <div key={bookmaker} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`book-${bookmaker}`}
+                            checked={trevieFilters.bookmakersSecondari.includes(bookmaker)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setTrevieFilters({
+                                  ...trevieFilters,
+                                  bookmakersSecondari: [...trevieFilters.bookmakersSecondari, bookmaker]
+                                });
+                              } else {
+                                setTrevieFilters({
+                                  ...trevieFilters,
+                                  bookmakersSecondari: trevieFilters.bookmakersSecondari.filter(b => b !== bookmaker)
+                                });
+                              }
+                            }}
+                            className="border-gray-400"
+                          />
+                          <label 
+                            htmlFor={`book-${bookmaker}`} 
+                            className="text-sm text-gray-700 cursor-pointer capitalize"
+                          >
+                            {bookmaker === "planetwin365" ? "Planetwin365" : bookmaker.charAt(0).toUpperCase() + bookmaker.slice(1)}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
                 <Button 
                   variant="outline" 
                   size="sm" 
                   className="bg-white border-gray-300 hover:bg-gray-50 text-sm font-medium"
+                  onClick={() => {
+                    setTrevieFilters({
+                      ...trevieFilters,
+                      bookmakersSecondari: ["sisal", "bet365", "lottomatica", "goldbet", "planetwin365", "snai", "eurobet", "betfair"]
+                    });
+                  }}
                 >
                   Seleziona Top
                 </Button>
