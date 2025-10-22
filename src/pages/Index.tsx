@@ -449,7 +449,7 @@ const Index = () => {
             <>
               {/* Row 1: Sport */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#C8E6C9] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#66BB6A] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <Trophy className="h-4 w-4" />
                   Sport
                 </div>
@@ -468,7 +468,7 @@ const Index = () => {
 
               {/* Row 2: Mercato */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#FFE0B2] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#FF9800] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
@@ -503,7 +503,7 @@ const Index = () => {
 
               {/* Row 3: Bookmaker */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Bookmaker
                 </div>
@@ -534,7 +534,7 @@ const Index = () => {
 
               {/* Row 4: Exchange */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#EF5350] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <ArrowLeftRight className="h-4 w-4" />
                   Exchange
                 </div>
@@ -575,7 +575,7 @@ const Index = () => {
 
               {/* Row 6: Bonus */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#FFC107] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <Gift className="h-4 w-4" />
                   Bonus
                 </div>
@@ -696,7 +696,7 @@ const Index = () => {
             <>
               {/* Row 1: Sport */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#C8E6C9] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#66BB6A] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <Trophy className="h-4 w-4" />
                   Sport
                 </div>
@@ -715,7 +715,7 @@ const Index = () => {
 
               {/* Row 2: Mercato */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#FFE0B2] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#FF9800] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
@@ -750,7 +750,7 @@ const Index = () => {
 
               {/* Row 3: Bookmaker */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Bookmaker
                 </div>
@@ -781,7 +781,7 @@ const Index = () => {
 
               {/* Row 4: Exchange with Filtro Liquidità */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#EF5350] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <ArrowLeftRight className="h-4 w-4" />
                   Exchange
                 </div>
@@ -833,7 +833,7 @@ const Index = () => {
 
               {/* Row 6: Bonus */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#FFC107] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <Gift className="h-4 w-4" />
                   Bonus
                 </div>
@@ -991,7 +991,7 @@ const Index = () => {
             <>
               {/* Row 1: Bookmaker Principale */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Bookmaker Principale
                 </div>
@@ -1023,7 +1023,7 @@ const Index = () => {
 
               {/* Row 2: Bookmakers Secondari */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Bookmakers Secondari
                 </div>
@@ -1105,7 +1105,7 @@ const Index = () => {
 
               {/* Row 4: Bonus */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#FFC107] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
                   <Gift className="h-4 w-4" />
                   Bonus
                 </div>
@@ -1229,7 +1229,7 @@ const Index = () => {
             <>
               {/* Row 1: Mercato */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-[#FFE0B2] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-semibold text-white bg-[#FF9800] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
