@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown } from "lucide-react";
+import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
@@ -114,7 +114,8 @@ const Index = () => {
             <>
               {/* Row 1: Sport */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#C8E6C9] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#C8E6C9] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Trophy className="h-4 w-4" />
                   Sport
                 </div>
                 <Select defaultValue="tutti">
@@ -132,7 +133,8 @@ const Index = () => {
 
               {/* Row 2: Mercato */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#FFE0B2] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#FFE0B2] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
                 <Select defaultValue="tutti">
@@ -166,7 +168,8 @@ const Index = () => {
 
               {/* Row 3: Bookmaker */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Building2 className="h-4 w-4" />
                   Bookmaker
                 </div>
                 <Select defaultValue="tutti">
@@ -197,7 +200,8 @@ const Index = () => {
 
               {/* Row 4: Exchange */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <ArrowLeftRight className="h-4 w-4" />
                   Exchange
                 </div>
                 <Select defaultValue="tutti">
@@ -251,7 +255,8 @@ const Index = () => {
 
               {/* Row 5: Stake Punta */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Coins className="h-4 w-4" />
                   Stake Punta
                 </div>
                 <Input 
@@ -269,7 +274,8 @@ const Index = () => {
 
               {/* Row 6: Bonus */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Gift className="h-4 w-4" />
                   Bonus
                 </div>
                 <Input 
@@ -378,7 +384,8 @@ const Index = () => {
             <>
               {/* Row 1: Sport */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#C8E6C9] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#C8E6C9] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Trophy className="h-4 w-4" />
                   Sport
                 </div>
                 <Select defaultValue="tutti">
@@ -396,7 +403,8 @@ const Index = () => {
 
               {/* Row 2: Mercato */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#FFE0B2] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#FFE0B2] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
                 <Select defaultValue="tutti">
@@ -430,7 +438,8 @@ const Index = () => {
 
               {/* Row 3: Bookmaker */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#B8D4D8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Building2 className="h-4 w-4" />
                   Bookmaker
                 </div>
                 <Select defaultValue="nessuno">
@@ -461,7 +470,8 @@ const Index = () => {
 
               {/* Row 4: Exchange with Filtro Liquidità */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#EEBFBF] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <ArrowLeftRight className="h-4 w-4" />
                   Exchange
                 </div>
                 <Select defaultValue="tutti">
@@ -521,7 +531,8 @@ const Index = () => {
 
               {/* Row 5: Stake Multipla */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-gray-100 px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Coins className="h-4 w-4" />
                   Stake Multipla
                 </div>
                 <Input 
@@ -539,7 +550,8 @@ const Index = () => {
 
               {/* Row 6: Bonus */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                <div className="text-sm font-normal text-gray-700 bg-[#F5E6A8] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Gift className="h-4 w-4" />
                   Bonus
                 </div>
                 <Input 
