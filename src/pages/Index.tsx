@@ -16,6 +16,9 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { SurebetResults } from "@/components/SurebetResults";
 import { OddsResults } from "@/components/OddsResults";
+import { MatchedBettingResults } from "@/components/MatchedBettingResults";
+import { MultipleMatchedBettingResults } from "@/components/MultipleMatchedBettingResults";
+import { ThreeWayArbitrageResults } from "@/components/ThreeWayArbitrageResults";
 import logoCenturion from "@/assets/logo_centurion_new.png";
 
 const Index = () => {
@@ -1531,7 +1534,36 @@ const Index = () => {
           <SurebetResults data={apiData} loading={isLoading} error={apiError} />
         )}
         
-        {(activeTab === "singola" || activeTab === "multipla" || activeTab === "trevie" || activeTab === "bestodds") && (
+        {activeTab === "singola" && (
+          <MatchedBettingResults 
+            data={oddsData} 
+            filters={singolaFilters}
+            commission={parseFloat(betfairCommission.replace('%', '').replace(',', '.'))}
+            loading={oddsLoading} 
+            error={oddsError} 
+          />
+        )}
+
+        {activeTab === "multipla" && (
+          <MultipleMatchedBettingResults 
+            data={oddsData} 
+            filters={multiplaFilters}
+            commission={parseFloat(betfairCommission.replace('%', '').replace(',', '.'))}
+            loading={oddsLoading} 
+            error={oddsError} 
+          />
+        )}
+
+        {activeTab === "trevie" && (
+          <ThreeWayArbitrageResults 
+            data={oddsData} 
+            filters={trevieFilters}
+            loading={oddsLoading} 
+            error={oddsError} 
+          />
+        )}
+
+        {activeTab === "bestodds" && (
           <OddsResults data={oddsData} loading={oddsLoading} error={oddsError} />
         )}
       </div>
