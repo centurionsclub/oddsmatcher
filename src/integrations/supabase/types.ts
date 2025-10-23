@@ -14,6 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      events_master: {
+        Row: {
+          created_at: string
+          event_name: string
+          event_time: string
+          id: string
+          league: string
+          normalized_name: string
+          sport: string
+        }
+        Insert: {
+          created_at?: string
+          event_name: string
+          event_time: string
+          id?: string
+          league: string
+          normalized_name: string
+          sport: string
+        }
+        Update: {
+          created_at?: string
+          event_name?: string
+          event_time?: string
+          id?: string
+          league?: string
+          normalized_name?: string
+          sport?: string
+        }
+        Relationships: []
+      }
+      odds_cache: {
+        Row: {
+          bookmaker: string
+          event_name: string
+          event_time: string | null
+          expires_at: string
+          id: string
+          league: string | null
+          market: string
+          odds: Json
+          scraped_at: string
+          sport: string
+        }
+        Insert: {
+          bookmaker: string
+          event_name: string
+          event_time?: string | null
+          expires_at?: string
+          id?: string
+          league?: string | null
+          market: string
+          odds: Json
+          scraped_at?: string
+          sport: string
+        }
+        Update: {
+          bookmaker?: string
+          event_name?: string
+          event_time?: string | null
+          expires_at?: string
+          id?: string
+          league?: string | null
+          market?: string
+          odds?: Json
+          scraped_at?: string
+          sport?: string
+        }
+        Relationships: []
+      }
       saved_filters: {
         Row: {
           created_at: string
@@ -41,12 +110,39 @@ export type Database = {
         }
         Relationships: []
       }
+      scraping_logs: {
+        Row: {
+          bookmaker: string
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          id: string
+          status: string
+        }
+        Insert: {
+          bookmaker: string
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          status: string
+        }
+        Update: {
+          bookmaker?: string
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          status?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      clean_expired_odds_cache: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

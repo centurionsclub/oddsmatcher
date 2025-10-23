@@ -15,6 +15,7 @@ import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, Sh
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { SurebetResults } from "@/components/SurebetResults";
+import { OddsResults } from "@/components/OddsResults";
 import logoCenturion from "@/assets/logo_centurion_new.png";
 
 const Index = () => {
@@ -101,6 +102,11 @@ const Index = () => {
   const [apiData, setApiData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  
+  // Odds scraping data
+  const [oddsData, setOddsData] = useState<any>(null);
+  const [oddsLoading, setOddsLoading] = useState(false);
+  const [oddsError, setOddsError] = useState<string | null>(null);
 
   const handlePulisci = () => {
     if (activeTab === "singola") {
@@ -370,6 +376,76 @@ const Index = () => {
     }
   };
 
+  const handleSearchOdds = async () => {
+    setOddsLoading(true);
+    setOddsError(null);
+    
+    try {
+      let filters = {};
+      let bookmakers: string[] = [];
+      let sport = 'calcio';
+      let market = '1X2';
+      
+      if (activeTab === "singola") {
+        filters = singolaFilters;
+        bookmakers = singolaFilters.bookmaker;
+        sport = singolaFilters.sport === 'tutti' ? 'calcio' : singolaFilters.sport;
+        market = singolaFilters.mercato === 'tutti' ? '1X2' : singolaFilters.mercato;
+      } else if (activeTab === "multipla") {
+        filters = multiplaFilters;
+        bookmakers = multiplaFilters.bookmaker;
+        sport = multiplaFilters.sport === 'tutti' ? 'calcio' : multiplaFilters.sport;
+        market = multiplaFilters.mercato === 'tutti' ? '1X2' : multiplaFilters.mercato;
+      } else if (activeTab === "trevie") {
+        filters = trevieFilters;
+        bookmakers = [trevieFilters.bookmakerPrincipale, ...trevieFilters.bookmakersSecondari];
+        sport = 'calcio';
+        market = '1X2';
+      } else if (activeTab === "bestodds") {
+        filters = bestOddsFilters;
+        // For best odds, use all available bookmakers
+        bookmakers = ['bet365', 'snai', 'sisal'];
+        sport = 'calcio';
+        market = bestOddsFilters.mercato === 'nessuno' ? '1X2' : bestOddsFilters.mercato;
+      }
+
+      console.log('Calling odds-scraper with:', { bookmakers, sport, market, filters });
+
+      const { data, error } = await supabase.functions.invoke('odds-scraper', {
+        body: { bookmakers, sport, market, filters }
+      });
+
+      if (error) {
+        console.error('Odds scraper error:', error);
+        setOddsError(error.message || 'Failed to fetch odds');
+        toast({
+          title: "Errore",
+          description: error.message || 'Errore nel recupero delle quote',
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('Odds scraper response:', data);
+      setOddsData(data);
+      
+      toast({
+        title: "Ricerca completata",
+        description: `Trovate ${data?.data?.length || 0} quote`,
+      });
+    } catch (error: any) {
+      console.error('Error calling odds scraper:', error);
+      setOddsError(error.message);
+      toast({
+        title: "Errore",
+        description: error.message || 'Errore nel recupero delle quote',
+        variant: "destructive",
+      });
+    } finally {
+      setOddsLoading(false);
+    }
+  };
+
   const tabs = [
     { id: "singola", label: "SINGOLA" },
     { id: "multipla", label: "MULTIPLA" },
@@ -405,10 +481,10 @@ const Index = () => {
             variant="outline" 
             size="sm" 
             className="gap-2 text-sm font-medium"
-            onClick={handleSearchSurebet}
-            disabled={isLoading}
+            onClick={activeTab === "surebet" ? handleSearchSurebet : handleSearchOdds}
+            disabled={activeTab === "surebet" ? isLoading : oddsLoading}
           >
-            {isLoading ? (
+            {(activeTab === "surebet" ? isLoading : oddsLoading) ? (
               <>CARICAMENTO... <RefreshCw className="h-3.5 w-3.5 animate-spin" /></>
             ) : (
               <>CERCA <Search className="h-3.5 w-3.5" /></>
@@ -1351,18 +1427,13 @@ const Index = () => {
           ) : null}
         </div>
 
-        {/* Results - only show in surebet tab */}
+        {/* Results for different tabs */}
         {activeTab === "surebet" && (
           <SurebetResults data={apiData} loading={isLoading} error={apiError} />
         )}
         
-        {/* Empty state for other tabs */}
-        {activeTab !== "surebet" && (
-          <div className="mt-6 bg-card rounded-xl border border-border p-12 text-center">
-            <p className="text-muted-foreground">
-              Nessun risultato disponibile. Utilizza i filtri per cercare opportunità.
-            </p>
-          </div>
+        {(activeTab === "singola" || activeTab === "multipla" || activeTab === "trevie" || activeTab === "bestodds") && (
+          <OddsResults data={oddsData} loading={oddsLoading} error={oddsError} />
         )}
       </div>
     </div>
