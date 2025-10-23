@@ -992,8 +992,7 @@ const Index = () => {
             <>
               {/* Row 1: Bookmaker Principale */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
-                  <Building2 className="h-4 w-4" />
+                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center">
                   Bookmaker Principale
                 </div>
                 <Select value={trevieFilters.bookmakerPrincipale} onValueChange={(value) => setTrevieFilters({...trevieFilters, bookmakerPrincipale: value})}>
@@ -1024,8 +1023,7 @@ const Index = () => {
 
               {/* Row 2: Bookmakers Secondari */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
-                  <Building2 className="h-4 w-4" />
+                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center">
                   Bookmakers Secondari
                 </div>
                 <Popover>
