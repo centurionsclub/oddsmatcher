@@ -453,7 +453,7 @@ const Index = () => {
             <>
               {/* Row 1: Sport */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#66BB6A] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <Trophy className="h-4 w-4" />
                   Sport
                 </div>
@@ -472,7 +472,7 @@ const Index = () => {
 
               {/* Row 2: Mercato */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#FF9800] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
@@ -700,7 +700,7 @@ const Index = () => {
             <>
               {/* Row 1: Sport */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#66BB6A] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <Trophy className="h-4 w-4" />
                   Sport
                 </div>
@@ -719,7 +719,7 @@ const Index = () => {
 
               {/* Row 2: Mercato */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#FF9800] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
@@ -1233,7 +1233,7 @@ const Index = () => {
             <>
               {/* Row 1: Mercato */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#FF9800] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <ShoppingCart className="h-4 w-4" />
                   Mercato
                 </div>
