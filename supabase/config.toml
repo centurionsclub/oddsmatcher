@@ -1,1 +1,7 @@
 project_id = "tygzrqdgcagvasqmzlgy"
+
+[functions.betburger-api]
+verify_jwt = false
+
+[functions.odds-scraper]
+verify_jwt = false
