@@ -11,7 +11,7 @@ All colors MUST be HSL.
     --background: 215 25% 16%;
     --foreground: 0 0% 100%;
 
-    --card: 215 25% 22%;
+    --card: 215 15% 25%;
     --card-foreground: 0 0% 100%;
 
     --popover: 215 25% 22%;
@@ -37,7 +37,7 @@ All colors MUST be HSL.
     --warning-foreground: 0 0% 100%;
 
     --border: 215 15% 25%;
-    --input: 215 15% 25%;
+    --input: 215 25% 22%;
     --ring: 6 78% 57%;
 
     --radius: 0.75rem;
@@ -60,7 +60,7 @@ All colors MUST be HSL.
     --background: 215 25% 16%;
     --foreground: 0 0% 100%;
 
-    --card: 215 25% 22%;
+    --card: 215 15% 25%;
     --card-foreground: 0 0% 100%;
 
     --popover: 215 25% 22%;
@@ -86,7 +86,7 @@ All colors MUST be HSL.
     --warning-foreground: 0 0% 100%;
 
     --border: 215 15% 25%;
-    --input: 215 15% 25%;
+    --input: 215 25% 22%;
     --ring: 6 78% 57%;
     
     --profit: 145 63% 49%;
