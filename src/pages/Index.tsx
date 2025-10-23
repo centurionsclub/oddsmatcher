@@ -1424,6 +1424,105 @@ const Index = () => {
                 />
               </div>
             </>
+          ) : activeTab === "surebet" ? (
+            <>
+              {/* Row 1: Sport */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Trophy className="h-4 w-4" />
+                  Sport
+                </div>
+                <Select value={surebetFilters.sport} onValueChange={(value) => setSurebetFilters({...surebetFilters, sport: value})}>
+                  <SelectTrigger className="h-9 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tutti">Tutti gli sport</SelectItem>
+                    <SelectItem value="calcio">⚽ Calcio</SelectItem>
+                    <SelectItem value="tennis">🎾 Tennis</SelectItem>
+                    <SelectItem value="basket">🏀 Basket</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 2: Partita */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                  Partita
+                </div>
+                <Input 
+                  type="text" 
+                  placeholder="Cerca per nome..."
+                  value={surebetFilters.partita}
+                  onChange={(e) => setSurebetFilters({...surebetFilters, partita: e.target.value})}
+                  className="h-9 flex-1 max-w-[300px] placeholder:text-muted-foreground/60"
+                />
+              </div>
+
+              {/* Row 3: Bookmaker 1 */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Bookmaker 1
+                </div>
+                <Select value={surebetFilters.bookmaker1} onValueChange={(value) => setSurebetFilters({...surebetFilters, bookmaker1: value})}>
+                  <SelectTrigger className="h-9 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[400px] overflow-y-auto">
+                    <SelectItem value="tutti">Tutti i bookmakers</SelectItem>
+                    <SelectItem value="888sport">888sport</SelectItem>
+                    <SelectItem value="admiral">Admiral</SelectItem>
+                    <SelectItem value="bet365">Bet365</SelectItem>
+                    <SelectItem value="betfair">Betfair</SelectItem>
+                    <SelectItem value="betflag">Betflag</SelectItem>
+                    <SelectItem value="betsson">Betsson</SelectItem>
+                    <SelectItem value="better">Better</SelectItem>
+                    <SelectItem value="betway">Betway</SelectItem>
+                    <SelectItem value="eurobet">Eurobet</SelectItem>
+                    <SelectItem value="goldbet">Goldbet</SelectItem>
+                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                    <SelectItem value="netbet">NetBet</SelectItem>
+                    <SelectItem value="sisal">Sisal</SelectItem>
+                    <SelectItem value="snai">Snai</SelectItem>
+                    <SelectItem value="unibet">Unibet</SelectItem>
+                    <SelectItem value="williamhill">William Hill</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 4: Bookmaker 2 */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Bookmaker 2
+                </div>
+                <Select value={surebetFilters.bookmaker2} onValueChange={(value) => setSurebetFilters({...surebetFilters, bookmaker2: value})}>
+                  <SelectTrigger className="h-9 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[400px] overflow-y-auto">
+                    <SelectItem value="tutti">Tutti i bookmakers</SelectItem>
+                    <SelectItem value="888sport">888sport</SelectItem>
+                    <SelectItem value="admiral">Admiral</SelectItem>
+                    <SelectItem value="bet365">Bet365</SelectItem>
+                    <SelectItem value="betfair">Betfair</SelectItem>
+                    <SelectItem value="betflag">Betflag</SelectItem>
+                    <SelectItem value="betsson">Betsson</SelectItem>
+                    <SelectItem value="better">Better</SelectItem>
+                    <SelectItem value="betway">Betway</SelectItem>
+                    <SelectItem value="eurobet">Eurobet</SelectItem>
+                    <SelectItem value="goldbet">Goldbet</SelectItem>
+                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                    <SelectItem value="netbet">NetBet</SelectItem>
+                    <SelectItem value="sisal">Sisal</SelectItem>
+                    <SelectItem value="snai">Snai</SelectItem>
+                    <SelectItem value="unibet">Unibet</SelectItem>
+                    <SelectItem value="williamhill">William Hill</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
           ) : null}
         </div>
 
