@@ -579,7 +579,7 @@ const Index = () => {
 
               {/* Row 6: Bonus */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#FFC107] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <Gift className="h-4 w-4" />
                   Bonus
                 </div>
@@ -837,7 +837,7 @@ const Index = () => {
 
               {/* Row 6: Bonus */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#FFC107] px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
                   <Gift className="h-4 w-4" />
                   Bonus
                 </div>
@@ -1109,7 +1109,7 @@ const Index = () => {
 
               {/* Row 4: Bonus */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#FFC107] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center gap-2">
                   <Gift className="h-4 w-4" />
                   Bonus
                 </div>
