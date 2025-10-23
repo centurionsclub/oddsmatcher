@@ -411,7 +411,7 @@ const Index = () => {
             {isLoading ? (
               <>CARICAMENTO... <RefreshCw className="h-3.5 w-3.5 animate-spin" /></>
             ) : (
-              <>CERCA SUREBET <Search className="h-3.5 w-3.5" /></>
+              <>CERCA <Search className="h-3.5 w-3.5" /></>
             )}
           </Button>
           <Button 
@@ -1351,8 +1351,19 @@ const Index = () => {
           ) : null}
         </div>
 
-        {/* Results */}
-        <SurebetResults data={apiData} loading={isLoading} error={apiError} />
+        {/* Results - only show in surebet tab */}
+        {activeTab === "surebet" && (
+          <SurebetResults data={apiData} loading={isLoading} error={apiError} />
+        )}
+        
+        {/* Empty state for other tabs */}
+        {activeTab !== "surebet" && (
+          <div className="mt-6 bg-card rounded-xl border border-border p-12 text-center">
+            <p className="text-muted-foreground">
+              Nessun risultato disponibile. Utilizza i filtri per cercare opportunità.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

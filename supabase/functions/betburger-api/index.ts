@@ -2,7 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const BETBURGER_API_KEY = Deno.env.get('BETBURGER_API_KEY');
-const BETBURGER_API_URL = 'https://api.betburger.com';
+const BETBURGER_API_URL = 'https://rest-api.betburger.com/api/v1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
