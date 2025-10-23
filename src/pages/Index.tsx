@@ -11,9 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Wallet, Save, X } from "lucide-react";
+import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Wallet, Save, X, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { SurebetResults } from "@/components/SurebetResults";
 import logoCenturion from "@/assets/logo_centurion_new.png";
 
 const Index = () => {
@@ -95,6 +96,11 @@ const Index = () => {
     bookmaker1: "tutti",
     bookmaker2: "tutti",
   });
+
+  // Stati per API Betburger
+  const [apiData, setApiData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const handlePulisci = () => {
     if (activeTab === "singola") {
@@ -301,6 +307,69 @@ const Index = () => {
     }
   };
 
+  const handleSearchSurebet = async () => {
+    setIsLoading(true);
+    setApiError(null);
+
+    try {
+      let filters: any = {};
+
+      // Map filters based on active tab
+      if (activeTab === "singola") {
+        filters = {
+          sport: singolaFilters.sport,
+          market: singolaFilters.mercato,
+          bookmakers: singolaFilters.bookmaker,
+          exchanges: singolaFilters.exchange,
+          minOdds: parseFloat(singolaFilters.quotaMinima.replace(',', '.')),
+          maxOdds: parseFloat(singolaFilters.quotaMassima.replace(',', '.')),
+          eventName: singolaFilters.partita,
+          league: singolaFilters.campionato,
+          startedAtFrom: singolaFilters.daData?.toISOString(),
+          startedAtTo: singolaFilters.aData?.toISOString(),
+          freebet: singolaFilters.freebet,
+        };
+      } else if (activeTab === "multipla") {
+        filters = {
+          sport: multiplaFilters.sport,
+          market: multiplaFilters.mercato,
+          bookmakers: multiplaFilters.bookmaker,
+          exchanges: multiplaFilters.exchange,
+          minOdds: parseFloat(multiplaFilters.quotaPartitaMinima.replace(',', '.')),
+          maxOdds: parseFloat(multiplaFilters.quotaPartitaMassima.replace(',', '.')),
+          eventName: multiplaFilters.partita,
+          league: multiplaFilters.campionato,
+          startedAtFrom: multiplaFilters.daData?.toISOString(),
+          startedAtTo: multiplaFilters.aData?.toISOString(),
+          freebet: multiplaFilters.freebet,
+        };
+      }
+
+      const { data, error } = await supabase.functions.invoke('betburger-api', {
+        body: { filters, endpoint: 'arbs' }
+      });
+
+      if (error) throw error;
+
+      setApiData(data);
+      toast({
+        title: "Ricerca completata",
+        description: `Trovate ${data?.arbs?.length || 0} opportunità`,
+      });
+    } catch (error) {
+      console.error('Error calling Betburger API:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      setApiError(errorMessage);
+      toast({
+        title: "Errore",
+        description: "Impossibile recuperare i dati. Riprova più tardi.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const tabs = [
     { id: "singola", label: "SINGOLA" },
     { id: "multipla", label: "MULTIPLA" },
@@ -336,8 +405,14 @@ const Index = () => {
             variant="outline" 
             size="sm" 
             className="gap-2 text-sm font-medium"
+            onClick={handleSearchSurebet}
+            disabled={isLoading}
           >
-            AGGIORNA <RefreshCw className="h-3.5 w-3.5" />
+            {isLoading ? (
+              <>CARICAMENTO... <RefreshCw className="h-3.5 w-3.5 animate-spin" /></>
+            ) : (
+              <>CERCA SUREBET <Search className="h-3.5 w-3.5" /></>
+            )}
           </Button>
           <Button 
             size="sm" 
@@ -1276,12 +1351,8 @@ const Index = () => {
           ) : null}
         </div>
 
-        {/* Empty Results */}
-        <div className="mt-6 bg-card rounded-xl border border-border p-12 text-center">
-          <p className="text-muted-foreground">
-            Nessun risultato disponibile. Utilizza i filtri per cercare opportunità.
-          </p>
-        </div>
+        {/* Results */}
+        <SurebetResults data={apiData} loading={isLoading} error={apiError} />
       </div>
     </div>
   );
