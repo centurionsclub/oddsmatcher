@@ -215,7 +215,7 @@ async function fetchFromTheOddsAPI(sport: string, market: string): Promise<any[]
   }
 }
 
-// Real scraping/fetching implementation with multiple fallbacks
+// Real scraping/fetching implementation - no mock fallback
 async function scrapeBookmaker(
   bookmaker: string,
   sport: string,
@@ -260,19 +260,25 @@ async function scrapeBookmaker(
   try {
     if (bookmaker === 'bet365') {
       const scraped = await scrapeBet365(sport, market, filters);
-      if (scraped.length > 0) return scraped;
+      if (scraped.length > 0) {
+        console.log(`Real scraping returned ${scraped.length} events for ${bookmaker}`);
+        return scraped;
+      }
     } else if (bookmaker === 'snai') {
       const scraped = await scrapeSnai(sport, market, filters);
-      if (scraped.length > 0) return scraped;
+      if (scraped.length > 0) {
+        console.log(`Real scraping returned ${scraped.length} events for ${bookmaker}`);
+        return scraped;
+      }
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.log(`Real scraping failed for ${bookmaker}:`, errorMsg);
   }
 
-  // Strategy 3: Fallback to mock data
-  console.log(`Using mock data for ${bookmaker}`);
-  return await getMockData(bookmaker, sport, market, filters);
+  // No data available
+  console.log(`No real data available for ${bookmaker}`);
+  return [];
 }
 
 // Bet365 real scraper
