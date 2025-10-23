@@ -313,7 +313,7 @@ const Index = () => {
       {/* Header */}
       <header className="bg-background py-3 shadow-md">
         <div className="max-w-[1400px] mx-auto px-6 relative flex items-center">
-          <img src={logoCenturion} alt="Centurion Club" className="h-24 w-auto" />
+          <img src={logoCenturion} alt="Centurion Club" className="h-12 w-auto" />
           <h1 className="text-[26px] font-bold text-foreground tracking-wider absolute left-1/2 -translate-x-1/2">
             ODDSMATCHER
           </h1>
