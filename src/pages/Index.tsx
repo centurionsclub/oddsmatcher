@@ -412,10 +412,26 @@ const Index = () => {
         market = bestOddsFilters.mercato === 'nessuno' ? '1X2' : bestOddsFilters.mercato;
       }
 
-      console.log('Calling odds-scraper with:', { bookmakers, sport, market, filters });
+      // Pulisce e valida i bookmaker selezionati
+      const uniqueBookmakers = Array.from(new Set((bookmakers || [])
+        .filter(Boolean)
+        .map((b) => b.toLowerCase())
+        .filter((b) => b !== 'nessuno')
+      ));
+
+      if (uniqueBookmakers.length === 0) {
+        toast({
+          title: 'Seleziona almeno un bookmaker',
+          description: 'Aggiungi uno o più bookmaker prima di cercare.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      console.log('Calling odds-scraper with:', { bookmakers: uniqueBookmakers, sport, market, filters });
 
       const { data, error } = await supabase.functions.invoke('odds-scraper', {
-        body: { bookmakers, sport, market, filters }
+        body: { bookmakers: uniqueBookmakers, sport, market, filters }
       });
 
       if (error) {
