@@ -131,10 +131,11 @@ async function logScraping(
 async function fetchFromTheOddsAPI(sport: string, market: string): Promise<any[]> {
   const apiKey = Deno.env.get('THE_ODDS_API_KEY');
   if (!apiKey) {
+    console.error('THE_ODDS_API_KEY not configured');
     throw new Error('THE_ODDS_API_KEY not configured');
   }
 
-  console.log('Fetching odds from The Odds API...');
+  console.log('Fetching odds from The Odds API with key:', apiKey.substring(0, 8) + '...');
 
   // Map sport to The Odds API sport key
   const sportKey = sport === 'calcio' ? 'soccer_italy_serie_a' : sport;
@@ -151,7 +152,9 @@ async function fetchFromTheOddsAPI(sport: string, market: string): Promise<any[]
     });
 
     if (!response.ok) {
-      throw new Error(`The Odds API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('The Odds API error response:', errorText);
+      throw new Error(`The Odds API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
