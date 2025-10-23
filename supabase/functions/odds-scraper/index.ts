@@ -127,29 +127,152 @@ async function logScraping(
     });
 }
 
-// Real scraping implementation with fallback to mock data
+// Fetch from The Odds API
+async function fetchFromTheOddsAPI(sport: string, market: string): Promise<any[]> {
+  const apiKey = Deno.env.get('THE_ODDS_API_KEY');
+  if (!apiKey) {
+    throw new Error('THE_ODDS_API_KEY not configured');
+  }
+
+  console.log('Fetching odds from The Odds API...');
+
+  // Map sport to The Odds API sport key
+  const sportKey = sport === 'calcio' ? 'soccer_italy_serie_a' : sport;
+  
+  try {
+    const url = new URL(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/`);
+    url.searchParams.set('apiKey', apiKey);
+    url.searchParams.set('regions', 'eu');
+    url.searchParams.set('markets', market === '1X2' ? 'h2h' : 'totals');
+    url.searchParams.set('oddsFormat', 'decimal');
+
+    const response = await fetch(url.toString(), {
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`The Odds API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log(`The Odds API returned ${data.length} events`);
+
+    // Transform to our format
+    const events = data.map((event: any) => {
+      const bookmakers = event.bookmakers || [];
+      const eventData: any = {
+        eventName: `${event.home_team} - ${event.away_team}`,
+        league: sportKey.replace('soccer_', '').replace(/_/g, ' ').toUpperCase(),
+        eventTime: event.commence_time,
+        market: market,
+        odds: {},
+        bookmakerData: {}
+      };
+
+      // Extract odds from all bookmakers
+      bookmakers.forEach((bm: any) => {
+        const bmName = bm.key.toLowerCase();
+        const markets = bm.markets || [];
+        
+        markets.forEach((mkt: any) => {
+          if (mkt.key === 'h2h' && market === '1X2') {
+            const outcomes = mkt.outcomes || [];
+            const odds: any = {};
+            
+            outcomes.forEach((outcome: any) => {
+              if (outcome.name === event.home_team) odds.home = outcome.price;
+              if (outcome.name === event.away_team) odds.away = outcome.price;
+              if (outcome.name === 'Draw') odds.draw = outcome.price;
+            });
+
+            if (!eventData.bookmakerData[bmName]) {
+              eventData.bookmakerData[bmName] = odds;
+            }
+          } else if (mkt.key === 'totals' && market !== '1X2') {
+            const outcomes = mkt.outcomes || [];
+            const odds: any = {};
+            
+            outcomes.forEach((outcome: any) => {
+              if (outcome.name === 'Over') odds.over = outcome.price;
+              if (outcome.name === 'Under') odds.under = outcome.price;
+            });
+
+            if (!eventData.bookmakerData[bmName]) {
+              eventData.bookmakerData[bmName] = odds;
+            }
+          }
+        });
+      });
+
+      return eventData;
+    });
+
+    return events.filter((e: any) => Object.keys(e.bookmakerData).length > 0);
+
+  } catch (error) {
+    console.error('The Odds API fetch failed:', error);
+    throw error;
+  }
+}
+
+// Real scraping/fetching implementation with multiple fallbacks
 async function scrapeBookmaker(
   bookmaker: string,
   sport: string,
   market: string,
   filters: any
 ): Promise<any[]> {
-  console.log(`Scraping ${bookmaker} for ${sport} - ${market}`);
+  console.log(`Fetching odds for ${bookmaker} - ${sport} - ${market}`);
   
+  // Strategy 1: Try The Odds API first (best quality data)
   try {
-    // Attempt real scraping based on bookmaker
-    if (bookmaker === 'bet365') {
-      return await scrapeBet365(sport, market, filters);
-    } else if (bookmaker === 'snai') {
-      return await scrapeSnai(sport, market, filters);
-    } else {
-      console.log(`No real scraper for ${bookmaker}, using mock data`);
-      return await getMockData(bookmaker, sport, market, filters);
+    const apiEvents = await fetchFromTheOddsAPI(sport, market);
+    
+    // Extract odds for specific bookmaker
+    const bookmakerEvents = apiEvents
+      .map(event => {
+        const bmKey = bookmaker.toLowerCase();
+        const odds = event.bookmakerData[bmKey] || event.bookmakerData[Object.keys(event.bookmakerData)[0]];
+        
+        if (odds && Object.keys(odds).length > 0) {
+          return {
+            eventName: event.eventName,
+            league: event.league,
+            eventTime: event.eventTime,
+            market: event.market,
+            odds: odds
+          };
+        }
+        return null;
+      })
+      .filter((e: any) => e !== null);
+
+    if (bookmakerEvents.length > 0) {
+      console.log(`The Odds API returned ${bookmakerEvents.length} events for ${bookmaker}`);
+      return bookmakerEvents;
     }
   } catch (error) {
-    console.error(`Real scraping failed for ${bookmaker}, falling back to mock:`, error);
-    return await getMockData(bookmaker, sport, market, filters);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.log(`The Odds API failed for ${bookmaker}:`, errorMsg);
   }
+
+  // Strategy 2: Try real scraping
+  try {
+    if (bookmaker === 'bet365') {
+      const scraped = await scrapeBet365(sport, market, filters);
+      if (scraped.length > 0) return scraped;
+    } else if (bookmaker === 'snai') {
+      const scraped = await scrapeSnai(sport, market, filters);
+      if (scraped.length > 0) return scraped;
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.log(`Real scraping failed for ${bookmaker}:`, errorMsg);
+  }
+
+  // Strategy 3: Fallback to mock data
+  console.log(`Using mock data for ${bookmaker}`);
+  return await getMockData(bookmaker, sport, market, filters);
 }
 
 // Bet365 real scraper
