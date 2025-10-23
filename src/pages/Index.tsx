@@ -5,6 +5,7 @@ import { DecimalInput } from "@/components/ui/decimal-input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { ExchangeMultiSelect } from "@/components/ui/exchange-multi-select";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -39,8 +40,8 @@ const Index = () => {
     quotaMassima: "0,00",
     partita: "",
     campionato: "",
-    daData: "",
-    aData: "",
+    daData: undefined as Date | undefined,
+    aData: undefined as Date | undefined,
     freebet: false,
     rimborso: false,
   });
@@ -59,8 +60,8 @@ const Index = () => {
     quotaPartitaMassima: "0,00",
     partita: "",
     campionato: "",
-    daData: "",
-    aData: "",
+    daData: undefined as Date | undefined,
+    aData: undefined as Date | undefined,
     freebet: false,
     rimborso: false,
     filtroLiquidita: false,
@@ -76,8 +77,8 @@ const Index = () => {
     quotaMassima: "0,00",
     partita: "",
     campionato: "",
-    daData: "",
-    aData: "",
+    daData: undefined as Date | undefined,
+    aData: undefined as Date | undefined,
     rimborso: false,
   });
 
@@ -108,8 +109,8 @@ const Index = () => {
         quotaMassima: "0,00",
         partita: "",
         campionato: "",
-        daData: "",
-        aData: "",
+        daData: undefined,
+        aData: undefined,
         freebet: false,
         rimborso: false,
       });
@@ -127,8 +128,8 @@ const Index = () => {
         quotaPartitaMassima: "0,00",
         partita: "",
         campionato: "",
-        daData: "",
-        aData: "",
+        daData: undefined,
+        aData: undefined,
         freebet: false,
         rimborso: false,
         filtroLiquidita: false,
@@ -143,8 +144,8 @@ const Index = () => {
         quotaMassima: "0,00",
         partita: "",
         campionato: "",
-        daData: "",
-        aData: "",
+        daData: undefined,
+        aData: undefined,
         rimborso: false,
       });
     } else if (activeTab === "bestodds") {
@@ -677,22 +678,20 @@ const Index = () => {
                 <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Da data
                 </div>
-                <Input 
-                  type="text" 
+                <DatePicker
+                  date={singolaFilters.daData}
+                  onSelect={(date) => setSingolaFilters({...singolaFilters, daData: date})}
                   placeholder="gg/mm/aaaa"
-                  value={singolaFilters.daData}
-                  onChange={(e) => setSingolaFilters({...singolaFilters, daData: e.target.value})}
-                  className="h-9 w-[150px] placeholder:text-muted-foreground/60"
+                  className="w-[180px]"
                 />
                 <Label className="text-sm font-normal text-foreground whitespace-nowrap bg-secondary px-3 py-2 rounded">
                   A data
                 </Label>
-                <Input 
-                  type="text" 
+                <DatePicker
+                  date={singolaFilters.aData}
+                  onSelect={(date) => setSingolaFilters({...singolaFilters, aData: date})}
                   placeholder="gg/mm/aaaa"
-                  value={singolaFilters.aData}
-                  onChange={(e) => setSingolaFilters({...singolaFilters, aData: e.target.value})}
-                  className="h-9 w-[150px] placeholder:text-muted-foreground/60"
+                  className="w-[180px]"
                 />
               </div>
             </>
@@ -972,22 +971,20 @@ const Index = () => {
                 <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Da data
                 </div>
-                <Input 
-                  type="text" 
+                <DatePicker
+                  date={multiplaFilters.daData}
+                  onSelect={(date) => setMultiplaFilters({...multiplaFilters, daData: date})}
                   placeholder="gg/mm/aaaa"
-                  value={multiplaFilters.daData}
-                  onChange={(e) => setMultiplaFilters({...multiplaFilters, daData: e.target.value})}
-                  className="h-9 w-[150px] placeholder:text-muted-foreground/60"
+                  className="w-[180px]"
                 />
                 <Label className="text-sm font-normal text-foreground whitespace-nowrap bg-secondary px-3 py-2 rounded">
                   A data
                 </Label>
-                <Input 
-                  type="text" 
+                <DatePicker
+                  date={multiplaFilters.aData}
+                  onSelect={(date) => setMultiplaFilters({...multiplaFilters, aData: date})}
                   placeholder="gg/mm/aaaa"
-                  value={multiplaFilters.aData}
-                  onChange={(e) => setMultiplaFilters({...multiplaFilters, aData: e.target.value})}
-                  className="h-9 w-[150px] placeholder:text-muted-foreground/60"
+                  className="w-[180px]"
                 />
               </div>
             </>
@@ -1210,22 +1207,20 @@ const Index = () => {
                 <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center">
                   Da data
                 </div>
-                <Input 
-                  type="text" 
+                <DatePicker
+                  date={trevieFilters.daData}
+                  onSelect={(date) => setTrevieFilters({...trevieFilters, daData: date})}
                   placeholder="gg/mm/aaaa"
-                  value={trevieFilters.daData}
-                  onChange={(e) => setTrevieFilters({...trevieFilters, daData: e.target.value})}
-                  className="h-9 w-[150px] placeholder:text-muted-foreground/60"
+                  className="w-[180px]"
                 />
                 <Label className="text-sm font-normal text-foreground whitespace-nowrap bg-secondary px-3 py-2 rounded">
                   A data
                 </Label>
-                <Input 
-                  type="text" 
+                <DatePicker
+                  date={trevieFilters.aData}
+                  onSelect={(date) => setTrevieFilters({...trevieFilters, aData: date})}
                   placeholder="gg/mm/aaaa"
-                  value={trevieFilters.aData}
-                  onChange={(e) => setTrevieFilters({...trevieFilters, aData: e.target.value})}
-                  className="h-9 w-[150px] placeholder:text-muted-foreground/60"
+                  className="w-[180px]"
                 />
               </div>
             </>
