@@ -76,7 +76,8 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
   // Calculate matched betting opportunities
   const calculateOpportunities = (): MatchedBettingOpportunity[] => {
     const opportunities: MatchedBettingOpportunity[] = [];
-    const stake = parseFloat(filters.stakePunta) || 10;
+    const stakeValue = parseFloat(filters.stakePunta?.toString().replace(',', '.')) || 0;
+    const stake = stakeValue > 0 ? stakeValue : 10; // Minimo 10€ se non specificato
     const commissionRate = commission / 100;
 
     data.data.forEach(odds => {

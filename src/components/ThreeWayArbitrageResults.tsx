@@ -73,7 +73,8 @@ export function ThreeWayArbitrageResults({ data, filters, loading, error }: Thre
   // Calculate three-way arbitrage opportunities
   const calculateArbitrageOpportunities = (): ArbitrageOpportunity[] => {
     const opportunities: ArbitrageOpportunity[] = [];
-    const stake = parseFloat(filters.stakePunta) || 100;
+    const stakeValue = parseFloat(filters.stakePunta?.toString().replace(',', '.')) || 0;
+    const stake = stakeValue > 0 ? stakeValue : 100; // Minimo 100€ se non specificato
 
     // Group odds by event
     const eventGroups = new Map<string, OddsData[]>();

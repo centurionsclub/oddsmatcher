@@ -73,7 +73,8 @@ export function MultipleMatchedBettingResults({ data, filters, commission, loadi
   // Calculate multiple betting opportunities
   const calculateMultipleOpportunities = (): MultipleOpportunity[] => {
     const opportunities: MultipleOpportunity[] = [];
-    const stake = parseFloat(filters.stakeMultipla) || 10;
+    const stakeValue = parseFloat(filters.stakeMultipla?.toString().replace(',', '.')) || 0;
+    const stake = stakeValue > 0 ? stakeValue : 10; // Minimo 10€ se non specificato
     const nEventi = parseInt(filters.nEventi) || 2;
     const commissionRate = commission / 100;
 
