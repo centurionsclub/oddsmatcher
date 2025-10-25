@@ -1551,13 +1551,19 @@ const Index = () => {
         )}
         
         {activeTab === "singola" && (
-          <MatchedBettingResults 
-            data={oddsData} 
-            filters={singolaFilters}
-            commission={parseFloat(betfairCommission.replace('%', '').replace(',', '.'))}
-            loading={oddsLoading} 
-            error={oddsError} 
-          />
+          <>
+            <MatchedBettingResults 
+              data={oddsData} 
+              filters={singolaFilters}
+              commission={parseFloat(betfairCommission.replace('%', '').replace(',', '.'))}
+              loading={oddsLoading} 
+              error={oddsError} 
+            />
+            {/* Fallback: mostra sempre la lista quote per garantire visibilità dei risultati */}
+            <div className="mt-6">
+              <OddsResults data={oddsData} loading={oddsLoading} error={oddsError} />
+            </div>
+          </>
         )}
 
         {activeTab === "multipla" && (
