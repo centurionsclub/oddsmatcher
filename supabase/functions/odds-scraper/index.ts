@@ -409,11 +409,11 @@ async function scrapeSisal(sport: string, market: string, filters: any): Promise
   
   try {
     // Ottimizzazione parametri ScrapingBee per Sisal
-    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it&wait=1000&block_resources=true`;
+    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it&wait=3500&block_resources=false`;
     
     console.log(`Fetching from ScrapingBee for Sisal: ${targetUrl}`);
     const response = await fetch(scrapingBeeUrl, {
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!response.ok) {
@@ -538,6 +538,43 @@ function parseSisalHTML(html: string, market: string, filters: any): any[] {
           }
         } catch (e) {
           console.log('[Sisal Parser] Failed to parse JSON:', e);
+        }
+      }
+    }
+
+    // Strategy 1b: Parse application/ld+json blocks for SportsEvent
+    if (events.length === 0) {
+      const ldMatches = [...html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)];
+      for (const m of ldMatches) {
+        try {
+          const json = JSON.parse(m[1].trim());
+          const arr = Array.isArray(json) ? json : [json];
+          for (const item of arr) {
+            const type = (item['@type'] || '').toString().toLowerCase();
+            const name = (item.name || '').toString();
+            if (type.includes('sport') || (name && name.includes('-'))) {
+              let home = '';
+              let away = '';
+              if (name.includes('-')) {
+                const parts = name.split('-');
+                home = parts[0].trim();
+                away = parts[1]?.trim() || '';
+              }
+              const start = item.startDate || item.datePublished || item.validFrom;
+              if (home && away) {
+                events.push({
+                  eventName: `${home} - ${away}`,
+                  league: (item.competition && (item.competition.name || item.competition)) || 'Serie A',
+                  eventTime: start || new Date(Date.now() + 86400000).toISOString(),
+                  market,
+                  odds: {}
+                });
+              }
+            }
+          }
+          if (events.length >= 50) break;
+        } catch (e) {
+          // ignore JSON parse errors from unrelated ld+json blocks
         }
       }
     }
