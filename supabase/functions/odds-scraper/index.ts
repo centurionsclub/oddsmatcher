@@ -248,113 +248,40 @@ async function scrapeBookmaker(
 ): Promise<any[]> {
   console.log(`Fetching odds for ${bookmaker} - ${sport} - ${market}`);
   
-  // STRATEGY FOR SISAL & LOTTOMATICA: ScrapingBee first, The Odds API as fallback
-  if (bookmaker === 'sisal' || bookmaker === 'lottomatica') {
-    // Strategy 1: Try ScrapingBee first (direct scraping)
-    try {
-      let scraped: any[] = [];
-      if (bookmaker === 'sisal') {
-        scraped = await scrapeSisal(sport, market, filters);
-      } else if (bookmaker === 'lottomatica') {
-        scraped = await scrapeLottomatica(sport, market, filters);
-      }
-      
-      if (scraped.length > 0) {
-        console.log(`ScrapingBee returned ${scraped.length} events for ${bookmaker}`);
-        return scraped;
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.log(`ScrapingBee failed for ${bookmaker}, trying The Odds API fallback:`, errorMsg);
+  // STRATEGY: Use The Odds API as primary source for all bookmakers
+  // This avoids CPU timeout issues with scraping
+  try {
+    const apiEvents = await fetchFromTheOddsAPI(sport, market);
+    const bookmakerEvents = apiEvents
+      .map(event => {
+        const bmKey = bookmaker.toLowerCase();
+        const odds = event.bookmakerData[bmKey] || event.bookmakerData[Object.keys(event.bookmakerData)[0]];
+        
+        if (odds && Object.keys(odds).length > 0) {
+          return {
+            bookmaker: bookmaker,
+            eventName: event.eventName,
+            league: event.league,
+            eventTime: event.eventTime,
+            market: event.market,
+            odds: odds
+          };
+        }
+        return null;
+      })
+      .filter((e: any) => e !== null);
+
+    if (bookmakerEvents.length > 0) {
+      console.log(`The Odds API returned ${bookmakerEvents.length} events for ${bookmaker}`);
+      return bookmakerEvents;
     }
     
-    // Strategy 2: Fallback to The Odds API
-    try {
-      const apiEvents = await fetchFromTheOddsAPI(sport, market);
-      const bookmakerEvents = apiEvents
-        .map(event => {
-          const bmKey = bookmaker.toLowerCase();
-          const odds = event.bookmakerData[bmKey] || event.bookmakerData[Object.keys(event.bookmakerData)[0]];
-          
-          if (odds && Object.keys(odds).length > 0) {
-            return {
-              eventName: event.eventName,
-              league: event.league,
-              eventTime: event.eventTime,
-              market: event.market,
-              odds: odds
-            };
-          }
-          return null;
-        })
-        .filter((e: any) => e !== null);
-
-      if (bookmakerEvents.length > 0) {
-        console.log(`The Odds API (fallback) returned ${bookmakerEvents.length} events for ${bookmaker}`);
-        return bookmakerEvents;
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.log(`The Odds API fallback also failed for ${bookmaker}:`, errorMsg);
-    }
+    return [];
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`The Odds API failed for ${bookmaker}:`, errorMsg);
+    return [];
   }
-  
-  // STRATEGY FOR OTHER BOOKMAKERS: The Odds API first, then direct scraping
-  else {
-    // Strategy 1: Try The Odds API first
-    try {
-      const apiEvents = await fetchFromTheOddsAPI(sport, market);
-      const bookmakerEvents = apiEvents
-        .map(event => {
-          const bmKey = bookmaker.toLowerCase();
-          const odds = event.bookmakerData[bmKey] || event.bookmakerData[Object.keys(event.bookmakerData)[0]];
-          
-          if (odds && Object.keys(odds).length > 0) {
-            return {
-              eventName: event.eventName,
-              league: event.league,
-              eventTime: event.eventTime,
-              market: event.market,
-              odds: odds
-            };
-          }
-          return null;
-        })
-        .filter((e: any) => e !== null);
-
-      if (bookmakerEvents.length > 0) {
-        console.log(`The Odds API returned ${bookmakerEvents.length} events for ${bookmaker}`);
-        return bookmakerEvents;
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.log(`The Odds API failed for ${bookmaker}:`, errorMsg);
-    }
-
-    // Strategy 2: Try direct scraping as fallback
-    try {
-      if (bookmaker === 'bet365') {
-        const scraped = await scrapeBet365(sport, market, filters);
-        if (scraped.length > 0) {
-          console.log(`Direct scraping returned ${scraped.length} events for ${bookmaker}`);
-          return scraped;
-        }
-      } else if (bookmaker === 'snai') {
-        const scraped = await scrapeSnai(sport, market, filters);
-        if (scraped.length > 0) {
-          console.log(`Direct scraping returned ${scraped.length} events for ${bookmaker}`);
-          return scraped;
-        }
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.log(`Direct scraping failed for ${bookmaker}:`, errorMsg);
-    }
-  }
-
-  // No data available
-  console.log(`No data available for ${bookmaker}`);
-  return [];
 }
 
 // Bet365 real scraper
