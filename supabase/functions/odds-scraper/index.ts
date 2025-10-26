@@ -31,7 +31,7 @@ const BOOKMAKER_CONFIGS = {
   sisal: {
     name: 'Sisal',
     baseUrl: 'https://www.sisal.it',
-    prematchUrl: 'https://www.sisal.it/scommesse-matchpoint/sport/calcio',
+    prematchUrl: 'https://www.sisal.it/scommesse-matchpoint/quote/calcio/serie-a',
     selectors: {
       eventContainer: '[data-qa="event-item"], .event-row, .match-item, .match-card, article[class*="event"]',
       eventName: '[data-qa="event-name"], .event-name, .match-name',
