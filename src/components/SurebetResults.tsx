@@ -71,10 +71,6 @@ export function SurebetResults({ data, loading, error }: SurebetResultsProps) {
               <TableHead className="bg-secondary/30">Esito 2</TableHead>
               <TableHead className="bg-secondary/30">Quota 2</TableHead>
               <TableHead className="bg-secondary/30">Stake 2</TableHead>
-              <TableHead className="bg-accent/10">Book 3</TableHead>
-              <TableHead className="bg-accent/10">Esito 3</TableHead>
-              <TableHead className="bg-accent/10">Quota 3</TableHead>
-              <TableHead className="bg-accent/10">Stake 3</TableHead>
               <TableHead className="font-semibold">Profitto %</TableHead>
               <TableHead className="font-semibold">Profitto €</TableHead>
             </TableRow>
@@ -126,14 +122,6 @@ export function SurebetResults({ data, loading, error }: SurebetResultsProps) {
                   <TableCell className="bg-secondary/30 font-semibold">{leg2?.odds?.toFixed(2) || 'N/A'}</TableCell>
                   <TableCell className="bg-secondary/30">
                     {leg2?.stake ? `€${leg2.stake.toFixed(2)}` : 'N/A'}
-                  </TableCell>
-                  
-                  {/* Leg 3 (optional - only for 3-way markets) */}
-                  <TableCell className="bg-accent/10">{leg3?.bookmaker || '-'}</TableCell>
-                  <TableCell className="bg-accent/10 font-medium">{leg3?.outcome || '-'}</TableCell>
-                  <TableCell className="bg-accent/10 font-semibold">{leg3?.odds?.toFixed(2) || '-'}</TableCell>
-                  <TableCell className="bg-accent/10">
-                    {leg3?.stake ? `€${leg3.stake.toFixed(2)}` : '-'}
                   </TableCell>
                   
                   {/* Profit */}
