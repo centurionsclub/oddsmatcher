@@ -409,11 +409,11 @@ async function scrapeSisal(sport: string, market: string, filters: any): Promise
   
   try {
     // Ottimizzazione parametri ScrapingBee per Sisal
-    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it&wait=2000&block_resources=false`;
+    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it&wait=1000&block_resources=true`;
     
     console.log(`Fetching from ScrapingBee for Sisal: ${targetUrl}`);
     const response = await fetch(scrapingBeeUrl, {
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(12000),
     });
 
     if (!response.ok) {
@@ -449,11 +449,11 @@ async function scrapeLottomatica(sport: string, market: string, filters: any): P
   
   try {
     // Ottimizzazione parametri ScrapingBee per Lottomatica
-    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it&wait=2000&block_resources=false`;
+    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it&wait=1000&block_resources=true`;
     
     console.log(`Fetching from ScrapingBee for Lottomatica: ${targetUrl}`);
     const response = await fetch(scrapingBeeUrl, {
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(12000),
     });
 
     if (!response.ok) {
@@ -542,67 +542,13 @@ function parseSisalHTML(html: string, market: string, filters: any): any[] {
       }
     }
 
-    // Strategy 2: Enhanced regex patterns for HTML extraction
+    // Strategy 2: Skip heavy regex to avoid CPU timeouts
     if (events.length === 0) {
-      console.log('[Sisal Parser] No JSON found, trying regex patterns...');
-      
-      const eventPatterns = [
-        // Pattern 1: Team names separated by dash or vs with odds (quota-1, quota-x, quota-2)
-        /([\w\sàèéìòù']+)\s*[-–]\s*([\w\sàèéìòù']+).*?(?:quota-1|home-odd|esito-1)[^>]*>([\d.,]+).*?(?:quota-x|draw-odd|esito-x)[^>]*>([\d.,]+).*?(?:quota-2|away-odd|esito-2)[^>]*>([\d.,]+)/gis,
-        
-        // Pattern 2: Data attributes
-        /data-qa="event[^"]*"[^>]*>.*?([\w\sàèéìòù']+)\s*[-–vs]\s*([\w\sàèéìòù']+).*?data-qa="odd[^"]*"[^>]*>([\d.,]+)/gis,
-        
-        // Pattern 3: Button elements with odds
-        /<button[^>]*class="[^"]*odd[^"]*"[^>]*>([\d.,]+)<\/button>/gi,
-        
-        // Pattern 4: Match in article or div with team names
-        /<(?:article|div)[^>]*class="[^"]*(?:event|match)[^"]*"[^>]*>[\s\S]{0,500}?([\w\sàèéìòù']+)\s*[-–]\s*([\w\sàèéìòù']+)[\s\S]{0,300}?([\d.,]+)/gis,
-      ];
-
-      for (const pattern of eventPatterns) {
-        const matches = [...html.matchAll(pattern)];
-        if (matches.length > 0) {
-          console.log(`[Sisal Parser] Found ${matches.length} potential events using regex pattern`);
-          
-          matches.forEach((match, index) => {
-            try {
-              const homeTeam = match[1]?.trim();
-              const awayTeam = match[2]?.trim();
-              const odd1 = parseFloat((match[3] || '0').replace(',', '.'));
-              const oddX = parseFloat((match[4] || '0').replace(',', '.'));
-              const odd2 = parseFloat((match[5] || '0').replace(',', '.'));
-              
-              if (homeTeam && awayTeam && odd1 > 1.01) {
-                const eventName = `${homeTeam} - ${awayTeam}`;
-                console.log(`[Sisal Parser] Event ${index + 1}: ${eventName}, odds: ${odd1}/${oddX || 'N/A'}/${odd2 || 'N/A'}`);
-                
-                events.push({
-                  eventName,
-                  league: 'Serie A',
-                  eventTime: new Date(Date.now() + 86400000).toISOString(),
-                  market,
-                  odds: market === '1X2' 
-                    ? { 
-                        home: odd1, 
-                        draw: oddX > 1.01 ? oddX : 3.20, 
-                        away: odd2 > 1.01 ? odd2 : 3.50 
-                      }
-                    : { over: odd1, under: 1.95 }
-                });
-              }
-            } catch (e) {
-              console.log(`[Sisal Parser] Error parsing match ${index}:`, e);
-            }
-          });
-          
-          if (events.length > 0) break;
-        }
-      }
+      console.log('[Sisal Parser] No JSON found, skipping regex to prevent CPU timeout.');
     }
-
+ 
     console.log(`[Sisal Parser] Completed parsing, found ${events.length} events`);
-
+ 
   } catch (error) {
     console.error('[Sisal Parser] Fatal error:', error);
   }
@@ -936,8 +882,8 @@ serve(async (req) => {
     console.error('Error in odds-scraper function:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ success: false, error: errorMessage, data: [], metadata: { durationMs: Date.now() - startTime } }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
