@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DecimalInput } from "@/components/ui/decimal-input";
@@ -599,6 +600,18 @@ const Index = () => {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          
+          {/* Link to dedicated Surebet page */}
+          <Link to="/surebet">
+            <Button 
+              variant="default"
+              size="sm" 
+              className="gap-2 text-sm font-medium bg-primary hover:bg-primary-hover"
+            >
+              <Trophy className="h-3.5 w-3.5" />
+              SUREBET FINDER
+            </Button>
+          </Link>
         </div>
 
         {/* Tabs */}

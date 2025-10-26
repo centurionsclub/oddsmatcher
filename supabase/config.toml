@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.odds-scraper]
 verify_jwt = false
+
+[functions.surebet-finder]
+verify_jwt = false

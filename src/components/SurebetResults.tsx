@@ -60,37 +60,92 @@ export function SurebetResults({ data, loading, error }: SurebetResultsProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Sport</TableHead>
               <TableHead>Evento</TableHead>
               <TableHead>Orario</TableHead>
-              <TableHead>Profitto %</TableHead>
-              <TableHead>Bookmaker 1</TableHead>
-              <TableHead>Quota 1</TableHead>
-              <TableHead>Mercato 1</TableHead>
-              <TableHead>Bookmaker 2</TableHead>
-              <TableHead>Quota 2</TableHead>
-              <TableHead>Mercato 2</TableHead>
+              <TableHead>Mercato</TableHead>
+              <TableHead className="bg-primary/5">Book 1</TableHead>
+              <TableHead className="bg-primary/5">Esito 1</TableHead>
+              <TableHead className="bg-primary/5">Quota 1</TableHead>
+              <TableHead className="bg-primary/5">Stake 1</TableHead>
+              <TableHead className="bg-secondary/30">Book 2</TableHead>
+              <TableHead className="bg-secondary/30">Esito 2</TableHead>
+              <TableHead className="bg-secondary/30">Quota 2</TableHead>
+              <TableHead className="bg-secondary/30">Stake 2</TableHead>
+              <TableHead className="bg-accent/10">Book 3</TableHead>
+              <TableHead className="bg-accent/10">Esito 3</TableHead>
+              <TableHead className="bg-accent/10">Quota 3</TableHead>
+              <TableHead className="bg-accent/10">Stake 3</TableHead>
+              <TableHead className="font-semibold">Profitto %</TableHead>
+              <TableHead className="font-semibold">Profitto €</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.arbs.map((arb: any, index: number) => (
-              <TableRow key={arb.id || index}>
-                <TableCell className="font-medium">{arb.sport?.name || 'N/A'}</TableCell>
-                <TableCell>{arb.event?.name || 'N/A'}</TableCell>
-                <TableCell>
-                  {arb.started_at ? new Date(arb.started_at).toLocaleString('it-IT') : 'N/A'}
-                </TableCell>
-                <TableCell className="font-semibold text-green-600">
-                  {arb.profit ? `${arb.profit.toFixed(2)}%` : 'N/A'}
-                </TableCell>
-                <TableCell>{arb.bookmaker1?.name || 'N/A'}</TableCell>
-                <TableCell className="font-medium">{arb.odds1 || 'N/A'}</TableCell>
-                <TableCell>{arb.market1?.name || 'N/A'}</TableCell>
-                <TableCell>{arb.bookmaker2?.name || 'N/A'}</TableCell>
-                <TableCell className="font-medium">{arb.odds2 || 'N/A'}</TableCell>
-                <TableCell>{arb.market2?.name || 'N/A'}</TableCell>
-              </TableRow>
-            ))}
+            {data.arbs.map((arb: any, index: number) => {
+              const profitClass = arb.profitPercentage >= 2 
+                ? 'text-green-600 font-bold' 
+                : arb.profitPercentage >= 1 
+                ? 'text-green-500 font-semibold' 
+                : 'text-green-400';
+              
+              const leg1 = arb.legs?.[0];
+              const leg2 = arb.legs?.[1];
+              const leg3 = arb.legs?.[2];
+
+              return (
+                <TableRow key={arb.id || index} className="hover:bg-muted/50">
+                  <TableCell className="font-medium">
+                    <div className="min-w-[180px]">
+                      <div className="font-semibold">{arb.event?.home || 'N/A'}</div>
+                      <div className="text-muted-foreground text-sm">vs {arb.event?.away || 'N/A'}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{arb.sport || 'N/A'}</div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {arb.event?.startTime 
+                      ? new Date(arb.event.startTime).toLocaleString('it-IT', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : 'N/A'}
+                  </TableCell>
+                  <TableCell className="font-medium">{arb.market || 'N/A'}</TableCell>
+                  
+                  {/* Leg 1 */}
+                  <TableCell className="bg-primary/5">{leg1?.bookmaker || 'N/A'}</TableCell>
+                  <TableCell className="bg-primary/5 font-medium">{leg1?.outcome || 'N/A'}</TableCell>
+                  <TableCell className="bg-primary/5 font-semibold">{leg1?.odds?.toFixed(2) || 'N/A'}</TableCell>
+                  <TableCell className="bg-primary/5">
+                    {leg1?.stake ? `€${leg1.stake.toFixed(2)}` : 'N/A'}
+                  </TableCell>
+                  
+                  {/* Leg 2 */}
+                  <TableCell className="bg-secondary/30">{leg2?.bookmaker || 'N/A'}</TableCell>
+                  <TableCell className="bg-secondary/30 font-medium">{leg2?.outcome || 'N/A'}</TableCell>
+                  <TableCell className="bg-secondary/30 font-semibold">{leg2?.odds?.toFixed(2) || 'N/A'}</TableCell>
+                  <TableCell className="bg-secondary/30">
+                    {leg2?.stake ? `€${leg2.stake.toFixed(2)}` : 'N/A'}
+                  </TableCell>
+                  
+                  {/* Leg 3 (optional - only for 3-way markets) */}
+                  <TableCell className="bg-accent/10">{leg3?.bookmaker || '-'}</TableCell>
+                  <TableCell className="bg-accent/10 font-medium">{leg3?.outcome || '-'}</TableCell>
+                  <TableCell className="bg-accent/10 font-semibold">{leg3?.odds?.toFixed(2) || '-'}</TableCell>
+                  <TableCell className="bg-accent/10">
+                    {leg3?.stake ? `€${leg3.stake.toFixed(2)}` : '-'}
+                  </TableCell>
+                  
+                  {/* Profit */}
+                  <TableCell className={profitClass}>
+                    {arb.profitPercentage ? `${arb.profitPercentage.toFixed(2)}%` : 'N/A'}
+                  </TableCell>
+                  <TableCell className={`${profitClass} font-bold`}>
+                    {arb.guaranteedProfit ? `€${arb.guaranteedProfit.toFixed(2)}` : 'N/A'}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
