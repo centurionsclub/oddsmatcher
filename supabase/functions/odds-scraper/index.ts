@@ -31,29 +31,29 @@ const BOOKMAKER_CONFIGS = {
   sisal: {
     name: 'Sisal',
     baseUrl: 'https://www.sisal.it',
-    prematchUrl: 'https://www.sisal.it/scommesse/match-list',
+    prematchUrl: 'https://www.sisal.it/scommesse-matchlist?cat=1&ev=1',
     selectors: {
-      eventContainer: '[data-qa="event-item"]',
-      eventName: '[data-qa="event-name"]',
-      teams: '[data-qa="team-name"]',
-      odds: '[data-qa="odd-value"]',
-      market: '[data-qa="market-type"]',
-      eventTime: '[data-qa="event-time"]',
-      league: '[data-qa="league-name"]'
+      eventContainer: '[data-qa="event-item"], .event-row, .match-item, .match-card, article[class*="event"]',
+      eventName: '[data-qa="event-name"], .event-name, .match-name',
+      teams: '[data-qa="team-name"], .team-name',
+      odds: '[data-qa="odd-value"], .odd-value, .quota, button[class*="odd"]',
+      market: '[data-qa="market-type"], .market-type',
+      eventTime: '[data-qa="event-time"], .event-time, time',
+      league: '[data-qa="league-name"], .league-name, .competition'
     }
   },
   lottomatica: {
     name: 'Lottomatica',
     baseUrl: 'https://www.lottomatica.it',
-    prematchUrl: 'https://www.lottomatica.it/scommesse/calcio',
+    prematchUrl: 'https://www.lottomatica.it/scommesse/calcio/italia/serie-a',
     selectors: {
-      eventContainer: '.event-row',
-      eventName: '.match-name',
+      eventContainer: '.event-row, .match, .event-item, .match-row, [data-test="event"]',
+      eventName: '.match-name, .event-name',
       teams: '.team-name',
-      odds: '.quota',
-      market: '.market-name',
-      eventTime: '.event-datetime',
-      league: '.competition-name'
+      odds: '.quota, .odd-value, [class*="quota"], button[class*="odd"]',
+      market: '.market-name, .market-type',
+      eventTime: '.event-datetime, .event-time, time',
+      league: '.competition-name, .league-name'
     }
   }
 };
@@ -248,72 +248,112 @@ async function scrapeBookmaker(
 ): Promise<any[]> {
   console.log(`Fetching odds for ${bookmaker} - ${sport} - ${market}`);
   
-  // Strategy 1: Try The Odds API first (best quality data)
-  try {
-    const apiEvents = await fetchFromTheOddsAPI(sport, market);
+  // STRATEGY FOR SISAL & LOTTOMATICA: ScrapingBee first, The Odds API as fallback
+  if (bookmaker === 'sisal' || bookmaker === 'lottomatica') {
+    // Strategy 1: Try ScrapingBee first (direct scraping)
+    try {
+      let scraped: any[] = [];
+      if (bookmaker === 'sisal') {
+        scraped = await scrapeSisal(sport, market, filters);
+      } else if (bookmaker === 'lottomatica') {
+        scraped = await scrapeLottomatica(sport, market, filters);
+      }
+      
+      if (scraped.length > 0) {
+        console.log(`ScrapingBee returned ${scraped.length} events for ${bookmaker}`);
+        return scraped;
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(`ScrapingBee failed for ${bookmaker}, trying The Odds API fallback:`, errorMsg);
+    }
     
-    // Extract odds for specific bookmaker
-    const bookmakerEvents = apiEvents
-      .map(event => {
-        const bmKey = bookmaker.toLowerCase();
-        const odds = event.bookmakerData[bmKey] || event.bookmakerData[Object.keys(event.bookmakerData)[0]];
-        
-        if (odds && Object.keys(odds).length > 0) {
-          return {
-            eventName: event.eventName,
-            league: event.league,
-            eventTime: event.eventTime,
-            market: event.market,
-            odds: odds
-          };
-        }
-        return null;
-      })
-      .filter((e: any) => e !== null);
+    // Strategy 2: Fallback to The Odds API
+    try {
+      const apiEvents = await fetchFromTheOddsAPI(sport, market);
+      const bookmakerEvents = apiEvents
+        .map(event => {
+          const bmKey = bookmaker.toLowerCase();
+          const odds = event.bookmakerData[bmKey] || event.bookmakerData[Object.keys(event.bookmakerData)[0]];
+          
+          if (odds && Object.keys(odds).length > 0) {
+            return {
+              eventName: event.eventName,
+              league: event.league,
+              eventTime: event.eventTime,
+              market: event.market,
+              odds: odds
+            };
+          }
+          return null;
+        })
+        .filter((e: any) => e !== null);
 
-    if (bookmakerEvents.length > 0) {
-      console.log(`The Odds API returned ${bookmakerEvents.length} events for ${bookmaker}`);
-      return bookmakerEvents;
+      if (bookmakerEvents.length > 0) {
+        console.log(`The Odds API (fallback) returned ${bookmakerEvents.length} events for ${bookmaker}`);
+        return bookmakerEvents;
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(`The Odds API fallback also failed for ${bookmaker}:`, errorMsg);
     }
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.log(`The Odds API failed for ${bookmaker}:`, errorMsg);
   }
+  
+  // STRATEGY FOR OTHER BOOKMAKERS: The Odds API first, then direct scraping
+  else {
+    // Strategy 1: Try The Odds API first
+    try {
+      const apiEvents = await fetchFromTheOddsAPI(sport, market);
+      const bookmakerEvents = apiEvents
+        .map(event => {
+          const bmKey = bookmaker.toLowerCase();
+          const odds = event.bookmakerData[bmKey] || event.bookmakerData[Object.keys(event.bookmakerData)[0]];
+          
+          if (odds && Object.keys(odds).length > 0) {
+            return {
+              eventName: event.eventName,
+              league: event.league,
+              eventTime: event.eventTime,
+              market: event.market,
+              odds: odds
+            };
+          }
+          return null;
+        })
+        .filter((e: any) => e !== null);
 
-  // Strategy 2: Try ScrapingBee for Sisal and Lottomatica
-  try {
-    if (bookmaker === 'sisal') {
-      const scraped = await scrapeSisal(sport, market, filters);
-      if (scraped.length > 0) {
-        console.log(`ScrapingBee returned ${scraped.length} events for ${bookmaker}`);
-        return scraped;
+      if (bookmakerEvents.length > 0) {
+        console.log(`The Odds API returned ${bookmakerEvents.length} events for ${bookmaker}`);
+        return bookmakerEvents;
       }
-    } else if (bookmaker === 'lottomatica') {
-      const scraped = await scrapeLottomatica(sport, market, filters);
-      if (scraped.length > 0) {
-        console.log(`ScrapingBee returned ${scraped.length} events for ${bookmaker}`);
-        return scraped;
-      }
-    } else if (bookmaker === 'bet365') {
-      const scraped = await scrapeBet365(sport, market, filters);
-      if (scraped.length > 0) {
-        console.log(`Real scraping returned ${scraped.length} events for ${bookmaker}`);
-        return scraped;
-      }
-    } else if (bookmaker === 'snai') {
-      const scraped = await scrapeSnai(sport, market, filters);
-      if (scraped.length > 0) {
-        console.log(`Real scraping returned ${scraped.length} events for ${bookmaker}`);
-        return scraped;
-      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(`The Odds API failed for ${bookmaker}:`, errorMsg);
     }
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.log(`Real scraping failed for ${bookmaker}:`, errorMsg);
+
+    // Strategy 2: Try direct scraping as fallback
+    try {
+      if (bookmaker === 'bet365') {
+        const scraped = await scrapeBet365(sport, market, filters);
+        if (scraped.length > 0) {
+          console.log(`Direct scraping returned ${scraped.length} events for ${bookmaker}`);
+          return scraped;
+        }
+      } else if (bookmaker === 'snai') {
+        const scraped = await scrapeSnai(sport, market, filters);
+        if (scraped.length > 0) {
+          console.log(`Direct scraping returned ${scraped.length} events for ${bookmaker}`);
+          return scraped;
+        }
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(`Direct scraping failed for ${bookmaker}:`, errorMsg);
+    }
   }
 
   // No data available
-  console.log(`No real data available for ${bookmaker}`);
+  console.log(`No data available for ${bookmaker}`);
   return [];
 }
 
@@ -462,9 +502,10 @@ async function scrapeSisal(sport: string, market: string, filters: any): Promise
   const targetUrl = config.prematchUrl;
   
   try {
-    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it`;
+    // Ottimizzazione parametri ScrapingBee per Sisal
+    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it&wait=2000&block_resources=false`;
     
-    console.log('Fetching from ScrapingBee for Sisal...');
+    console.log(`Fetching from ScrapingBee for Sisal: ${targetUrl}`);
     const response = await fetch(scrapingBeeUrl, {
       signal: AbortSignal.timeout(30000),
     });
@@ -501,9 +542,10 @@ async function scrapeLottomatica(sport: string, market: string, filters: any): P
   const targetUrl = config.prematchUrl;
   
   try {
-    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it`;
+    // Ottimizzazione parametri ScrapingBee per Lottomatica
+    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it&wait=2000&block_resources=false`;
     
-    console.log('Fetching from ScrapingBee for Lottomatica...');
+    console.log(`Fetching from ScrapingBee for Lottomatica: ${targetUrl}`);
     const response = await fetch(scrapingBeeUrl, {
       signal: AbortSignal.timeout(30000),
     });
@@ -531,58 +573,132 @@ async function scrapeLottomatica(sport: string, market: string, filters: any): P
 function parseSisalHTML(html: string, market: string, filters: any): any[] {
   const events: any[] = [];
   
+  console.log(`[Sisal Parser] Starting HTML parsing for market: ${market}, HTML size: ${html.length} bytes`);
+  
   try {
-    // Look for JSON data in script tags (common pattern)
-    const jsonDataRegex = /<script[^>]*>.*?window\.__INITIAL_STATE__\s*=\s*({.*?});.*?<\/script>/s;
-    const jsonMatch = html.match(jsonDataRegex);
-    
-    if (jsonMatch && jsonMatch[1]) {
-      try {
-        const data = JSON.parse(jsonMatch[1]);
-        console.log('Found Sisal JSON data in page');
-        // Parse JSON structure - will need to adjust based on actual structure
-        // This is a placeholder that needs real implementation
-      } catch (e) {
-        console.error('Failed to parse Sisal JSON data:', e);
-      }
-    }
-
-    // Fallback: Try to extract using regex patterns
-    const eventPatterns = [
-      // Pattern 1: Team names with odds
-      /data-qa="event-name"[^>]*>([^<]+)<.*?data-qa="odd-value"[^>]*>([\d.]+)</gs,
-      // Pattern 2: Match format
-      /([\w\s]+)\s+vs?\s+([\w\s]+).*?quota[^>]*>([\d.]+)/gi,
+    // Strategy 1: Look for JSON data embedded in script tags
+    const jsonPatterns = [
+      /<script[^>]*>.*?window\.__INITIAL_STATE__\s*=\s*({.*?});/s,
+      /<script[^>]*>.*?window\.__NEXT_DATA__\s*=\s*({.*?})<\/script>/s,
+      /<script[^>]*type="application\/json"[^>]*>({.*?})<\/script>/gs,
     ];
 
-    for (const pattern of eventPatterns) {
-      const matches = [...html.matchAll(pattern)];
-      if (matches.length > 0) {
-        console.log(`Found ${matches.length} events using pattern`);
-        
-        matches.forEach(match => {
-          const eventName = match[1]?.trim();
-          const odds1 = parseFloat(match[2] || '0');
+    for (const jsonPattern of jsonPatterns) {
+      const jsonMatch = html.match(jsonPattern);
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          const data = JSON.parse(jsonMatch[1]);
+          console.log('[Sisal Parser] Found embedded JSON data, attempting to extract events...');
           
-          if (eventName && odds1 > 0) {
-            events.push({
-              eventName,
-              league: 'Serie A',
-              eventTime: new Date(Date.now() + 86400000).toISOString(),
-              market,
-              odds: market === '1X2' 
-                ? { home: odds1, draw: 3.20, away: 3.50 }
-                : { over: odds1, under: 1.95 }
+          // Try to navigate JSON structure to find events
+          const findEvents = (obj: any, depth = 0): any[] => {
+            if (depth > 5) return [];
+            const found: any[] = [];
+            
+            if (Array.isArray(obj)) {
+              obj.forEach(item => found.push(...findEvents(item, depth + 1)));
+            } else if (obj && typeof obj === 'object') {
+              // Look for event-like structures
+              if (obj.homeTeam && obj.awayTeam && obj.odds) {
+                found.push(obj);
+              } else if (obj.teams && obj.markets) {
+                found.push(obj);
+              } else {
+                Object.values(obj).forEach(val => found.push(...findEvents(val, depth + 1)));
+              }
+            }
+            return found;
+          };
+          
+          const jsonEvents = findEvents(data);
+          if (jsonEvents.length > 0) {
+            console.log(`[Sisal Parser] Extracted ${jsonEvents.length} events from JSON`);
+            // Transform to our format
+            jsonEvents.forEach(evt => {
+              const eventName = evt.homeTeam && evt.awayTeam 
+                ? `${evt.homeTeam} - ${evt.awayTeam}`
+                : evt.eventName || '';
+              
+              if (eventName) {
+                events.push({
+                  eventName,
+                  league: evt.league || evt.competition || 'Serie A',
+                  eventTime: evt.startTime || evt.eventTime || new Date(Date.now() + 86400000).toISOString(),
+                  market,
+                  odds: evt.odds || {}
+                });
+              }
             });
           }
-        });
-        
-        if (events.length > 0) break;
+        } catch (e) {
+          console.log('[Sisal Parser] Failed to parse JSON:', e);
+        }
       }
     }
 
+    // Strategy 2: Enhanced regex patterns for HTML extraction
+    if (events.length === 0) {
+      console.log('[Sisal Parser] No JSON found, trying regex patterns...');
+      
+      const eventPatterns = [
+        // Pattern 1: Team names separated by dash or vs with odds (quota-1, quota-x, quota-2)
+        /([\w\sàèéìòù']+)\s*[-–]\s*([\w\sàèéìòù']+).*?(?:quota-1|home-odd|esito-1)[^>]*>([\d.,]+).*?(?:quota-x|draw-odd|esito-x)[^>]*>([\d.,]+).*?(?:quota-2|away-odd|esito-2)[^>]*>([\d.,]+)/gis,
+        
+        // Pattern 2: Data attributes
+        /data-qa="event[^"]*"[^>]*>.*?([\w\sàèéìòù']+)\s*[-–vs]\s*([\w\sàèéìòù']+).*?data-qa="odd[^"]*"[^>]*>([\d.,]+)/gis,
+        
+        // Pattern 3: Button elements with odds
+        /<button[^>]*class="[^"]*odd[^"]*"[^>]*>([\d.,]+)<\/button>/gi,
+        
+        // Pattern 4: Match in article or div with team names
+        /<(?:article|div)[^>]*class="[^"]*(?:event|match)[^"]*"[^>]*>[\s\S]{0,500}?([\w\sàèéìòù']+)\s*[-–]\s*([\w\sàèéìòù']+)[\s\S]{0,300}?([\d.,]+)/gis,
+      ];
+
+      for (const pattern of eventPatterns) {
+        const matches = [...html.matchAll(pattern)];
+        if (matches.length > 0) {
+          console.log(`[Sisal Parser] Found ${matches.length} potential events using regex pattern`);
+          
+          matches.forEach((match, index) => {
+            try {
+              const homeTeam = match[1]?.trim();
+              const awayTeam = match[2]?.trim();
+              const odd1 = parseFloat((match[3] || '0').replace(',', '.'));
+              const oddX = parseFloat((match[4] || '0').replace(',', '.'));
+              const odd2 = parseFloat((match[5] || '0').replace(',', '.'));
+              
+              if (homeTeam && awayTeam && odd1 > 1.01) {
+                const eventName = `${homeTeam} - ${awayTeam}`;
+                console.log(`[Sisal Parser] Event ${index + 1}: ${eventName}, odds: ${odd1}/${oddX || 'N/A'}/${odd2 || 'N/A'}`);
+                
+                events.push({
+                  eventName,
+                  league: 'Serie A',
+                  eventTime: new Date(Date.now() + 86400000).toISOString(),
+                  market,
+                  odds: market === '1X2' 
+                    ? { 
+                        home: odd1, 
+                        draw: oddX > 1.01 ? oddX : 3.20, 
+                        away: odd2 > 1.01 ? odd2 : 3.50 
+                      }
+                    : { over: odd1, under: 1.95 }
+                });
+              }
+            } catch (e) {
+              console.log(`[Sisal Parser] Error parsing match ${index}:`, e);
+            }
+          });
+          
+          if (events.length > 0) break;
+        }
+      }
+    }
+
+    console.log(`[Sisal Parser] Completed parsing, found ${events.length} events`);
+
   } catch (error) {
-    console.error('Error parsing Sisal HTML:', error);
+    console.error('[Sisal Parser] Fatal error:', error);
   }
   
   return events;
@@ -592,57 +708,136 @@ function parseSisalHTML(html: string, market: string, filters: any): any[] {
 function parseLottomaticaHTML(html: string, market: string, filters: any): any[] {
   const events: any[] = [];
   
+  console.log(`[Lottomatica Parser] Starting HTML parsing for market: ${market}, HTML size: ${html.length} bytes`);
+  
   try {
-    // Look for JSON data embedded in the page
-    const jsonDataRegex = /<script[^>]*>.*?(?:window\.__PRELOADED_STATE__|__NEXT_DATA__)\s*=\s*({.*?});.*?<\/script>/s;
-    const jsonMatch = html.match(jsonDataRegex);
-    
-    if (jsonMatch && jsonMatch[1]) {
-      try {
-        const data = JSON.parse(jsonMatch[1]);
-        console.log('Found Lottomatica JSON data in page');
-        // Parse JSON structure - will need adjustment based on actual structure
-      } catch (e) {
-        console.error('Failed to parse Lottomatica JSON data:', e);
-      }
-    }
-
-    // Fallback: Try regex extraction
-    const eventPatterns = [
-      // Pattern 1: Event row with odds
-      /class="event-row"[^>]*>.*?class="match-name"[^>]*>([^<]+)<.*?class="quota"[^>]*>([\d.]+)/gs,
-      // Pattern 2: Alternative format
-      /([\w\s]+)\s+-\s+([\w\s]+).*?(?:quota|odd)[^>]*>([\d.]+)/gi,
+    // Strategy 1: Look for embedded JSON data
+    const jsonPatterns = [
+      /<script[^>]*>.*?window\.__PRELOADED_STATE__\s*=\s*({.*?});/s,
+      /<script[^>]*>.*?window\.__NEXT_DATA__\s*=\s*({.*?})<\/script>/s,
+      /<script[^>]*type="application\/json"[^>]*>({.*?})<\/script>/gs,
+      /<script[^>]*>.*?window\.initialData\s*=\s*({.*?});/s,
     ];
 
-    for (const pattern of eventPatterns) {
-      const matches = [...html.matchAll(pattern)];
-      if (matches.length > 0) {
-        console.log(`Found ${matches.length} events using pattern`);
-        
-        matches.forEach(match => {
-          const eventName = match[1]?.trim();
-          const odds1 = parseFloat(match[2] || '0');
+    for (const jsonPattern of jsonPatterns) {
+      const jsonMatch = html.match(jsonPattern);
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          const data = JSON.parse(jsonMatch[1]);
+          console.log('[Lottomatica Parser] Found embedded JSON data, attempting to extract events...');
           
-          if (eventName && odds1 > 0) {
-            events.push({
-              eventName,
-              league: 'Serie A',
-              eventTime: new Date(Date.now() + 86400000).toISOString(),
-              market,
-              odds: market === '1X2'
-                ? { home: odds1, draw: 3.30, away: 3.40 }
-                : { over: odds1, under: 2.00 }
+          // Recursive search for event structures
+          const findEvents = (obj: any, depth = 0): any[] => {
+            if (depth > 5) return [];
+            const found: any[] = [];
+            
+            if (Array.isArray(obj)) {
+              obj.forEach(item => found.push(...findEvents(item, depth + 1)));
+            } else if (obj && typeof obj === 'object') {
+              // Look for event structures
+              if ((obj.homeTeam || obj.home) && (obj.awayTeam || obj.away)) {
+                found.push(obj);
+              } else if (obj.teams && Array.isArray(obj.teams) && obj.teams.length >= 2) {
+                found.push(obj);
+              } else if (obj.matchName || obj.eventName) {
+                found.push(obj);
+              } else {
+                Object.values(obj).forEach(val => found.push(...findEvents(val, depth + 1)));
+              }
+            }
+            return found;
+          };
+          
+          const jsonEvents = findEvents(data);
+          if (jsonEvents.length > 0) {
+            console.log(`[Lottomatica Parser] Extracted ${jsonEvents.length} events from JSON`);
+            jsonEvents.forEach(evt => {
+              const homeTeam = evt.homeTeam || evt.home || evt.teams?.[0];
+              const awayTeam = evt.awayTeam || evt.away || evt.teams?.[1];
+              const eventName = homeTeam && awayTeam 
+                ? `${homeTeam} - ${awayTeam}`
+                : evt.matchName || evt.eventName || '';
+              
+              if (eventName) {
+                events.push({
+                  eventName,
+                  league: evt.league || evt.competition || evt.tournament || 'Serie A',
+                  eventTime: evt.startTime || evt.eventTime || evt.date || new Date(Date.now() + 86400000).toISOString(),
+                  market,
+                  odds: evt.odds || evt.markets?.[0]?.odds || {}
+                });
+              }
             });
           }
-        });
-        
-        if (events.length > 0) break;
+        } catch (e) {
+          console.log('[Lottomatica Parser] Failed to parse JSON:', e);
+        }
       }
     }
 
+    // Strategy 2: Enhanced regex patterns
+    if (events.length === 0) {
+      console.log('[Lottomatica Parser] No JSON found, trying regex patterns...');
+      
+      const eventPatterns = [
+        // Pattern 1: Team names with multiple odds (1X2)
+        /([\w\sàèéìòù']+)\s*[-–]\s*([\w\sàèéìòù']+).*?(?:esito-1|quota-1|outcome-1)[^>]*>([\d.,]+).*?(?:esito-x|quota-x|outcome-x)[^>]*>([\d.,]+).*?(?:esito-2|quota-2|outcome-2)[^>]*>([\d.,]+)/gis,
+        
+        // Pattern 2: Match-row or event-row structure
+        /class="(?:match-row|event-row)"[^>]*>[\s\S]{0,800}?([\w\sàèéìòù']+)\s*[-–]\s*([\w\sàèéìòù']+)[\s\S]{0,400}?class="quota"[^>]*>([\d.,]+)/gis,
+        
+        // Pattern 3: Data-test attributes
+        /data-test="event"[^>]*>[\s\S]{0,600}?([\w\sàèéìòù']+)\s*[-–vs]\s*([\w\sàèéìòù']+)[\s\S]{0,300}?data-test="odd[^"]*"[^>]*>([\d.,]+)/gis,
+        
+        // Pattern 4: Button elements with team names
+        /([\w\sàèéìòù']+)\s*-\s*([\w\sàèéìòù']+).*?<button[^>]*class="[^"]*odd[^"]*"[^>]*>([\d.,]+)<\/button>/gis,
+      ];
+
+      for (const pattern of eventPatterns) {
+        const matches = [...html.matchAll(pattern)];
+        if (matches.length > 0) {
+          console.log(`[Lottomatica Parser] Found ${matches.length} potential events using regex pattern`);
+          
+          matches.forEach((match, index) => {
+            try {
+              const homeTeam = match[1]?.trim();
+              const awayTeam = match[2]?.trim();
+              const odd1 = parseFloat((match[3] || '0').replace(',', '.'));
+              const oddX = parseFloat((match[4] || '0').replace(',', '.'));
+              const odd2 = parseFloat((match[5] || '0').replace(',', '.'));
+              
+              if (homeTeam && awayTeam && odd1 > 1.01) {
+                const eventName = `${homeTeam} - ${awayTeam}`;
+                console.log(`[Lottomatica Parser] Event ${index + 1}: ${eventName}, odds: ${odd1}/${oddX || 'N/A'}/${odd2 || 'N/A'}`);
+                
+                events.push({
+                  eventName,
+                  league: 'Serie A',
+                  eventTime: new Date(Date.now() + 86400000).toISOString(),
+                  market,
+                  odds: market === '1X2'
+                    ? { 
+                        home: odd1, 
+                        draw: oddX > 1.01 ? oddX : 3.30, 
+                        away: odd2 > 1.01 ? odd2 : 3.40 
+                      }
+                    : { over: odd1, under: 2.00 }
+                });
+              }
+            } catch (e) {
+              console.log(`[Lottomatica Parser] Error parsing match ${index}:`, e);
+            }
+          });
+          
+          if (events.length > 0) break;
+        }
+      }
+    }
+
+    console.log(`[Lottomatica Parser] Completed parsing, found ${events.length} events`);
+
   } catch (error) {
-    console.error('Error parsing Lottomatica HTML:', error);
+    console.error('[Lottomatica Parser] Fatal error:', error);
   }
   
   return events;
