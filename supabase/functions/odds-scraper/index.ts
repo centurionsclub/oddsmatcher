@@ -31,7 +31,7 @@ const BOOKMAKER_CONFIGS = {
   sisal: {
     name: 'Sisal',
     baseUrl: 'https://www.sisal.it',
-    prematchUrl: 'https://www.sisal.it/scommesse-matchlist?cat=1&ev=1',
+    prematchUrl: 'https://www.sisal.it/scommesse-matchpoint/sport/calcio',
     selectors: {
       eventContainer: '[data-qa="event-item"], .event-row, .match-item, .match-card, article[class*="event"]',
       eventName: '[data-qa="event-name"], .event-name, .match-name',
@@ -45,7 +45,7 @@ const BOOKMAKER_CONFIGS = {
   lottomatica: {
     name: 'Lottomatica',
     baseUrl: 'https://www.lottomatica.it',
-    prematchUrl: 'https://www.lottomatica.it/scommesse/calcio/italia/serie-a',
+    prematchUrl: 'https://www.lottomatica.it/scommesse/sport/',
     selectors: {
       eventContainer: '.event-row, .match, .event-item, .match-row, [data-test="event"]',
       eventName: '.match-name, .event-name',
