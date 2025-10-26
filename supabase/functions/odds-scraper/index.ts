@@ -248,40 +248,19 @@ async function scrapeBookmaker(
 ): Promise<any[]> {
   console.log(`Fetching odds for ${bookmaker} - ${sport} - ${market}`);
   
-  // STRATEGY: Use The Odds API as primary source for all bookmakers
-  // This avoids CPU timeout issues with scraping
-  try {
-    const apiEvents = await fetchFromTheOddsAPI(sport, market);
-    const bookmakerEvents = apiEvents
-      .map(event => {
-        const bmKey = bookmaker.toLowerCase();
-        const odds = event.bookmakerData[bmKey] || event.bookmakerData[Object.keys(event.bookmakerData)[0]];
-        
-        if (odds && Object.keys(odds).length > 0) {
-          return {
-            bookmaker: bookmaker,
-            eventName: event.eventName,
-            league: event.league,
-            eventTime: event.eventTime,
-            market: event.market,
-            odds: odds
-          };
-        }
-        return null;
-      })
-      .filter((e: any) => e !== null);
-
-    if (bookmakerEvents.length > 0) {
-      console.log(`The Odds API returned ${bookmakerEvents.length} events for ${bookmaker}`);
-      return bookmakerEvents;
-    }
-    
-    return [];
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`The Odds API failed for ${bookmaker}:`, errorMsg);
-    return [];
+  // STRATEGY: Use ONLY ScrapingBee for Sisal and Lottomatica
+  if (bookmaker === 'sisal') {
+    return await scrapeSisal(sport, market, filters);
+  } else if (bookmaker === 'lottomatica') {
+    return await scrapeLottomatica(sport, market, filters);
+  } else if (bookmaker === 'bet365') {
+    return await scrapeBet365(sport, market, filters);
+  } else if (bookmaker === 'snai') {
+    return await scrapeSnai(sport, market, filters);
   }
+  
+  console.log(`No scraper available for ${bookmaker}`);
+  return [];
 }
 
 // Bet365 real scraper
