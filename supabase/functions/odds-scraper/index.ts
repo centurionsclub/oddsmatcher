@@ -258,7 +258,12 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
     // Map sport to Betfair event type ID (1 = Soccer)
     const eventTypeId = sport === 'calcio' ? '1' : '1';
 
-    // Step 1: fetch market catalogue for IT MATCH_ODDS (no competition filter)
+    // Time window: from last hour to next 24h
+    const now = new Date();
+    const fromIso = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+    const toIso = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+    // Step 1: fetch market catalogue for MATCH_ODDS
     const marketCatalogueResp = await fetch(`${restBase}/listMarketCatalogue/`, {
       method: 'POST',
       headers: {
@@ -270,8 +275,11 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
       body: JSON.stringify({
         filter: {
           eventTypeIds: [eventTypeId],
+          // Narrow to Italy but allow live via time window
           marketCountries: ['IT'],
-          marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25']
+          marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25'],
+          marketStartTime: { from: fromIso, to: toIso },
+          inPlayOnly: !!(filters && (filters.live || filters.inPlay))
         },
         maxResults: 120,
         sort: 'FIRST_TO_START',

@@ -327,6 +327,12 @@ const Index = () => {
           bookmakers = ['bet365', 'snai', 'sisal'];
           sport = 'calcio';
           market = bestOddsFilters.mercato === 'nessuno' ? '1X2' : bestOddsFilters.mercato;
+        } else if (activeTab === "betfairlive") {
+          // Betfair Live: solo exchange Betfair, modalita' live
+          filters = { live: true, exchange: ['betfair'] };
+          bookmakers = ['betfair'];
+          sport = 'calcio';
+          market = '1X2';
         }
 
         // Pulisce e valida bookmaker ed exchange selezionati
