@@ -8,6 +8,3 @@ verify_jwt = false
 
 [functions.surebet-finder]
 verify_jwt = false
-
-[functions.update-betfair-credentials]
-verify_jwt = false

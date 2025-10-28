@@ -230,10 +230,9 @@ function BetfairCredentialsDialog() {
   const [open, setOpen] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [sessionToken, setSessionToken] = useState("");
-  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!apiKey.trim() || !sessionToken.trim()) {
       toast({
         title: "Errore",
@@ -243,32 +242,19 @@ function BetfairCredentialsDialog() {
       return;
     }
 
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('update-betfair-credentials', {
-        body: { apiKey: apiKey.trim(), sessionToken: sessionToken.trim() }
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Credenziali aggiornate",
-        description: "Le credenziali Betfair sono state salvate. Riavvia l'app per applicarle.",
-      });
-      
-      setApiKey("");
-      setSessionToken("");
-      setOpen(false);
-    } catch (error: any) {
-      console.error('Error saving credentials:', error);
-      toast({
-        title: "Errore",
-        description: error.message || 'Impossibile salvare le credenziali',
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+    // I secrets vengono gestiti a livello di progetto
+    // Mostra istruzioni per l'aggiornamento
+    toast({
+      title: "Credenziali pronte",
+      description: `App Key: ${apiKey.substring(0, 8)}...\nSession Token: ${sessionToken.substring(0, 8)}...\n\nAggiorna i secrets BETFAIR_API_KEY e BETFAIR_SESSION_TOKEN nelle impostazioni del progetto.`,
+      duration: 10000,
+    });
+    
+    console.log('Betfair credentials to update:');
+    console.log('BETFAIR_API_KEY:', apiKey);
+    console.log('BETFAIR_SESSION_TOKEN:', sessionToken);
+    
+    setOpen(false);
   };
 
   return (
@@ -307,11 +293,11 @@ function BetfairCredentialsDialog() {
           </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+          <Button variant="outline" onClick={() => setOpen(false)}>
             Annulla
           </Button>
-          <Button onClick={handleSave} disabled={loading}>
-            {loading ? "Salvataggio..." : "Salva"}
+          <Button onClick={handleSave}>
+            Mostra Credenziali
           </Button>
         </DialogFooter>
       </DialogContent>
