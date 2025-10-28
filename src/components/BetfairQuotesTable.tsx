@@ -230,15 +230,45 @@ function BetfairCredentialsDialog() {
   const [open, setOpen] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [sessionToken, setSessionToken] = useState("");
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   const handleSave = async () => {
-    // In una vera implementazione, questi andrebbero salvati come secrets
-    toast({
-      title: "Credenziali salvate",
-      description: "Le credenziali Betfair sono state aggiornate con successo",
-    });
-    setOpen(false);
+    if (!apiKey.trim() || !sessionToken.trim()) {
+      toast({
+        title: "Errore",
+        description: "Inserisci sia l'Application Key che il Session Token",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('update-betfair-credentials', {
+        body: { apiKey: apiKey.trim(), sessionToken: sessionToken.trim() }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Credenziali aggiornate",
+        description: "Le credenziali Betfair sono state salvate. Riavvia l'app per applicarle.",
+      });
+      
+      setApiKey("");
+      setSessionToken("");
+      setOpen(false);
+    } catch (error: any) {
+      console.error('Error saving credentials:', error);
+      toast({
+        title: "Errore",
+        description: error.message || 'Impossibile salvare le credenziali',
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -277,11 +307,11 @@ function BetfairCredentialsDialog() {
           </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
             Annulla
           </Button>
-          <Button onClick={handleSave}>
-            Salva
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? "Salvataggio..." : "Salva"}
           </Button>
         </DialogFooter>
       </DialogContent>

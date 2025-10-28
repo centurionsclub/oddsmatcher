@@ -714,31 +714,71 @@ function parseSisalHTML(html: string, market: string, filters: any): any[] {
       }
     }
 
-    // Strategy 2: Targeted regex extraction for 1X2 odds (limited window)
+    // Strategy 2: Multi-pattern regex extraction for Sisal 1X2
     if (events.length === 0) {
-      console.log('[Sisal Parser] No JSON found, trying light regex extraction...');
-      const pattern = /([A-Za-zÀ-ÖØ-öø-ÿ0-9.'\s]{3,})\s*[-–]\s*([A-Za-zÀ-ÖØ-öø-ÿ0-9.'\s]{3,})[\s\S]{0,600}?data-qa="odd-value"[^>]*>([\d.,]+)[\s\S]{0,200}?data-qa="odd-value"[^>]*>([\d.,]+)[\s\S]{0,200}?data-qa="odd-value"[^>]*>([\d.,]+)/gis;
-      const matches = [...html.matchAll(pattern)].slice(0, 50);
+      console.log('[Sisal Parser] No JSON found, trying enhanced regex patterns...');
+      
+      // Pattern 1: Standard data-qa attributes (più permissivo)
+      const pattern1 = /([A-Za-zÀ-ÖØ-öø-ÿ0-9.'\s]{2,})\s*[-–—]\s*([A-Za-zÀ-ÖØ-öø-ÿ0-9.'\s]{2,})[\s\S]{0,800}?(?:data-qa="odd|class="[^"]*odd[^"]*")[\s\S]{0,100}?>([\d.,]+)<[\s\S]{0,300}?(?:data-qa="odd|class="[^"]*odd[^"]*")[\s\S]{0,100}?>([\d.,]+)<[\s\S]{0,300}?(?:data-qa="odd|class="[^"]*odd[^"]*")[\s\S]{0,100}?>([\d.,]+)</gis;
+      
+      // Pattern 2: Button/span con quote
+      const pattern2 = /([A-Za-zÀ-ÖØ-öø-ÿ0-9.'\s]{2,})\s*[-–—]\s*([A-Za-zÀ-ÖØ-öø-ÿ0-9.'\s]{2,})[\s\S]{0,800}?<button[^>]*>[\s\S]{0,50}?([\d.,]+)[\s\S]{0,50}?<\/button>[\s\S]{0,200}?<button[^>]*>[\s\S]{0,50}?([\d.,]+)[\s\S]{0,50}?<\/button>[\s\S]{0,200}?<button[^>]*>[\s\S]{0,50}?([\d.,]+)[\s\S]{0,50}?<\/button>/gis;
+      
+      // Pattern 3: Div con classi quota/odd
+      const pattern3 = /<div[^>]*class="[^"]*(?:match|event)[^"]*"[^>]*>[\s\S]{0,600}?([A-Za-zÀ-ÖØ-öø-ÿ0-9.'\s]{2,})\s*[-–—]\s*([A-Za-zÀ-ÖØ-öø-ÿ0-9.'\s]{2,})[\s\S]{0,600}?class="[^"]*quota[^"]*"[^>]*>([\d.,]+)<[\s\S]{0,200}?class="[^"]*quota[^"]*"[^>]*>([\d.,]+)<[\s\S]{0,200}?class="[^"]*quota[^"]*"[^>]*>([\d.,]+)</gis;
 
-      console.log(`[Sisal Parser] Regex found ${matches.length} candidate events`);
+      const patterns = [pattern1, pattern2, pattern3];
+      let allMatches: RegExpMatchArray[] = [];
 
-      for (const m of matches) {
+      for (const pattern of patterns) {
+        const matches = [...html.matchAll(pattern)];
+        if (matches.length > 0) {
+          console.log(`[Sisal Parser] Pattern found ${matches.length} matches`);
+          allMatches = allMatches.concat(matches);
+        }
+      }
+
+      // Deduplica per nome evento
+      const seen = new Set<string>();
+      const uniqueMatches = allMatches.filter(m => {
+        const key = `${m[1]?.trim()}_${m[2]?.trim()}`.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 50);
+
+      console.log(`[Sisal Parser] Found ${uniqueMatches.length} unique events after deduplication`);
+
+      for (const m of uniqueMatches) {
         try {
-          const home = (m[1] || '').trim();
-          const away = (m[2] || '').trim();
+          const home = (m[1] || '').trim().replace(/\s+/g, ' ');
+          const away = (m[2] || '').trim().replace(/\s+/g, ' ');
           const o1 = parseFloat((m[3] || '0').replace(',', '.'));
           const ox = parseFloat((m[4] || '0').replace(',', '.'));
           const o2 = parseFloat((m[5] || '0').replace(',', '.'));
-          if (home && away && o1 > 1.01 && o2 > 1.01) {
+          
+          // Validazione: nomi squadre plausibili e quote valide
+          if (home.length >= 3 && away.length >= 3 && 
+              home.length < 40 && away.length < 40 &&
+              o1 >= 1.01 && o1 <= 50 && 
+              o2 >= 1.01 && o2 <= 50 &&
+              ox >= 1.01 && ox <= 50) {
+            
             events.push({
               eventName: `${home} - ${away}`,
               league: 'Serie A',
               eventTime: new Date(Date.now() + 86400000).toISOString(),
               market,
-              odds: market === '1X2' ? { home: o1, draw: ox > 1.01 ? ox : 3.20, away: o2 } : { over: o1, under: o2 }
+              odds: market === '1X2' 
+                ? { home: o1, draw: ox, away: o2 } 
+                : { over: o1, under: o2 }
             });
+            
+            console.log(`[Sisal Parser] Added: ${home} - ${away} | ${o1}/${ox}/${o2}`);
           }
-        } catch (_) { /* ignore */ }
+        } catch (e) {
+          console.log('[Sisal Parser] Error parsing match:', e);
+        }
       }
     }
  
