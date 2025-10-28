@@ -242,12 +242,14 @@ async function fetchFromTheOddsAPI(sport: string, market: string): Promise<any[]
 // Fetch Betfair exchange odds
 async function fetchBetfairOdds(sport: string, market: string, filters: any): Promise<any[]> {
   const apiKey = Deno.env.get('BETFAIR_API_KEY');
-  if (!apiKey) {
-    console.error('BETFAIR_API_KEY not configured');
-    throw new Error('BETFAIR_API_KEY not configured');
+  const sessionToken = Deno.env.get('BETFAIR_SESSION_TOKEN');
+  
+  if (!apiKey || !sessionToken) {
+    console.error('BETFAIR_API_KEY or BETFAIR_SESSION_TOKEN not configured');
+    throw new Error('Betfair credentials not configured');
   }
 
-  console.log('Fetching odds from Betfair Exchange API');
+  console.log('Fetching odds from Betfair Exchange API with session token');
   
   try {
     // Betfair API endpoint for Italian Exchange
@@ -274,6 +276,7 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
       method: 'POST',
       headers: {
         'X-Application': apiKey,
+        'X-Authentication': sessionToken,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
@@ -288,11 +291,16 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
     }
 
     const compData = await compResponse.json();
-    console.log('Betfair competitions response:', JSON.stringify(compData).substring(0, 200));
+    console.log('Betfair competitions response:', JSON.stringify(compData).substring(0, 500));
+    
+    if (compData.error) {
+      console.error('Betfair API error:', compData.error);
+      throw new Error(`Betfair API error: ${compData.error.message || compData.error.code}`);
+    }
 
     const competitions = compData.result || [];
     if (competitions.length === 0) {
-      console.log('No competitions found');
+      console.log('No competitions found for Serie A');
       return [];
     }
 
@@ -320,6 +328,7 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
       method: 'POST',
       headers: {
         'X-Application': apiKey,
+        'X-Authentication': sessionToken,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
@@ -361,6 +370,7 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
       method: 'POST',
       headers: {
         'X-Application': apiKey,
+        'X-Authentication': sessionToken,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
