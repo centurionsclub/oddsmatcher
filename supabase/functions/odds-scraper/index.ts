@@ -295,10 +295,46 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
     }
 
     const catalogue = await marketCatalogueResp.json();
-    const markets = Array.isArray(catalogue) ? catalogue : [];
+    let markets = Array.isArray(catalogue) ? catalogue : [];
 
     console.log(`[Betfair REST] MarketCatalogue returned ${markets.length} markets`);
-    if (markets.length === 0) return [];
+
+    // Fallback: if zero markets, broaden filter (no country restriction)
+    if (markets.length === 0) {
+      console.log('[Betfair REST] 0 markets with country=IT, retrying without country filter...');
+      const fallbackResp = await fetch(`${restBase}/listMarketCatalogue/`, {
+        method: 'POST',
+        headers: {
+          'X-Application': apiKey,
+          'X-Authentication': sessionToken,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          filter: {
+            eventTypeIds: [eventTypeId],
+            marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25'],
+            marketStartTime: { from: fromIso, to: toIso },
+            inPlayOnly: !!(filters && (filters.live || filters.inPlay)),
+            turnInPlayEnabled: true
+          },
+          maxResults: 60,
+          sort: 'FIRST_TO_START',
+          marketProjection: ['RUNNER_DESCRIPTION', 'EVENT', 'COMPETITION', 'MARKET_START_TIME']
+        }),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (fallbackResp.ok) {
+        markets = await fallbackResp.json();
+        console.log(`[Betfair REST] Fallback MarketCatalogue returned ${Array.isArray(markets) ? markets.length : 0} markets`);
+      } else {
+        const txt = await fallbackResp.text();
+        console.error('Betfair REST fallback error:', txt);
+      }
+    }
+
+    if (!Array.isArray(markets) || markets.length === 0) return [];
 
     // Step 2: fetch market books (prices)
     const marketIds = markets.map((m: any) => m.marketId);
