@@ -252,248 +252,49 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
   console.log('Fetching odds from Betfair Exchange API with session token');
   
   try {
-    // Betfair API endpoint for Italian Exchange
-    const baseUrl = 'https://api.betfair.com/exchange/betting/json-rpc/v1';
-    
+    // Betfair REST endpoints (Italy)
+    const restBase = 'https://api.betfair.com/exchange/betting/rest/v1.0';
+
     // Map sport to Betfair event type ID (1 = Soccer)
     const eventTypeId = sport === 'calcio' ? '1' : '1';
-    
-    // Step 1: Get competition IDs for Serie A
-    const competitionFilter = {
-      jsonrpc: '2.0',
-      method: 'SportsAPING/v1.0/listCompetitions',
-      params: {
+
+    // Step 1: fetch market catalogue for IT MATCH_ODDS (no competition filter)
+    const marketCatalogueResp = await fetch(`${restBase}/listMarketCatalogue/`, {
+      method: 'POST',
+      headers: {
+        'X-Application': apiKey,
+        'X-Authentication': sessionToken,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
         filter: {
           eventTypeIds: [eventTypeId],
           marketCountries: ['IT'],
-          textQuery: 'Serie A'
-        }
-      },
-      id: 1
-    };
-
-    const compResponse = await fetch(baseUrl, {
-      method: 'POST',
-      headers: {
-        'X-Application': apiKey,
-        'X-Authentication': sessionToken,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify(competitionFilter),
-      signal: AbortSignal.timeout(10000)
-    });
-
-    if (!compResponse.ok) {
-      const errorText = await compResponse.text();
-      console.error('Betfair competitions error:', errorText);
-      throw new Error(`Betfair API error: ${compResponse.status}`);
-    }
-
-    const compData = await compResponse.json();
-    console.log('Betfair competitions response:', JSON.stringify(compData).substring(0, 500));
-    
-    if (compData.error) {
-      console.error('Betfair API error:', compData.error);
-      throw new Error(`Betfair API error: ${compData.error.message || compData.error.code}`);
-    }
-
-    const competitions = compData.result || [];
-    if (competitions.length === 0) {
-      console.log('No competitions found for Serie A');
-      // Fallback: query markets for Italy without competitionIds and filter later
-      const fallbackMarketFilter = {
-        jsonrpc: '2.0',
-        method: 'SportsAPING/v1.0/listMarketCatalogue',
-        params: {
-          filter: {
-            eventTypeIds: [eventTypeId],
-            marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25'],
-            marketCountries: ['IT']
-          },
-          maxResults: 100,
-          marketProjection: ['RUNNER_DESCRIPTION', 'EVENT', 'MARKET_START_TIME', 'COMPETITION']
+          marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25']
         },
-        id: 22
-      };
-
-      const fbResp = await fetch(baseUrl, {
-        method: 'POST',
-        headers: {
-          'X-Application': apiKey,
-          'X-Authentication': sessionToken,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(fallbackMarketFilter),
-        signal: AbortSignal.timeout(15000)
-      });
-
-      if (!fbResp.ok) {
-        const errorText = await fbResp.text();
-        console.error('Betfair fallback markets error:', errorText);
-        throw new Error(`Betfair fallback markets API error: ${fbResp.status}`);
-      }
-
-      const fbData = await fbResp.json();
-      let markets = (fbData.result || []).filter((m: any) =>
-        (m.competition?.name || '').toLowerCase().includes('serie a')
-      );
-      if (markets.length === 0) {
-        // If still empty, keep Italian soccer markets anyway
-        markets = fbData.result || [];
-      }
-
-      console.log(`Fallback found ${markets.length} markets from Betfair`);
-
-      if (markets.length === 0) return [];
-
-      // Proceed directly to prices with fallback markets
-      const marketIds = markets.map((m: any) => m.marketId);
-
-      const priceFilter = {
-        jsonrpc: '2.0',
-        method: 'SportsAPING/v1.0/listMarketBook',
-        params: {
-          marketIds,
-          priceProjection: { priceData: ['EX_BEST_OFFERS'] }
-        },
-        id: 23
-      };
-
-      const priceResponse = await fetch(baseUrl, {
-        method: 'POST',
-        headers: {
-          'X-Application': apiKey,
-          'X-Authentication': sessionToken,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(priceFilter),
-        signal: AbortSignal.timeout(15000)
-      });
-
-      if (!priceResponse.ok) {
-        const errorText = await priceResponse.text();
-        console.error('Betfair prices (fallback) error:', errorText);
-        throw new Error(`Betfair prices API error: ${priceResponse.status}`);
-      }
-
-      const priceData = await priceResponse.json();
-      const marketBooks = priceData.result || [];
-
-      const events: any[] = [];
-      for (const marketInfo of markets) {
-        const marketBook = marketBooks.find((mb: any) => mb.marketId === marketInfo.marketId);
-        if (!marketBook || !marketBook.runners) continue;
-
-        const eventName = marketInfo.event?.name || 'Unknown';
-        const runners = marketInfo.runners || [];
-        const odds: any = {};
-
-        if (market === '1X2' && runners.length >= 3) {
-          runners.forEach((runner: any, idx: number) => {
-            const runnerBook = marketBook.runners.find((r: any) => r.selectionId === runner.selectionId);
-            if (!runnerBook) return;
-            const bestPrice = runnerBook.ex?.availableToBack?.[0]?.price;
-            if (bestPrice) {
-              const runnerName = runner.runnerName.toLowerCase();
-              if (runnerName.includes('draw') || idx === 2) odds.draw = bestPrice;
-              else if (idx === 0) odds.home = bestPrice;
-              else if (idx === 1) odds.away = bestPrice;
-            }
-          });
-        } else {
-          runners.forEach((runner: any) => {
-            const runnerBook = marketBook.runners.find((r: any) => r.selectionId === runner.selectionId);
-            if (!runnerBook) return;
-            const bestPrice = runnerBook.ex?.availableToBack?.[0]?.price;
-            if (bestPrice) {
-              const rn = runner.runnerName.toLowerCase();
-              if (rn.includes('over')) odds.over = bestPrice;
-              else if (rn.includes('under')) odds.under = bestPrice;
-            }
-          });
-        }
-
-        if (Object.keys(odds).length > 0) {
-          events.push({
-            eventName,
-            league: marketInfo.competition?.name || 'Serie A',
-            eventTime: marketInfo.marketStartTime || new Date(Date.now() + 86400000).toISOString(),
-            market,
-            odds
-          });
-        }
-      }
-
-      console.log(`Betfair (fallback) returned ${events.length} events with odds`);
-      return events;
-    }
-
-    const competitionIds = competitions.map((c: any) => c.competition?.id).filter(Boolean);
-    console.log(`Found ${competitionIds.length} competitions:`, competitionIds);
-
-    // Step 2: Get market catalogue for these competitions
-    const marketFilter = {
-      jsonrpc: '2.0',
-      method: 'SportsAPING/v1.0/listMarketCatalogue',
-      params: {
-        filter: {
-          eventTypeIds: [eventTypeId],
-          competitionIds: competitionIds.slice(0, 3), // Limit to first 3 competitions
-          marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25'],
-          marketCountries: ['IT']
-        },
-        maxResults: 50,
-        marketProjection: ['RUNNER_DESCRIPTION', 'EVENT', 'MARKET_START_TIME']
-      },
-      id: 2
-    };
-
-    const marketResponse = await fetch(baseUrl, {
-      method: 'POST',
-      headers: {
-        'X-Application': apiKey,
-        'X-Authentication': sessionToken,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify(marketFilter),
+        maxResults: 120,
+        sort: 'FIRST_TO_START',
+        marketProjection: ['RUNNER_DESCRIPTION', 'EVENT', 'COMPETITION', 'MARKET_START_TIME']
+      }),
       signal: AbortSignal.timeout(15000)
     });
 
-    if (!marketResponse.ok) {
-      const errorText = await marketResponse.text();
-      console.error('Betfair markets error:', errorText);
-      throw new Error(`Betfair markets API error: ${marketResponse.status}`);
+    if (!marketCatalogueResp.ok) {
+      const t = await marketCatalogueResp.text();
+      console.error('Betfair REST listMarketCatalogue error:', t);
+      throw new Error(`Betfair REST listMarketCatalogue HTTP ${marketCatalogueResp.status}`);
     }
 
-    const marketData = await marketResponse.json();
-    const markets = marketData.result || [];
-    
-    console.log(`Found ${markets.length} markets from Betfair`);
+    const catalogue = await marketCatalogueResp.json();
+    const markets = Array.isArray(catalogue) ? catalogue : [];
 
-    if (markets.length === 0) {
-      return [];
-    }
+    console.log(`[Betfair REST] MarketCatalogue returned ${markets.length} markets`);
+    if (markets.length === 0) return [];
 
-    // Step 3: Get best available prices for these markets
+    // Step 2: fetch market books (prices)
     const marketIds = markets.map((m: any) => m.marketId);
-    
-    const priceFilter = {
-      jsonrpc: '2.0',
-      method: 'SportsAPING/v1.0/listMarketBook',
-      params: {
-        marketIds: marketIds,
-        priceProjection: {
-          priceData: ['EX_BEST_OFFERS']
-        }
-      },
-      id: 3
-    };
-
-    const priceResponse = await fetch(baseUrl, {
+    const marketBooksResp = await fetch(`${restBase}/listMarketBook/`, {
       method: 'POST',
       headers: {
         'X-Application': apiKey,
@@ -501,79 +302,68 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify(priceFilter),
+      body: JSON.stringify({
+        marketIds,
+        priceProjection: { priceData: ['EX_BEST_OFFERS'] }
+      }),
       signal: AbortSignal.timeout(15000)
     });
 
-    if (!priceResponse.ok) {
-      const errorText = await priceResponse.text();
-      console.error('Betfair prices error:', errorText);
-      throw new Error(`Betfair prices API error: ${priceResponse.status}`);
+    if (!marketBooksResp.ok) {
+      const t = await marketBooksResp.text();
+      console.error('Betfair REST listMarketBook error:', t);
+      throw new Error(`Betfair REST listMarketBook HTTP ${marketBooksResp.status}`);
     }
 
-    const priceData = await priceResponse.json();
-    const marketBooks = priceData.result || [];
+    const books = await marketBooksResp.json();
+    const events: any[] = [];
 
-    // Combine market info with prices
-    const events = [];
-    
-    for (const marketInfo of markets) {
-      const marketBook = marketBooks.find((mb: any) => mb.marketId === marketInfo.marketId);
-      if (!marketBook || !marketBook.runners) continue;
+    for (const mkt of markets) {
+      const book = Array.isArray(books) ? books.find((b: any) => b.marketId === mkt.marketId) : null;
+      if (!book || !book.runners) continue;
 
-      const eventName = marketInfo.event?.name || 'Unknown';
-      const runners = marketInfo.runners || [];
-      
+      const runnersInfo = (mkt.runners || []) as any[];
+      const eventName = mkt.event?.name || 'Unknown';
+      const league = mkt.competition?.name || 'Italia';
+      const eventTime = mkt.marketStartTime || new Date(Date.now() + 86400000).toISOString();
+
       const odds: any = {};
+      const runners: any[] = [];
 
-      if (market === '1X2' && runners.length >= 3) {
-        // Match Odds market
-        runners.forEach((runner: any, idx: number) => {
-          const runnerBook = marketBook.runners.find((r: any) => r.selectionId === runner.selectionId);
-          if (!runnerBook) return;
+      for (const r of runnersInfo) {
+        const rb = book.runners.find((x: any) => x.selectionId === r.selectionId);
+        if (!rb) continue;
+        const back = rb.ex?.availableToBack || [];
+        const lay = rb.ex?.availableToLay || [];
+        const runnerName = r.runnerName || '';
 
-          const bestPrice = runnerBook.ex?.availableToBack?.[0]?.price;
-          if (bestPrice) {
-            const runnerName = runner.runnerName.toLowerCase();
-            if (runnerName.includes('draw') || idx === 2) {
-              odds.draw = bestPrice;
-            } else if (idx === 0) {
-              odds.home = bestPrice;
-            } else if (idx === 1) {
-              odds.away = bestPrice;
-            }
-          }
+        runners.push({
+          selectionId: r.selectionId,
+          runnerName,
+          back,
+          lay,
         });
-      } else {
-        // Over/Under market
-        runners.forEach((runner: any) => {
-          const runnerBook = marketBook.runners.find((r: any) => r.selectionId === runner.selectionId);
-          if (!runnerBook) return;
 
-          const bestPrice = runnerBook.ex?.availableToBack?.[0]?.price;
-          if (bestPrice) {
-            const runnerName = runner.runnerName.toLowerCase();
-            if (runnerName.includes('over')) {
-              odds.over = bestPrice;
-            } else if (runnerName.includes('under')) {
-              odds.under = bestPrice;
-            }
-          }
-        });
+        const rn = runnerName.toLowerCase();
+        const topBack = back?.[0]?.price;
+        if (topBack) {
+          if (rn.includes('draw') || rn.includes('pareggio')) odds.draw = topBack;
+          else if (!odds.home) odds.home = topBack;
+          else odds.away = topBack;
+        }
       }
 
-      if (Object.keys(odds).length > 0) {
-        events.push({
-          eventName,
-          league: marketInfo.competition?.name || 'Serie A',
-          eventTime: marketInfo.marketStartTime || new Date(Date.now() + 86400000).toISOString(),
-          market,
-          odds
-        });
-      }
+      events.push({
+        eventName,
+        league,
+        eventTime,
+        market,
+        odds,
+        runners
+      });
     }
 
-    console.log(`Betfair returned ${events.length} events with odds`);
+    console.log(`[Betfair REST] Built ${events.length} events with runners`);
     return events;
 
   } catch (error) {
