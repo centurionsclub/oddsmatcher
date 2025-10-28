@@ -19,6 +19,7 @@ import { OddsResults } from "@/components/OddsResults";
 import { MatchedBettingResults } from "@/components/MatchedBettingResults";
 import { MultipleMatchedBettingResults } from "@/components/MultipleMatchedBettingResults";
 import { ThreeWayArbitrageResults } from "@/components/ThreeWayArbitrageResults";
+import { BetfairQuotesTable } from "@/components/BetfairQuotesTable";
 import logoCenturion from "@/assets/logo_centurion_new.png";
 
 const Index = () => {
@@ -388,6 +389,7 @@ const Index = () => {
     { id: "multipla", label: "MULTIPLA" },
     { id: "trevie", label: "TRE VIE" },
     { id: "bestodds", label: "BEST ODDS" },
+    { id: "betfairlive", label: "BETFAIR LIVE" },
   ];
 
   return (
@@ -1413,6 +1415,10 @@ const Index = () => {
 
         {activeTab === "bestodds" && (
           <OddsResults data={oddsData} loading={oddsLoading} error={oddsError} />
+        )}
+
+        {activeTab === "betfairlive" && (
+          <BetfairQuotesTable />
         )}
       </div>
     </div>
