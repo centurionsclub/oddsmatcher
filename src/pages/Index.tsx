@@ -296,41 +296,46 @@ const Index = () => {
     setOddsLoading(true);
     setOddsError(null);
     
-    try {
-      let filters = {};
-      let bookmakers: string[] = [];
-      let sport = 'calcio';
-      let market = '1X2';
-      
-      if (activeTab === "singola") {
-        filters = singolaFilters;
-        bookmakers = singolaFilters.bookmaker;
-        sport = singolaFilters.sport === 'tutti' ? 'calcio' : singolaFilters.sport;
-        market = singolaFilters.mercato === 'tutti' ? '1X2' : singolaFilters.mercato;
-      } else if (activeTab === "multipla") {
-        filters = multiplaFilters;
-        bookmakers = multiplaFilters.bookmaker;
-        sport = multiplaFilters.sport === 'tutti' ? 'calcio' : multiplaFilters.sport;
-        market = multiplaFilters.mercato === 'tutti' ? '1X2' : multiplaFilters.mercato;
-      } else if (activeTab === "trevie") {
-        filters = trevieFilters;
-        bookmakers = [trevieFilters.bookmakerPrincipale, ...trevieFilters.bookmakersSecondari];
-        sport = 'calcio';
-        market = '1X2';
-      } else if (activeTab === "bestodds") {
-        filters = bestOddsFilters;
-        // For best odds, use all available bookmakers
-        bookmakers = ['bet365', 'snai', 'sisal'];
-        sport = 'calcio';
-        market = bestOddsFilters.mercato === 'nessuno' ? '1X2' : bestOddsFilters.mercato;
-      }
+      try {
+        let filters = {};
+        let bookmakers: string[] = [];
+        let exchanges: string[] = [];
+        let sport = 'calcio';
+        let market = '1X2';
+        
+        if (activeTab === "singola") {
+          filters = singolaFilters;
+          bookmakers = singolaFilters.bookmaker;
+          exchanges = singolaFilters.exchange || [];
+          sport = singolaFilters.sport === 'tutti' ? 'calcio' : singolaFilters.sport;
+          market = singolaFilters.mercato === 'tutti' ? '1X2' : singolaFilters.mercato;
+        } else if (activeTab === "multipla") {
+          filters = multiplaFilters;
+          bookmakers = multiplaFilters.bookmaker;
+          exchanges = multiplaFilters.exchange || [];
+          sport = multiplaFilters.sport === 'tutti' ? 'calcio' : multiplaFilters.sport;
+          market = multiplaFilters.mercato === 'tutti' ? '1X2' : multiplaFilters.mercato;
+        } else if (activeTab === "trevie") {
+          filters = trevieFilters;
+          bookmakers = [trevieFilters.bookmakerPrincipale, ...trevieFilters.bookmakersSecondari];
+          sport = 'calcio';
+          market = '1X2';
+        } else if (activeTab === "bestodds") {
+          filters = bestOddsFilters;
+          // For best odds, use all available bookmakers
+          bookmakers = ['bet365', 'snai', 'sisal'];
+          sport = 'calcio';
+          market = bestOddsFilters.mercato === 'nessuno' ? '1X2' : bestOddsFilters.mercato;
+        }
 
-      // Pulisce e valida i bookmaker selezionati
-      const uniqueBookmakers = Array.from(new Set((bookmakers || [])
-        .filter(Boolean)
-        .map((b) => b.toLowerCase())
-        .filter((b) => b !== 'nessuno')
-      ));
+        // Pulisce e valida bookmaker ed exchange selezionati
+        const combined = [...(bookmakers || []), ...(exchanges || [])];
+        const uniqueBookmakers = Array.from(new Set(
+          combined
+            .filter(Boolean)
+            .map((b) => b.toLowerCase())
+            .filter((b) => b !== 'nessuno')
+        ));
 
       if (uniqueBookmakers.length === 0) {
         toast({
