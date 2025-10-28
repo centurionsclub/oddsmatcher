@@ -73,101 +73,114 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
     );
   }
 
-  // Calculate matched betting opportunities
+  // Calculate matched betting opportunities confrontando Sisal con Betfair
   const calculateOpportunities = (): MatchedBettingOpportunity[] => {
     const opportunities: MatchedBettingOpportunity[] = [];
     const stakeValue = parseFloat(filters.stakePunta?.toString().replace(',', '.')) || 0;
-    const stake = stakeValue > 0 ? stakeValue : 10; // Minimo 10€ se non specificato
+    const stake = stakeValue > 0 ? stakeValue : 100; // Default 100€
     const commissionRate = commission / 100;
 
-    data.data.forEach(odds => {
-      const { bookmaker, eventName, league, eventTime, market } = odds;
+    // Separa i dati di Sisal e Betfair
+    const sisalOdds = data.data.filter(odd => odd.bookmaker.toLowerCase() === 'sisal');
+    const betfairOdds = data.data.filter(odd => odd.bookmaker.toLowerCase() === 'betfair');
+
+    console.log('Sisal events:', sisalOdds.length, 'Betfair events:', betfairOdds.length);
+
+    // Normalizza il nome dell'evento per il confronto
+    const normalizeEventName = (name: string): string => {
+      return name.toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[-–—]/g, '')
+        .replace(/\./g, '');
+    };
+
+    // Per ogni evento Sisal, cerca il corrispondente su Betfair
+    sisalOdds.forEach(sisalEvent => {
+      const normalizedSisal = normalizeEventName(sisalEvent.eventName);
       
-      // For each market type, calculate back and lay stakes
-      if (market === '1X2') {
-        // For 1X2, we can match any outcome
-        ['home', 'draw', 'away'].forEach(outcome => {
-          const backOdds = odds.odds[outcome as keyof typeof odds.odds];
-          if (!backOdds) return;
-          
-          // Simulate lay odds (typically 5-10% lower than back odds)
-          const layOdds = backOdds * 0.95;
-          
-          // Calculate lay stake
-          const layStake = (stake * backOdds) / (layOdds - commissionRate);
-          const liability = layStake * (layOdds - 1);
-          
-          // Calculate profit/loss
-          const backWin = stake * (backOdds - 1);
-          const layLoss = -liability;
-          const layWin = layStake * (1 - commissionRate);
-          
-          const profit = Math.min(backWin + layLoss, layWin - stake);
-          const rating = (profit / stake) * 100;
+      // Trova l'evento corrispondente su Betfair
+      const betfairEvent = betfairOdds.find(bf => {
+        const normalizedBetfair = normalizeEventName(bf.eventName);
+        return normalizedSisal === normalizedBetfair || 
+               normalizedSisal.includes(normalizedBetfair.substring(0, 10)) ||
+               normalizedBetfair.includes(normalizedSisal.substring(0, 10));
+      });
 
-          // Apply filters
-          if (filters.quotaMinima && backOdds < parseFloat(filters.quotaMinima.replace(',', '.'))) return;
-          if (filters.quotaMassima && backOdds > parseFloat(filters.quotaMassima.replace(',', '.'))) return;
-          if (filters.partita && !eventName.toLowerCase().includes(filters.partita.toLowerCase())) return;
-          if (filters.campionato && filters.campionato !== league.toLowerCase()) return;
-
-          opportunities.push({
-            bookmaker,
-            eventName,
-            league,
-            eventTime,
-            market: `${market} - ${outcome}`,
-            backOdds,
-            layOdds,
-            rating,
-            profit,
-            backStake: stake,
-            layStake,
-            liability,
-          });
-        });
-      } else if (market === 'goal' || market.includes('over') || market.includes('under')) {
-        // For goal/over/under markets
-        const outcomes = market === 'goal' ? ['over', 'under'] : [market.includes('over') ? 'over' : 'under'];
-        
-        outcomes.forEach(outcome => {
-          const backOdds = odds.odds[outcome as keyof typeof odds.odds];
-          if (!backOdds) return;
-          
-          const layOdds = backOdds * 0.95;
-          const layStake = (stake * backOdds) / (layOdds - commissionRate);
-          const liability = layStake * (layOdds - 1);
-          
-          const backWin = stake * (backOdds - 1);
-          const layLoss = -liability;
-          const layWin = layStake * (1 - commissionRate);
-          
-          const profit = Math.min(backWin + layLoss, layWin - stake);
-          const rating = (profit / stake) * 100;
-
-          if (filters.quotaMinima && backOdds < parseFloat(filters.quotaMinima.replace(',', '.'))) return;
-          if (filters.quotaMassima && backOdds > parseFloat(filters.quotaMassima.replace(',', '.'))) return;
-          if (filters.partita && !eventName.toLowerCase().includes(filters.partita.toLowerCase())) return;
-
-          opportunities.push({
-            bookmaker,
-            eventName,
-            league,
-            eventTime,
-            market: `${market} - ${outcome}`,
-            backOdds,
-            layOdds,
-            rating,
-            profit,
-            backStake: stake,
-            layStake,
-            liability,
-          });
-        });
+      if (!betfairEvent) {
+        console.log('No Betfair match for:', sisalEvent.eventName);
+        return;
       }
+
+      console.log('Matched:', sisalEvent.eventName, '<=>', betfairEvent.eventName);
+
+      // Per ogni esito, calcola l'opportunità
+      const outcomes: Array<{ key: string; label: string }> = [];
+      
+      if (sisalEvent.market === '1X2') {
+        outcomes.push(
+          { key: 'home', label: '1' },
+          { key: 'draw', label: 'X' },
+          { key: 'away', label: '2' }
+        );
+      } else {
+        outcomes.push(
+          { key: 'over', label: 'Over' },
+          { key: 'under', label: 'Under' }
+        );
+      }
+
+      outcomes.forEach(outcome => {
+        const backOdds = sisalEvent.odds[outcome.key as keyof typeof sisalEvent.odds];
+        const layOdds = betfairEvent.odds[outcome.key as keyof typeof betfairEvent.odds];
+
+        if (!backOdds || !layOdds || backOdds <= 1 || layOdds <= 1) {
+          return;
+        }
+
+        // Calcola lay stake e liability
+        const layStake = (stake * backOdds) / layOdds;
+        const liability = layStake * (layOdds - 1);
+
+        // Calcola profitto/perdita
+        // Se vince la back: +backWin - liability
+        // Se perde la back: -stake + layWin
+        const backWin = stake * (backOdds - 1);
+        const layWin = layStake * (1 - commissionRate);
+        
+        const profitIfWin = backWin - liability;
+        const profitIfLose = layWin - stake;
+        
+        // La perdita totale è la media dei due scenari (qualifying bet)
+        const averageProfit = (profitIfWin + profitIfLose) / 2;
+        const lossPercent = (averageProfit / stake) * 100;
+
+        // Filtra per perdite tra -10% e -5%
+        if (lossPercent > -10 && lossPercent < -5) {
+          // Applica altri filtri
+          if (filters.quotaMinima && backOdds < parseFloat(filters.quotaMinima.replace(',', '.'))) return;
+          if (filters.quotaMassima && backOdds > parseFloat(filters.quotaMassima.replace(',', '.'))) return;
+          if (filters.partita && !sisalEvent.eventName.toLowerCase().includes(filters.partita.toLowerCase())) return;
+          if (filters.campionato && filters.campionato !== sisalEvent.league.toLowerCase()) return;
+
+          opportunities.push({
+            bookmaker: 'Sisal',
+            eventName: sisalEvent.eventName,
+            league: sisalEvent.league,
+            eventTime: sisalEvent.eventTime,
+            market: `${sisalEvent.market} - ${outcome.label}`,
+            backOdds,
+            layOdds,
+            rating: lossPercent,
+            profit: averageProfit,
+            backStake: stake,
+            layStake,
+            liability,
+          });
+        }
+      });
     });
 
-    // Sort by rating (best opportunities first)
+    // Ordina per rating (perdite minori per prime)
     return opportunities.sort((a, b) => b.rating - a.rating);
   };
 
@@ -198,8 +211,8 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
               <TableHead>Mercato</TableHead>
               <TableHead className="text-right">Quota Back</TableHead>
               <TableHead className="text-right">Quota Lay</TableHead>
-              <TableHead className="text-right">Rating %</TableHead>
-              <TableHead className="text-right">Profitto €</TableHead>
+              <TableHead className="text-right">Perdita %</TableHead>
+              <TableHead className="text-right">Perdita €</TableHead>
               <TableHead className="text-right">Punta €</TableHead>
               <TableHead className="text-right">Banca €</TableHead>
               <TableHead className="text-right">Passivo €</TableHead>
@@ -219,11 +232,11 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
                 <TableCell className="text-right font-mono">{opp.backOdds.toFixed(2)}</TableCell>
                 <TableCell className="text-right font-mono">{opp.layOdds.toFixed(2)}</TableCell>
                 <TableCell className="text-right">
-                  <Badge variant={opp.rating > 95 ? "default" : "secondary"}>
+                  <Badge variant={opp.rating > -7 ? "default" : "secondary"}>
                     {opp.rating.toFixed(2)}%
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right font-mono text-green-600">
+                <TableCell className="text-right font-mono text-red-600">
                   €{opp.profit.toFixed(2)}
                 </TableCell>
                 <TableCell className="text-right font-mono">€{opp.backStake.toFixed(2)}</TableCell>
