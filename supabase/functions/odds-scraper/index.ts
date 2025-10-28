@@ -301,7 +301,134 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
     const competitions = compData.result || [];
     if (competitions.length === 0) {
       console.log('No competitions found for Serie A');
-      return [];
+      // Fallback: query markets for Italy without competitionIds and filter later
+      const fallbackMarketFilter = {
+        jsonrpc: '2.0',
+        method: 'SportsAPING/v1.0/listMarketCatalogue',
+        params: {
+          filter: {
+            eventTypeIds: [eventTypeId],
+            marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25'],
+            marketCountries: ['IT']
+          },
+          maxResults: 100,
+          marketProjection: ['RUNNER_DESCRIPTION', 'EVENT', 'MARKET_START_TIME', 'COMPETITION']
+        },
+        id: 22
+      };
+
+      const fbResp = await fetch(baseUrl, {
+        method: 'POST',
+        headers: {
+          'X-Application': apiKey,
+          'X-Authentication': sessionToken,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(fallbackMarketFilter),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (!fbResp.ok) {
+        const errorText = await fbResp.text();
+        console.error('Betfair fallback markets error:', errorText);
+        throw new Error(`Betfair fallback markets API error: ${fbResp.status}`);
+      }
+
+      const fbData = await fbResp.json();
+      let markets = (fbData.result || []).filter((m: any) =>
+        (m.competition?.name || '').toLowerCase().includes('serie a')
+      );
+      if (markets.length === 0) {
+        // If still empty, keep Italian soccer markets anyway
+        markets = fbData.result || [];
+      }
+
+      console.log(`Fallback found ${markets.length} markets from Betfair`);
+
+      if (markets.length === 0) return [];
+
+      // Proceed directly to prices with fallback markets
+      const marketIds = markets.map((m: any) => m.marketId);
+
+      const priceFilter = {
+        jsonrpc: '2.0',
+        method: 'SportsAPING/v1.0/listMarketBook',
+        params: {
+          marketIds,
+          priceProjection: { priceData: ['EX_BEST_OFFERS'] }
+        },
+        id: 23
+      };
+
+      const priceResponse = await fetch(baseUrl, {
+        method: 'POST',
+        headers: {
+          'X-Application': apiKey,
+          'X-Authentication': sessionToken,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(priceFilter),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (!priceResponse.ok) {
+        const errorText = await priceResponse.text();
+        console.error('Betfair prices (fallback) error:', errorText);
+        throw new Error(`Betfair prices API error: ${priceResponse.status}`);
+      }
+
+      const priceData = await priceResponse.json();
+      const marketBooks = priceData.result || [];
+
+      const events: any[] = [];
+      for (const marketInfo of markets) {
+        const marketBook = marketBooks.find((mb: any) => mb.marketId === marketInfo.marketId);
+        if (!marketBook || !marketBook.runners) continue;
+
+        const eventName = marketInfo.event?.name || 'Unknown';
+        const runners = marketInfo.runners || [];
+        const odds: any = {};
+
+        if (market === '1X2' && runners.length >= 3) {
+          runners.forEach((runner: any, idx: number) => {
+            const runnerBook = marketBook.runners.find((r: any) => r.selectionId === runner.selectionId);
+            if (!runnerBook) return;
+            const bestPrice = runnerBook.ex?.availableToBack?.[0]?.price;
+            if (bestPrice) {
+              const runnerName = runner.runnerName.toLowerCase();
+              if (runnerName.includes('draw') || idx === 2) odds.draw = bestPrice;
+              else if (idx === 0) odds.home = bestPrice;
+              else if (idx === 1) odds.away = bestPrice;
+            }
+          });
+        } else {
+          runners.forEach((runner: any) => {
+            const runnerBook = marketBook.runners.find((r: any) => r.selectionId === runner.selectionId);
+            if (!runnerBook) return;
+            const bestPrice = runnerBook.ex?.availableToBack?.[0]?.price;
+            if (bestPrice) {
+              const rn = runner.runnerName.toLowerCase();
+              if (rn.includes('over')) odds.over = bestPrice;
+              else if (rn.includes('under')) odds.under = bestPrice;
+            }
+          });
+        }
+
+        if (Object.keys(odds).length > 0) {
+          events.push({
+            eventName,
+            league: marketInfo.competition?.name || 'Serie A',
+            eventTime: marketInfo.marketStartTime || new Date(Date.now() + 86400000).toISOString(),
+            market,
+            odds
+          });
+        }
+      }
+
+      console.log(`Betfair (fallback) returned ${events.length} events with odds`);
+      return events;
     }
 
     const competitionIds = competitions.map((c: any) => c.competition?.id).filter(Boolean);
@@ -797,9 +924,32 @@ function parseSisalHTML(html: string, market: string, filters: any): any[] {
       }
     }
 
-    // Strategy 2: Skip heavy regex to avoid CPU timeouts
+    // Strategy 2: Targeted regex extraction for 1X2 odds (limited window)
     if (events.length === 0) {
-      console.log('[Sisal Parser] No JSON found, skipping regex to prevent CPU timeout.');
+      console.log('[Sisal Parser] No JSON found, trying light regex extraction...');
+      const pattern = /([A-Za-zÀ-ÖØ-öø-ÿ0-9.'\s]{3,})\s*[-–]\s*([A-Za-zÀ-ÖØ-öø-ÿ0-9.'\s]{3,})[\s\S]{0,600}?data-qa="odd-value"[^>]*>([\d.,]+)[\s\S]{0,200}?data-qa="odd-value"[^>]*>([\d.,]+)[\s\S]{0,200}?data-qa="odd-value"[^>]*>([\d.,]+)/gis;
+      const matches = [...html.matchAll(pattern)].slice(0, 50);
+
+      console.log(`[Sisal Parser] Regex found ${matches.length} candidate events`);
+
+      for (const m of matches) {
+        try {
+          const home = (m[1] || '').trim();
+          const away = (m[2] || '').trim();
+          const o1 = parseFloat((m[3] || '0').replace(',', '.'));
+          const ox = parseFloat((m[4] || '0').replace(',', '.'));
+          const o2 = parseFloat((m[5] || '0').replace(',', '.'));
+          if (home && away && o1 > 1.01 && o2 > 1.01) {
+            events.push({
+              eventName: `${home} - ${away}`,
+              league: 'Serie A',
+              eventTime: new Date(Date.now() + 86400000).toISOString(),
+              market,
+              odds: market === '1X2' ? { home: o1, draw: ox > 1.01 ? ox : 3.20, away: o2 } : { over: o1, under: o2 }
+            });
+          }
+        } catch (_) { /* ignore */ }
+      }
     }
  
     console.log(`[Sisal Parser] Completed parsing, found ${events.length} events`);
