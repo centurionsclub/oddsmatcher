@@ -275,13 +275,10 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
       body: JSON.stringify({
         filter: {
           eventTypeIds: [eventTypeId],
-          // Narrow to Italy but allow live via time window
-          marketCountries: ['IT'],
           marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25'],
-          marketStartTime: { from: fromIso, to: toIso },
           inPlayOnly: !!(filters && (filters.live || filters.inPlay))
         },
-        maxResults: 120,
+        maxResults: 40,
         sort: 'FIRST_TO_START',
         marketProjection: ['RUNNER_DESCRIPTION', 'EVENT', 'COMPETITION', 'MARKET_START_TIME']
       }),
@@ -296,7 +293,13 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
 
     const catalogue = await marketCatalogueResp.json();
     let markets = Array.isArray(catalogue) ? catalogue : [];
-
+    if (!Array.isArray(catalogue)) {
+      try {
+        console.error('[Betfair REST] Non-array catalogue response:', JSON.stringify(catalogue).slice(0, 300));
+      } catch (_) {
+        console.error('[Betfair REST] Non-array catalogue response (unstringifiable)');
+      }
+    }
     console.log(`[Betfair REST] MarketCatalogue returned ${markets.length} markets`);
 
     // Fallback: if zero markets, broaden filter (no country restriction)
@@ -314,11 +317,9 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
           filter: {
             eventTypeIds: [eventTypeId],
             marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25'],
-            marketStartTime: { from: fromIso, to: toIso },
-            inPlayOnly: !!(filters && (filters.live || filters.inPlay)),
-            turnInPlayEnabled: true
+            inPlayOnly: !!(filters && (filters.live || filters.inPlay))
           },
-          maxResults: 60,
+          maxResults: 40,
           sort: 'FIRST_TO_START',
           marketProjection: ['RUNNER_DESCRIPTION', 'EVENT', 'COMPETITION', 'MARKET_START_TIME']
         }),
