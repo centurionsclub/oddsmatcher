@@ -33,16 +33,18 @@ export function BetfairQuotesTable() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const { toast } = useToast();
+  const [mode, setMode] = useState<'prematch' | 'live'>('prematch');
 
   const fetchBetfairQuotes = async () => {
     setLoading(true);
     try {
+      const filters = mode === 'live' ? { live: true, exchange: ['betfair'] } : { exchange: ['betfair'] };
       const { data, error } = await supabase.functions.invoke('odds-scraper', {
         body: { 
           bookmakers: ['betfair'], 
           sport: 'calcio', 
           market: '1X2',
-          filters: { live: true }
+          filters
         }
       });
 
@@ -105,7 +107,7 @@ export function BetfairQuotesTable() {
 
   useEffect(() => {
     fetchBetfairQuotes();
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     let interval: any;
@@ -128,7 +130,9 @@ export function BetfairQuotesTable() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Betfair Exchange - Quote Live</h3>
+            <h3 className="text-lg font-semibold">
+              Betfair Exchange - Quote {mode === 'live' ? 'Live' : 'Pre-match'}
+            </h3>
           {lastUpdate && (
             <p className="text-sm text-muted-foreground">
               Ultimo aggiornamento: {lastUpdate.toLocaleTimeString('it-IT')}
@@ -136,6 +140,20 @@ export function BetfairQuotesTable() {
           )}
         </div>
         <div className="flex gap-2">
+          <Button
+            variant={mode === 'prematch' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setMode('prematch')}
+          >
+            Pre-match
+          </Button>
+          <Button
+            variant={mode === 'live' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setMode('live')}
+          >
+            Live
+          </Button>
           <Button
             variant={autoRefresh ? "default" : "outline"}
             size="sm"
