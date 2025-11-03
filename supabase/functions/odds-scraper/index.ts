@@ -258,10 +258,10 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
     // Map sport to Betfair event type ID (1 = Soccer)
     const eventTypeId = sport === 'calcio' ? '1' : '1';
 
-    // Time window: from last hour to next 24h
+    // Time window: from last 12 hours to next 48h
     const now = new Date();
-    const fromIso = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
-    const toIso = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const fromIso = new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString();
+    const toIso = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
 
     // Step 1: fetch market catalogue for MATCH_ODDS
     const marketCatalogueResp = await fetch(`${restBase}/listMarketCatalogue/`, {
@@ -276,9 +276,10 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
         filter: {
           eventTypeIds: [eventTypeId],
           marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25'],
+          marketStartTime: { from: fromIso, to: toIso },
           inPlayOnly: !!(filters && (filters.live || filters.inPlay))
         },
-        maxResults: 40,
+        maxResults: 80,
         sort: 'FIRST_TO_START',
         marketProjection: ['RUNNER_DESCRIPTION', 'EVENT', 'COMPETITION', 'MARKET_START_TIME']
       }),
@@ -317,9 +318,10 @@ async function fetchBetfairOdds(sport: string, market: string, filters: any): Pr
           filter: {
             eventTypeIds: [eventTypeId],
             marketTypeCodes: market === '1X2' ? ['MATCH_ODDS'] : ['OVER_UNDER_25'],
+            marketStartTime: { from: fromIso, to: toIso },
             inPlayOnly: !!(filters && (filters.live || filters.inPlay))
           },
-          maxResults: 40,
+          maxResults: 80,
           sort: 'FIRST_TO_START',
           marketProjection: ['RUNNER_DESCRIPTION', 'EVENT', 'COMPETITION', 'MARKET_START_TIME']
         }),

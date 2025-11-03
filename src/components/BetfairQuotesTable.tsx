@@ -42,7 +42,7 @@ export function BetfairQuotesTable() {
           bookmakers: ['betfair'], 
           sport: 'calcio', 
           market: '1X2',
-          filters: {}
+          filters: { live: true }
         }
       });
 
