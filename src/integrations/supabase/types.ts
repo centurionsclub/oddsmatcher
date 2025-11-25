@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      aggregated_odds: {
+        Row: {
+          best_back_bookmaker: string | null
+          best_back_odds: number | null
+          best_lay_bookmaker: string | null
+          best_lay_odds: number | null
+          event_id: string | null
+          id: string
+          market: string
+          outcome: string
+          updated_at: string | null
+        }
+        Insert: {
+          best_back_bookmaker?: string | null
+          best_back_odds?: number | null
+          best_lay_bookmaker?: string | null
+          best_lay_odds?: number | null
+          event_id?: string | null
+          id?: string
+          market: string
+          outcome: string
+          updated_at?: string | null
+        }
+        Update: {
+          best_back_bookmaker?: string | null
+          best_back_odds?: number | null
+          best_lay_bookmaker?: string | null
+          best_lay_odds?: number | null
+          event_id?: string | null
+          id?: string
+          market?: string
+          outcome?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aggregated_odds_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_master"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events_master: {
         Row: {
           created_at: string
@@ -43,6 +87,68 @@ export type Database = {
           sport?: string
         }
         Relationships: []
+      }
+      matched_bets: {
+        Row: {
+          back_bookmaker: string
+          back_odds: number
+          back_stake: number
+          commission_rate: number | null
+          created_at: string | null
+          event_id: string | null
+          expires_at: string | null
+          id: string
+          lay_bookmaker: string
+          lay_odds: number
+          lay_stake: number
+          market: string
+          outcome: string
+          profit: number
+          rating: number
+        }
+        Insert: {
+          back_bookmaker: string
+          back_odds: number
+          back_stake: number
+          commission_rate?: number | null
+          created_at?: string | null
+          event_id?: string | null
+          expires_at?: string | null
+          id?: string
+          lay_bookmaker?: string
+          lay_odds: number
+          lay_stake: number
+          market: string
+          outcome: string
+          profit: number
+          rating: number
+        }
+        Update: {
+          back_bookmaker?: string
+          back_odds?: number
+          back_stake?: number
+          commission_rate?: number | null
+          created_at?: string | null
+          event_id?: string | null
+          expires_at?: string | null
+          id?: string
+          lay_bookmaker?: string
+          lay_odds?: number
+          lay_stake?: number
+          market?: string
+          outcome?: string
+          profit?: number
+          rating?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matched_bets_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events_master"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       odds_cache: {
         Row: {
@@ -142,6 +248,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      clean_expired_matched_bets: { Args: never; Returns: undefined }
       clean_expired_odds_cache: { Args: never; Returns: undefined }
     }
     Enums: {
