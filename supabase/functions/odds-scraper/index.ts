@@ -637,6 +637,143 @@ function parseBet365HTML(html: string, market: string, filters: any): any[] {
   return events;
 }
 
+// ===============================================
+// AUTO-DETECTION BOOKMAKER ORDER
+// ===============================================
+function extractBookmakerOrderFromHeader(html: string): string[] {
+  const bookmakerNames: string[] = [];
+  
+  // Pattern 1: Search table header <thead>
+  const theadMatch = html.match(/<thead[^>]*>([\s\S]*?)<\/thead>/i);
+  if (theadMatch) {
+    const headerHtml = theadMatch[1];
+    
+    // Extract all <th> containing bookmaker names
+    const thMatches = [...headerHtml.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/gi)];
+    
+    for (const thMatch of thMatches) {
+      const content = thMatch[1].toLowerCase().trim();
+      
+      // Mapping bookmaker names on CentroQuote -> standard names
+      const bookmakerMap: Record<string, string> = {
+        'bet365': 'bet365',
+        'snai': 'snai',
+        'sisal': 'sisal',
+        'lottomatica': 'lottomatica',
+        'goldbet': 'goldbet',
+        'eurobet': 'eurobet',
+        'betflag': 'betflag',
+        'bettson': 'bettson',
+        'planetwin': 'planetwin',
+        'netwin': 'netwin',
+        'bwin': 'bwin',
+        'william': 'williamhill',
+      };
+      
+      // Search partial match in content
+      for (const [key, value] of Object.entries(bookmakerMap)) {
+        if (content.includes(key)) {
+          bookmakerNames.push(value);
+          break;
+        }
+      }
+    }
+  }
+  
+  // Pattern 2: Fallback regex to find bookmaker names in HTML
+  if (bookmakerNames.length === 0) {
+    const bookmakerPatterns = [
+      /bet365/i, /snai/i, /sisal/i, /lottomatica/i, 
+      /goldbet/i, /eurobet/i, /betflag/i, /bettson/i, 
+      /planetwin/i, /netwin/i, /bwin/i, /william/i
+    ];
+    
+    const searchArea = html.slice(0, 10000); // First 10KB of HTML
+    
+    for (const pattern of bookmakerPatterns) {
+      if (pattern.test(searchArea)) {
+        const match = searchArea.match(pattern);
+        if (match) {
+          const normalized = match[0].toLowerCase();
+          if (normalized.includes('william')) bookmakerNames.push('williamhill');
+          else bookmakerNames.push(normalized);
+        }
+      }
+    }
+  }
+  
+  console.log(`[Auto-Detection] Found ${bookmakerNames.length} bookmakers: ${bookmakerNames.join(', ')}`);
+  
+  // Default fallback with all 12 bookmakers
+  return bookmakerNames.length > 0 ? bookmakerNames : [
+    'bet365', 'snai', 'sisal', 'lottomatica', 'goldbet', 
+    'eurobet', 'betflag', 'bettson', 'planetwin', 'netwin', 
+    'bwin', 'williamhill'
+  ];
+}
+
+// ===============================================
+// SMART CACHE FUNCTIONS
+// ===============================================
+async function checkLeagueCache(
+  supabase: any,
+  sport: string, 
+  league: string, 
+  market: string
+): Promise<any | null> {
+  const cacheKey = `${sport}:${league}:${market}`;
+  
+  const { data, error } = await supabase
+    .from('odds_cache_by_league')
+    .select('*')
+    .eq('cache_key', cacheKey)
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle();
+  
+  if (!error && data) {
+    console.log(`[Cache Hit] Found cached data for ${cacheKey}`);
+    return data.data;
+  }
+  
+  console.log(`[Cache Miss] No cache for ${cacheKey}`);
+  return null;
+}
+
+async function saveLeagueCache(
+  supabase: any,
+  sport: string,
+  league: string,
+  market: string,
+  oddsData: any[],
+  durationMs: number
+): Promise<void> {
+  const cacheKey = `${sport}:${league}:${market}`;
+  
+  try {
+    await supabase
+      .from('odds_cache_by_league')
+      .upsert({
+        sport,
+        league,
+        market,
+        cache_key: cacheKey,
+        data: oddsData,
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutes
+        scraping_duration_ms: durationMs,
+        total_events: oddsData.length,
+        total_bookmakers: new Set(oddsData.map((o: any) => o.bookmaker)).size,
+      });
+    
+    console.log(`[Cache Saved] Saved ${oddsData.length} events to cache for ${cacheKey}`);
+  } catch (error) {
+    console.error('[Cache Error] Failed to save cache:', error);
+  }
+}
+
+// ===============================================
+// PARSERS
+// ===============================================
+
 // Parse Snai HTML
 function parseSnaiHTML(html: string, market: string, filters: any): any[] {
   const events: any[] = [];
@@ -697,6 +834,9 @@ function parseCentroQuoteHTML(html: string, sport: string, market: string, filte
     
     for (const tableMatch of tableMatches) {
       const tableHtml = tableMatch[1];
+      // Auto-detect bookmaker order from HTML header
+      const bookmakerOrder = extractBookmakerOrderFromHeader(html);
+      
       const rowMatches = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
       
       for (const rowMatch of rowMatches) {
@@ -720,9 +860,6 @@ function parseCentroQuoteHTML(html: string, sport: string, market: string, filte
         // Extract all odds in this row (each column represents a bookmaker)
         const cells = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
         const oddsMap = new Map<string, any>();
-        
-        // Common bookmakers on CentroQuote
-        const bookmakerOrder = ['bet365', 'snai', 'sisal', 'lottomatica', 'goldbet', 'eurobet', 'betflag', 'betclic'];
         
         let cellIndex = 0;
         for (const cell of cells) {
@@ -812,9 +949,9 @@ function parseCentroQuoteHTML(html: string, sport: string, market: string, filte
           
           // Group odds in sets of 3 (1X2 for each bookmaker)
           const oddsMap = new Map<string, any>();
-          const bookmakerOrder = ['bet365', 'snai', 'sisal', 'lottomatica', 'goldbet', 'eurobet'];
+          const bookmakerOrder = extractBookmakerOrderFromHeader(html);
           
-          for (let i = 0; i < allOddsInArea.length - 2 && oddsMap.size < 6; i += 3) {
+          for (let i = 0; i < allOddsInArea.length - 2 && oddsMap.size < 12; i += 3) {
             const odds = allOddsInArea.slice(i, i + 3);
             if (odds.length === 3) {
               const bookmaker = bookmakerOrder[oddsMap.size] || `bookmaker_${oddsMap.size + 1}`;

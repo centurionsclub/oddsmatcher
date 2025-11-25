@@ -150,6 +150,48 @@ export type Database = {
           },
         ]
       }
+      odds_alerts: {
+        Row: {
+          average_odds: number
+          bookmaker: string
+          created_at: string
+          difference_percentage: number
+          event_name: string
+          event_time: string | null
+          expires_at: string
+          id: string
+          is_read: boolean | null
+          odds: number
+          outcome: string
+        }
+        Insert: {
+          average_odds: number
+          bookmaker: string
+          created_at?: string
+          difference_percentage: number
+          event_name: string
+          event_time?: string | null
+          expires_at: string
+          id?: string
+          is_read?: boolean | null
+          odds: number
+          outcome: string
+        }
+        Update: {
+          average_odds?: number
+          bookmaker?: string
+          created_at?: string
+          difference_percentage?: number
+          event_name?: string
+          event_time?: string | null
+          expires_at?: string
+          id?: string
+          is_read?: boolean | null
+          odds?: number
+          outcome?: string
+        }
+        Relationships: []
+      }
       odds_cache: {
         Row: {
           bookmaker: string
@@ -186,6 +228,48 @@ export type Database = {
           odds?: Json
           scraped_at?: string
           sport?: string
+        }
+        Relationships: []
+      }
+      odds_cache_by_league: {
+        Row: {
+          cache_key: string
+          data: Json
+          expires_at: string
+          id: string
+          league: string
+          market: string
+          scraped_at: string
+          scraping_duration_ms: number | null
+          sport: string
+          total_bookmakers: number | null
+          total_events: number | null
+        }
+        Insert: {
+          cache_key: string
+          data: Json
+          expires_at: string
+          id?: string
+          league: string
+          market: string
+          scraped_at?: string
+          scraping_duration_ms?: number | null
+          sport: string
+          total_bookmakers?: number | null
+          total_events?: number | null
+        }
+        Update: {
+          cache_key?: string
+          data?: Json
+          expires_at?: string
+          id?: string
+          league?: string
+          market?: string
+          scraped_at?: string
+          scraping_duration_ms?: number | null
+          sport?: string
+          total_bookmakers?: number | null
+          total_events?: number | null
         }
         Relationships: []
       }

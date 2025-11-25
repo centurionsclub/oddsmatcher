@@ -17,21 +17,17 @@ interface ExchangeMultiSelectProps {
 }
 
 const bookmakers = [
-  { value: "888sport", label: "888sport" },
-  { value: "admiral", label: "Admiral" },
   { value: "bet365", label: "Bet365" },
-  { value: "betfair-book", label: "Betfair" },
-  { value: "betflag-book", label: "Betflag" },
-  { value: "betsson", label: "Betsson" },
-  { value: "better", label: "Better" },
-  { value: "betway", label: "Betway" },
-  { value: "eurobet", label: "Eurobet" },
-  { value: "goldbet", label: "Goldbet" },
-  { value: "lottomatica", label: "Lottomatica" },
-  { value: "netbet", label: "NetBet" },
-  { value: "sisal", label: "Sisal" },
   { value: "snai", label: "Snai" },
-  { value: "unibet", label: "Unibet" },
+  { value: "sisal", label: "Sisal" },
+  { value: "lottomatica", label: "Lottomatica" },
+  { value: "goldbet", label: "Goldbet" },
+  { value: "eurobet", label: "Eurobet" },
+  { value: "betflag", label: "BetFlag" },
+  { value: "bettson", label: "Bettson" },
+  { value: "planetwin", label: "PlanetWin365" },
+  { value: "netwin", label: "NetWin" },
+  { value: "bwin", label: "Bwin" },
   { value: "williamhill", label: "William Hill" },
 ];
 
