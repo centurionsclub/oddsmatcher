@@ -1510,6 +1510,32 @@ serve(async (req) => {
 
     const results = [];
 
+    // Check smart cache first for CentroQuote
+    if (bookmakers.includes('centroquote')) {
+      const league = filters?.campionato || 'serie-a';
+      const cachedLeagueData = await checkLeagueCache(supabaseClient, sport, league, market);
+      
+      if (cachedLeagueData && Array.isArray(cachedLeagueData)) {
+        console.log(`[Smart Cache Hit] Using cached data for ${sport}:${league}:${market} - ${cachedLeagueData.length} events`);
+        results.push(...cachedLeagueData);
+        
+        const duration = Date.now() - startTime;
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: results,
+            cached: true,
+            metadata: {
+              totalResults: results.length,
+              bookmakers: bookmakers.length,
+              durationMs: duration
+            }
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Process bookmakers in parallel (max 3 at a time)
     const batchSize = 3;
     for (let i = 0; i < bookmakers.length; i += batchSize) {
@@ -1577,6 +1603,14 @@ serve(async (req) => {
       );
 
       results.push(...batchResults.flat());
+    }
+
+    // Save to smart cache if scraping CentroQuote
+    if (bookmakers.includes('centroquote') && results.length > 0) {
+      const league = filters?.campionato || 'serie-a';
+      const scrapingDuration = Date.now() - startTime;
+      await saveLeagueCache(supabaseClient, sport, league, market, results, scrapingDuration);
+      console.log(`[Smart Cache] Saved ${results.length} events for ${sport}:${league}:${market}`);
     }
 
     const duration = Date.now() - startTime;

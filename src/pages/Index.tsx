@@ -353,10 +353,41 @@ const Index = () => {
         return;
       }
 
-      console.log('Calling odds-scraper with:', { bookmakers: uniqueBookmakers, sport, market, filters });
+      // Bookmaker italiani disponibili su CentroQuote
+      const italianBookmakers = [
+        'bet365', 'snai', 'sisal', 'lottomatica', 'goldbet', 
+        'eurobet', 'betflag', 'bettson', 'planetwin', 'netwin', 
+        'bwin', 'williamhill'
+      ];
+      
+      // Exchange
+      const exchangesList = ['betfair'];
+      
+      // Separa bookmaker italiani dagli exchange
+      const selectedItalianBookmakers = uniqueBookmakers.filter(b => italianBookmakers.includes(b));
+      const selectedExchanges = uniqueBookmakers.filter(b => exchangesList.includes(b));
+      
+      // Costruisci l'array di bookmaker per la chiamata
+      const bookmakersToFetch: string[] = [];
+      
+      // Se ci sono bookmaker italiani, usa CentroQuote
+      if (selectedItalianBookmakers.length > 0) {
+        bookmakersToFetch.push('centroquote');
+      }
+      
+      // Aggiungi exchange selezionati
+      bookmakersToFetch.push(...selectedExchanges);
+
+      console.log('Calling odds-scraper with:', { 
+        bookmakers: bookmakersToFetch, 
+        sport, 
+        market, 
+        filters,
+        selectedItalianBookmakers // Per filtraggio lato client se necessario
+      });
 
       const { data, error } = await supabase.functions.invoke('odds-scraper', {
-        body: { bookmakers: uniqueBookmakers, sport, market, filters }
+        body: { bookmakers: bookmakersToFetch, sport, market, filters }
       });
 
       if (error) {
@@ -371,11 +402,25 @@ const Index = () => {
       }
 
       console.log('Odds scraper response:', data);
-      setOddsData(data);
+      
+      // Filtra i risultati se l'utente ha selezionato specifici bookmaker italiani
+      let filteredData = data;
+      if (selectedItalianBookmakers.length > 0 && selectedItalianBookmakers.length < italianBookmakers.length) {
+        // L'utente ha selezionato solo alcuni bookmaker italiani, filtra i risultati
+        filteredData = {
+          ...data,
+          data: data?.data?.filter((odd: any) => 
+            selectedItalianBookmakers.includes(odd.bookmaker?.toLowerCase()) ||
+            selectedExchanges.includes(odd.bookmaker?.toLowerCase())
+          ) || []
+        };
+      }
+      
+      setOddsData(filteredData);
       
       toast({
         title: "Ricerca completata",
-        description: `Trovate ${data?.data?.length || 0} quote`,
+        description: `Trovate ${filteredData?.data?.length || 0} quote`,
       });
     } catch (error: any) {
       console.error('Error calling odds scraper:', error);
