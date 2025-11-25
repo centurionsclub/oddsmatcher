@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.surebet-finder]
 verify_jwt = false
+
+[functions.api-odds]
+verify_jwt = false
+
+[functions.api-matched]
+verify_jwt = false
