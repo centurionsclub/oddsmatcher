@@ -8,6 +8,31 @@ const corsHeaders = {
 
 // Bookmaker scraping configurations
 const BOOKMAKER_CONFIGS = {
+  centroquote: {
+    name: 'CentroQuote',
+    baseUrl: 'https://www.centroquote.it',
+    sportUrls: {
+      calcio: {
+        'serie-a': 'https://www.centroquote.it/football/italy/serie-a/',
+        'serie-b': 'https://www.centroquote.it/football/italy/serie-b/',
+        'premier-league': 'https://www.centroquote.it/football/england/premier-league/',
+        'champions-league': 'https://www.centroquote.it/football/europe/champions-league/',
+      },
+      tennis: {
+        'atp': 'https://www.centroquote.it/tennis/atp/',
+      },
+      basket: {
+        'nba': 'https://www.centroquote.it/basketball/usa/nba/',
+      }
+    },
+    selectors: {
+      eventRow: 'tr.event-row, tr[class*="match"], tbody > tr',
+      eventName: 'td.event-name, td[class*="event"], td:first-child a',
+      eventTime: 'td.time, td[class*="time"], .event-time',
+      bookmakerColumn: 'td[data-bookmaker], td.bookmaker-odds',
+      oddsValue: '.odd-value, .quota, span[class*="odd"]',
+    }
+  },
   bet365: {
     name: 'Bet365',
     baseUrl: 'https://www.bet365.it',
@@ -428,6 +453,11 @@ async function scrapeBookmaker(
 ): Promise<any[]> {
   console.log(`Fetching odds for ${bookmaker} - ${sport} - ${market}`);
   
+  // CentroQuote is an aggregator - returns multiple bookmakers
+  if (bookmaker === 'centroquote') {
+    return await scrapeCentroQuote(sport, market, filters);
+  }
+  
   // STRATEGY: Use ONLY ScrapingBee for Sisal and Lottomatica
   if (bookmaker === 'sisal') {
     return await scrapeSisal(sport, market, filters);
@@ -443,6 +473,55 @@ async function scrapeBookmaker(
   
   console.log(`No scraper available for ${bookmaker}`);
   return [];
+}
+
+// CentroQuote scraper - aggregator that shows multiple bookmakers
+async function scrapeCentroQuote(sport: string, market: string, filters: any): Promise<any[]> {
+  console.log('Scraping CentroQuote with ScrapingBee...');
+  
+  const apiKey = Deno.env.get('SCRAPINGBEE_API_KEY');
+  if (!apiKey) {
+    throw new Error('SCRAPINGBEE_API_KEY not configured');
+  }
+
+  const config = BOOKMAKER_CONFIGS.centroquote;
+  
+  // Get target URL based on sport and league
+  const league = filters?.campionato?.toLowerCase() || 'serie-a';
+  const sportUrls = config.sportUrls[sport as keyof typeof config.sportUrls];
+  
+  if (!sportUrls) {
+    throw new Error(`Sport ${sport} not supported for CentroQuote`);
+  }
+  
+  const targetUrl = sportUrls[league as keyof typeof sportUrls] || Object.values(sportUrls)[0];
+  
+  try {
+    // ScrapingBee configuration optimized for CentroQuote
+    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&premium_proxy=true&country_code=it&wait=2000&block_resources=true`;
+    
+    console.log(`Fetching from ScrapingBee for CentroQuote: ${targetUrl}`);
+    const response = await fetch(scrapingBeeUrl, {
+      signal: AbortSignal.timeout(25000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`ScrapingBee error: ${response.status} ${response.statusText}`);
+    }
+
+    const html = await response.text();
+    console.log(`CentroQuote HTML received, size: ${html.length} bytes`);
+
+    // Parse the HTML to extract events and odds from multiple bookmakers
+    const events = parseCentroQuoteHTML(html, sport, market, filters);
+    console.log(`Successfully parsed ${events.length} event-bookmaker combinations from CentroQuote`);
+    
+    return events;
+
+  } catch (error) {
+    console.error('CentroQuote scraping with ScrapingBee failed:', error);
+    throw error;
+  }
 }
 
 // Bet365 real scraper
@@ -575,6 +654,216 @@ function parseSnaiHTML(html: string, market: string, filters: any): any[] {
   }
   
   return events;
+}
+
+// Parse CentroQuote HTML - extracts events and odds for multiple bookmakers
+function parseCentroQuoteHTML(html: string, sport: string, market: string, filters: any): any[] {
+  const allEvents: any[] = [];
+  
+  console.log(`[CentroQuote Parser] Starting HTML parsing for ${sport} - ${market}, HTML size: ${html.length} bytes`);
+  
+  try {
+    // Strategy 1: Look for structured data in JSON-LD or embedded JSON
+    const jsonLdMatches = [...html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)];
+    
+    for (const match of jsonLdMatches) {
+      try {
+        const json = JSON.parse(match[1].trim());
+        const events = Array.isArray(json) ? json : [json];
+        
+        for (const event of events) {
+          if (event['@type'] === 'SportsEvent' && event.name) {
+            const [home, away] = event.name.split(' vs ').map((t: string) => t.trim());
+            if (home && away) {
+              console.log(`[CentroQuote Parser] Found event from JSON-LD: ${home} - ${away}`);
+            }
+          }
+        }
+      } catch (e) {
+        // Skip invalid JSON
+      }
+    }
+    
+    // Strategy 2: Parse HTML table structure
+    // CentroQuote typically shows a table with rows for events and columns for bookmakers
+    const eventRows: Array<{ eventName: string; eventTime: string; league: string; odds: Map<string, any> }> = [];
+    
+    // Extract event names and times
+    const eventNamePattern = /([A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ\s.']{2,30})\s*[-–—]\s*([A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ\s.']{2,30})/g;
+    const oddsPattern = /(?:data-odd|class="[^"]*odd[^"]*")[^>]*>[\s]*([0-9]{1}\.[0-9]{2})/gi;
+    
+    // Find table sections
+    const tableMatches = [...html.matchAll(/<table[^>]*>([\s\S]*?)<\/table>/gi)];
+    
+    for (const tableMatch of tableMatches) {
+      const tableHtml = tableMatch[1];
+      const rowMatches = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+      
+      for (const rowMatch of rowMatches) {
+        const rowHtml = rowMatch[1];
+        
+        // Try to find event name
+        const eventMatch = rowHtml.match(eventNamePattern);
+        if (!eventMatch) continue;
+        
+        const home = eventMatch[1]?.trim();
+        const away = eventMatch[2]?.trim();
+        
+        if (!home || !away || home.length < 3 || away.length < 3) continue;
+        
+        const eventName = `${home} - ${away}`;
+        
+        // Extract event time
+        const timeMatch = rowHtml.match(/(\d{2}:\d{2}|\d{2}\/\d{2})/);
+        const eventTime = timeMatch ? new Date(Date.now() + 86400000).toISOString() : new Date(Date.now() + 86400000).toISOString();
+        
+        // Extract all odds in this row (each column represents a bookmaker)
+        const cells = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
+        const oddsMap = new Map<string, any>();
+        
+        // Common bookmakers on CentroQuote
+        const bookmakerOrder = ['bet365', 'snai', 'sisal', 'lottomatica', 'goldbet', 'eurobet', 'betflag', 'betclic'];
+        
+        let cellIndex = 0;
+        for (const cell of cells) {
+          const cellHtml = cell[1];
+          
+          // Extract 1X2 odds from this cell
+          const oddsInCell: number[] = [];
+          let oddsMatch;
+          oddsPattern.lastIndex = 0;
+          
+          while ((oddsMatch = oddsPattern.exec(cellHtml)) !== null && oddsInCell.length < 3) {
+            const oddValue = parseFloat(oddsMatch[1]);
+            if (oddValue >= 1.01 && oddValue <= 100) {
+              oddsInCell.push(oddValue);
+            }
+          }
+          
+          // If we found 3 odds (1X2), assign to a bookmaker
+          if (oddsInCell.length === 3 && cellIndex < bookmakerOrder.length) {
+            const bookmaker = bookmakerOrder[cellIndex];
+            oddsMap.set(bookmaker, {
+              '1': oddsInCell[0],
+              'X': oddsInCell[1],
+              '2': oddsInCell[2]
+            });
+            console.log(`[CentroQuote Parser] Found odds for ${bookmaker}: ${oddsInCell.join('/')}`);
+          }
+          
+          cellIndex++;
+        }
+        
+        if (oddsMap.size > 0) {
+          eventRows.push({
+            eventName,
+            eventTime,
+            league: filters?.campionato || 'Serie A',
+            odds: oddsMap
+          });
+        }
+      }
+    }
+    
+    // Strategy 3: Fallback regex-based extraction if table parsing fails
+    if (eventRows.length === 0) {
+      console.log('[CentroQuote Parser] Table parsing failed, trying fallback regex...');
+      
+      const chunks: string[] = [];
+      const chunkSize = 50000;
+      
+      for (let i = 0; i < html.length && chunks.length < 10; i += chunkSize) {
+        chunks.push(html.slice(i, i + chunkSize + 2000));
+      }
+      
+      const seen = new Set<string>();
+      
+      for (const chunk of chunks) {
+        let match;
+        while ((match = eventNamePattern.exec(chunk)) !== null && eventRows.length < 30) {
+          const home = match[1].trim();
+          const away = match[2].trim();
+          
+          if (home.length < 3 || away.length < 3 || home === away) continue;
+          
+          const eventName = `${home} - ${away}`;
+          const normalized = eventName.toLowerCase();
+          
+          if (seen.has(normalized)) continue;
+          seen.add(normalized);
+          
+          // Search for odds near this event
+          const eventIndex = chunk.indexOf(eventName);
+          if (eventIndex === -1) continue;
+          
+          const searchArea = chunk.slice(Math.max(0, eventIndex - 500), eventIndex + 3000);
+          
+          // Try to extract multiple sets of odds (different bookmakers)
+          const allOddsInArea: number[] = [];
+          let oddsMatch;
+          oddsPattern.lastIndex = 0;
+          
+          while ((oddsMatch = oddsPattern.exec(searchArea)) !== null && allOddsInArea.length < 24) {
+            const oddValue = parseFloat(oddsMatch[1]);
+            if (oddValue >= 1.01 && oddValue <= 100) {
+              allOddsInArea.push(oddValue);
+            }
+          }
+          
+          // Group odds in sets of 3 (1X2 for each bookmaker)
+          const oddsMap = new Map<string, any>();
+          const bookmakerOrder = ['bet365', 'snai', 'sisal', 'lottomatica', 'goldbet', 'eurobet'];
+          
+          for (let i = 0; i < allOddsInArea.length - 2 && oddsMap.size < 6; i += 3) {
+            const odds = allOddsInArea.slice(i, i + 3);
+            if (odds.length === 3) {
+              const bookmaker = bookmakerOrder[oddsMap.size] || `bookmaker_${oddsMap.size + 1}`;
+              oddsMap.set(bookmaker, {
+                '1': odds[0],
+                'X': odds[1],
+                '2': odds[2]
+              });
+            }
+          }
+          
+          if (oddsMap.size > 0) {
+            eventRows.push({
+              eventName,
+              eventTime: new Date(Date.now() + 86400000).toISOString(),
+              league: filters?.campionato || 'Serie A',
+              odds: oddsMap
+            });
+            console.log(`[CentroQuote Parser] Regex fallback: ${eventName} with ${oddsMap.size} bookmakers`);
+          }
+          
+          if (eventRows.length >= 20) break;
+        }
+        
+        if (eventRows.length >= 20) break;
+      }
+    }
+    
+    // Convert to output format: one entry per bookmaker per event
+    for (const row of eventRows) {
+      for (const [bookmaker, odds] of row.odds.entries()) {
+        allEvents.push({
+          eventName: row.eventName,
+          league: row.league,
+          eventTime: row.eventTime,
+          market: market,
+          odds: odds,
+          bookmaker: bookmaker // Add bookmaker field to distinguish
+        });
+      }
+    }
+    
+    console.log(`[CentroQuote Parser] Completed parsing, found ${allEvents.length} event-bookmaker combinations`);
+    
+  } catch (error) {
+    console.error('[CentroQuote Parser] Fatal error:', error);
+  }
+  
+  return allEvents;
 }
 
 // Sisal scraper using ScrapingBee
@@ -1114,10 +1403,12 @@ serve(async (req) => {
             const scrapedData = await scrapeBookmaker(bookmaker, sport, market, filters);
             
             // Save to cache
+            // For CentroQuote, each event has its own bookmaker field
             for (const event of scrapedData) {
+              const actualBookmaker = event.bookmaker || bookmaker;
               await saveToCache(
                 supabaseClient,
-                bookmaker,
+                actualBookmaker,
                 sport,
                 event.eventName,
                 event.league,
@@ -1130,7 +1421,7 @@ serve(async (req) => {
             await logScraping(supabaseClient, bookmaker, 'success', Date.now() - bmStartTime);
 
             return scrapedData.map(e => ({
-              bookmaker,
+              bookmaker: e.bookmaker || bookmaker,
               ...e
             }));
           } catch (error) {
