@@ -20,6 +20,8 @@ import { MatchedBettingResults } from "@/components/MatchedBettingResults";
 import { MultipleMatchedBettingResults } from "@/components/MultipleMatchedBettingResults";
 import { ThreeWayArbitrageResults } from "@/components/ThreeWayArbitrageResults";
 import { BetfairQuotesTable } from "@/components/BetfairQuotesTable";
+import { OddsComparator } from "@/components/OddsComparator";
+import { OddsAlerts } from "@/components/OddsAlerts";
 import logoCenturion from "@/assets/logo_centurion_new.png";
 
 const Index = () => {
@@ -93,11 +95,23 @@ const Index = () => {
     mercato: "nessuno",
     partita: "",
   });
+
+  // Stati per COMPARATORE
+  const [comparatoreFilters, setComparatoreFilters] = useState({
+    sport: "calcio",
+    mercato: "1X2",
+    campionato: "",
+  });
   
   // Odds scraping data
   const [oddsData, setOddsData] = useState<any>(null);
   const [oddsLoading, setOddsLoading] = useState(false);
   const [oddsError, setOddsError] = useState<string | null>(null);
+
+  // Comparator data
+  const [comparatorData, setComparatorData] = useState<any>(null);
+  const [comparatorLoading, setComparatorLoading] = useState(false);
+  const [comparatorError, setComparatorError] = useState<string | null>(null);
 
   const handlePulisci = () => {
     if (activeTab === "singola") {
@@ -155,6 +169,12 @@ const Index = () => {
       setBestOddsFilters({
         mercato: "nessuno",
         partita: "",
+      });
+    } else if (activeTab === "comparatore") {
+      setComparatoreFilters({
+        sport: "calcio",
+        mercato: "1X2",
+        campionato: "",
       });
     }
   };
@@ -435,12 +455,58 @@ const Index = () => {
     }
   };
 
+  const handleSearchComparator = async () => {
+    setComparatorLoading(true);
+    setComparatorError(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('odds-comparator', {
+        body: { 
+          sport: comparatoreFilters.sport,
+          market: comparatoreFilters.mercato,
+          league: comparatoreFilters.campionato || undefined
+        }
+      });
+
+      if (error) {
+        console.error('Comparator error:', error);
+        setComparatorError(error.message || 'Failed to fetch comparator data');
+        toast({
+          title: "Errore",
+          description: error.message || 'Errore nel recupero dati comparatore',
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('Comparator response:', data);
+      setComparatorData(data);
+      
+      toast({
+        title: "Ricerca completata",
+        description: `Trovati ${data?.length || 0} eventi`,
+      });
+    } catch (error: any) {
+      console.error('Error calling comparator:', error);
+      setComparatorError(error.message);
+      toast({
+        title: "Errore",
+        description: error.message || 'Errore nel recupero dati comparatore',
+        variant: "destructive",
+      });
+    } finally {
+      setComparatorLoading(false);
+    }
+  };
+
   const tabs = [
     { id: "singola", label: "SINGOLA" },
     { id: "multipla", label: "MULTIPLA" },
     { id: "trevie", label: "TRE VIE" },
     { id: "bestodds", label: "BEST ODDS" },
     { id: "betfairlive", label: "BETFAIR LIVE" },
+    { id: "comparatore", label: "COMPARATORE" },
+    { id: "alert", label: "ALERT" },
   ];
 
   return (
@@ -470,10 +536,10 @@ const Index = () => {
             variant="outline" 
             size="sm" 
             className="gap-2 text-sm font-medium"
-            onClick={handleSearchOdds}
-            disabled={oddsLoading}
+            onClick={activeTab === "comparatore" ? handleSearchComparator : handleSearchOdds}
+            disabled={activeTab === "comparatore" ? comparatorLoading : oddsLoading}
           >
-            {oddsLoading ? (
+            {(activeTab === "comparatore" ? comparatorLoading : oddsLoading) ? (
               <>CARICAMENTO... <RefreshCw className="h-3.5 w-3.5 animate-spin" /></>
             ) : (
               <>CERCA <Search className="h-3.5 w-3.5" /></>
@@ -1425,6 +1491,58 @@ const Index = () => {
                 />
               </div>
             </>
+          ) : activeTab === "comparatore" ? (
+            <>
+              {/* Row 1: Sport */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <Trophy className="h-4 w-4" />
+                  Sport
+                </div>
+                <Select value={comparatoreFilters.sport} onValueChange={(value) => setComparatoreFilters({...comparatoreFilters, sport: value})}>
+                  <SelectTrigger className="h-9 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="calcio">⚽ Calcio</SelectItem>
+                    <SelectItem value="tennis">🎾 Tennis</SelectItem>
+                    <SelectItem value="basket">🏀 Basket</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 2: Mercato */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
+                  <ShoppingCart className="h-4 w-4" />
+                  Mercato
+                </div>
+                <Select value={comparatoreFilters.mercato} onValueChange={(value) => setComparatoreFilters({...comparatoreFilters, mercato: value})}>
+                  <SelectTrigger className="h-9 flex-1 max-w-[300px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1X2">⚽ 1X2</SelectItem>
+                    <SelectItem value="under25">⚽ Under 2.5</SelectItem>
+                    <SelectItem value="over25">⚽ Over 2.5</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Row 3: Campionato */}
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
+                  Campionato
+                </div>
+                <Input 
+                  type="text" 
+                  placeholder="Es: Serie A, Premier League..."
+                  value={comparatoreFilters.campionato}
+                  onChange={(e) => setComparatoreFilters({...comparatoreFilters, campionato: e.target.value})}
+                  className="h-9 flex-1 max-w-[300px] placeholder:text-muted-foreground/60"
+                />
+              </div>
+            </>
           ) : null}
         </div>
 
@@ -1470,6 +1588,32 @@ const Index = () => {
 
         {activeTab === "betfairlive" && (
           <BetfairQuotesTable />
+        )}
+
+        {activeTab === "comparatore" && (
+          <div className="mt-6">
+            {comparatorLoading && <p className="text-center text-muted-foreground">Caricamento...</p>}
+            {comparatorError && <p className="text-center text-destructive">Errore: {comparatorError}</p>}
+            {!comparatorLoading && !comparatorError && comparatorData && (
+              <OddsComparator data={comparatorData} />
+            )}
+            {!comparatorLoading && !comparatorError && !comparatorData && (
+              <p className="text-center text-muted-foreground mt-8">Seleziona i filtri e clicca su CERCA per visualizzare il comparatore quote</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === "alert" && (
+          <div className="mt-6">
+            <div className="bg-card rounded-xl border border-border p-6">
+              <h2 className="text-xl font-semibold mb-4">Alert Quote Anomale</h2>
+              <p className="text-muted-foreground mb-6">
+                Gli alert vengono generati automaticamente quando vengono rilevate quote significativamente più alte della media. 
+                Riceverai notifiche in tempo reale quando nuovi alert vengono creati.
+              </p>
+            </div>
+            <OddsAlerts />
+          </div>
         )}
       </div>
     </div>
