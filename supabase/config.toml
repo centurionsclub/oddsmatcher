@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.api-matched]
 verify_jwt = false
+
+[functions.api-aggregator]
+verify_jwt = false
