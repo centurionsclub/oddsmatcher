@@ -480,11 +480,14 @@ const Index = () => {
       }
 
       console.log('Comparator response:', data);
-      setComparatorData(data);
+      
+      // Extract the data array from the response
+      const events = data?.data || [];
+      setComparatorData(events);
       
       toast({
         title: "Ricerca completata",
-        description: `Trovati ${data?.length || 0} eventi`,
+        description: `Trovati ${events.length} eventi`,
       });
     } catch (error: any) {
       console.error('Error calling comparator:', error);
