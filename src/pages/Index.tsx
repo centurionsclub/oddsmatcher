@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Wallet, Save, X, Search } from "lucide-react";
+import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Save, X, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { OddsResults } from "@/components/OddsResults";
 import { MatchedBettingResults } from "@/components/MatchedBettingResults";
 import { MultipleMatchedBettingResults } from "@/components/MultipleMatchedBettingResults";
@@ -30,7 +29,7 @@ const Index = () => {
   const [betflagCommission, setBetflagCommission] = useState("5,00%");
   const { toast } = useToast();
   
-  // Stati per salvare filtri
+  // Stati per salvare filtri (solo locale, nessun database)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [filterName, setFilterName] = useState("");
   const [savedFilters, setSavedFilters] = useState<any[]>([]);
@@ -102,16 +101,6 @@ const Index = () => {
     mercato: "1X2",
     campionato: "",
   });
-  
-  // Odds scraping data
-  const [oddsData, setOddsData] = useState<any>(null);
-  const [oddsLoading, setOddsLoading] = useState(false);
-  const [oddsError, setOddsError] = useState<string | null>(null);
-
-  // Comparator data
-  const [comparatorData, setComparatorData] = useState<any>(null);
-  const [comparatorLoading, setComparatorLoading] = useState(false);
-  const [comparatorError, setComparatorError] = useState<string | null>(null);
 
   const handlePulisci = () => {
     if (activeTab === "singola") {
@@ -177,6 +166,10 @@ const Index = () => {
         campionato: "",
       });
     }
+    toast({
+      title: "Filtri puliti",
+      description: "Tutti i filtri sono stati resettati",
+    });
   };
 
   const handleBetfairChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,28 +180,7 @@ const Index = () => {
     setBetflagCommission(e.target.value);
   };
 
-  // Supabase handlers
-  useEffect(() => {
-    const loadSavedFilters = async () => {
-      const { data, error } = await supabase
-        .from('saved_filters')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error loading filters:', error);
-        return;
-      }
-      
-      if (data) {
-        setSavedFilters(data);
-      }
-    };
-    
-    loadSavedFilters();
-  }, []);
-
-  const handleSaveFilter = async () => {
+  const handleSaveFilter = () => {
     if (!filterName.trim()) {
       toast({
         title: "Errore",
@@ -229,40 +201,23 @@ const Index = () => {
       filterData = bestOddsFilters;
     }
 
-    const { error } = await supabase
-      .from('saved_filters')
-      .insert({
-        name: filterName,
-        tab_type: activeTab,
-        filter_data: filterData,
-      });
-
-    if (error) {
-      toast({
-        title: "Errore",
-        description: "Impossibile salvare il filtro",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Salva solo localmente
+    const newFilter = {
+      id: Date.now().toString(),
+      name: filterName,
+      tab_type: activeTab,
+      filter_data: filterData,
+    };
+    
+    setSavedFilters([newFilter, ...savedFilters]);
 
     toast({
       title: "Filtro salvato",
-      description: `Il filtro "${filterName}" è stato salvato con successo`,
+      description: `Il filtro "${filterName}" è stato salvato localmente`,
     });
 
     setFilterName("");
     setSaveDialogOpen(false);
-    
-    // Reload filters
-    const { data } = await supabase
-      .from('saved_filters')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (data) {
-      setSavedFilters(data);
-    }
   };
 
   const handleLoadFilter = (filterData: any) => {
@@ -282,224 +237,19 @@ const Index = () => {
     });
   };
 
-  const handleDeleteFilter = async (id: string) => {
-    const { error } = await supabase
-      .from('saved_filters')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      toast({
-        title: "Errore",
-        description: "Impossibile eliminare il filtro",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const handleDeleteFilter = (id: string) => {
+    setSavedFilters(savedFilters.filter(f => f.id !== id));
     toast({
       title: "Filtro eliminato",
       description: "Il filtro è stato rimosso",
     });
-
-    // Reload filters
-    const { data } = await supabase
-      .from('saved_filters')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (data) {
-      setSavedFilters(data);
-    }
   };
 
-  const handleSearchOdds = async () => {
-    setOddsLoading(true);
-    setOddsError(null);
-    
-      try {
-        let filters = {};
-        let bookmakers: string[] = [];
-        let exchanges: string[] = [];
-        let sport = 'calcio';
-        let market = '1X2';
-        
-        if (activeTab === "singola") {
-          filters = singolaFilters;
-          bookmakers = singolaFilters.bookmaker;
-          exchanges = singolaFilters.exchange || [];
-          sport = singolaFilters.sport === 'tutti' ? 'calcio' : singolaFilters.sport;
-          market = singolaFilters.mercato === 'tutti' ? '1X2' : singolaFilters.mercato;
-        } else if (activeTab === "multipla") {
-          filters = multiplaFilters;
-          bookmakers = multiplaFilters.bookmaker;
-          exchanges = multiplaFilters.exchange || [];
-          sport = multiplaFilters.sport === 'tutti' ? 'calcio' : multiplaFilters.sport;
-          market = multiplaFilters.mercato === 'tutti' ? '1X2' : multiplaFilters.mercato;
-        } else if (activeTab === "trevie") {
-          filters = trevieFilters;
-          bookmakers = [trevieFilters.bookmakerPrincipale, ...trevieFilters.bookmakersSecondari];
-          sport = 'calcio';
-          market = '1X2';
-        } else if (activeTab === "bestodds") {
-          filters = bestOddsFilters;
-          // For best odds, use all available bookmakers
-          bookmakers = ['bet365', 'snai', 'sisal'];
-          sport = 'calcio';
-          market = bestOddsFilters.mercato === 'nessuno' ? '1X2' : bestOddsFilters.mercato;
-        } else if (activeTab === "betfairlive") {
-          // Betfair Live: solo exchange Betfair, modalita' live
-          filters = { live: true, exchange: ['betfair'] };
-          bookmakers = ['betfair'];
-          sport = 'calcio';
-          market = '1X2';
-        }
-
-        // Pulisce e valida bookmaker ed exchange selezionati
-        const combined = [...(bookmakers || []), ...(exchanges || [])];
-        const uniqueBookmakers = Array.from(new Set(
-          combined
-            .filter(Boolean)
-            .map((b) => b.toLowerCase())
-            .filter((b) => b !== 'nessuno')
-        ));
-
-      if (uniqueBookmakers.length === 0) {
-        toast({
-          title: 'Seleziona almeno un bookmaker',
-          description: 'Aggiungi uno o più bookmaker prima di cercare.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      // Bookmaker italiani disponibili su CentroQuote
-      const italianBookmakers = [
-        'bet365', 'snai', 'sisal', 'lottomatica', 'goldbet', 
-        'eurobet', 'betflag', 'bettson', 'planetwin', 'netwin', 
-        'bwin', 'williamhill'
-      ];
-      
-      // Exchange
-      const exchangesList = ['betfair'];
-      
-      // Separa bookmaker italiani dagli exchange
-      const selectedItalianBookmakers = uniqueBookmakers.filter(b => italianBookmakers.includes(b));
-      const selectedExchanges = uniqueBookmakers.filter(b => exchangesList.includes(b));
-      
-      // Costruisci l'array di bookmaker per la chiamata
-      const bookmakersToFetch: string[] = [];
-      
-      // Se ci sono bookmaker italiani, usa CentroQuote
-      if (selectedItalianBookmakers.length > 0) {
-        bookmakersToFetch.push('centroquote');
-      }
-      
-      // Aggiungi exchange selezionati
-      bookmakersToFetch.push(...selectedExchanges);
-
-      console.log('Calling odds-scraper with:', { 
-        bookmakers: bookmakersToFetch, 
-        sport, 
-        market, 
-        filters,
-        selectedItalianBookmakers // Per filtraggio lato client se necessario
-      });
-
-      const { data, error } = await supabase.functions.invoke('odds-scraper', {
-        body: { bookmakers: bookmakersToFetch, sport, market, filters }
-      });
-
-      if (error) {
-        console.error('Odds scraper error:', error);
-        setOddsError(error.message || 'Failed to fetch odds');
-        toast({
-          title: "Errore",
-          description: error.message || 'Errore nel recupero delle quote',
-          variant: "destructive",
-        });
-        return;
-      }
-
-      console.log('Odds scraper response:', data);
-      
-      // Filtra i risultati se l'utente ha selezionato specifici bookmaker italiani
-      let filteredData = data;
-      if (selectedItalianBookmakers.length > 0 && selectedItalianBookmakers.length < italianBookmakers.length) {
-        // L'utente ha selezionato solo alcuni bookmaker italiani, filtra i risultati
-        filteredData = {
-          ...data,
-          data: data?.data?.filter((odd: any) => 
-            selectedItalianBookmakers.includes(odd.bookmaker?.toLowerCase()) ||
-            selectedExchanges.includes(odd.bookmaker?.toLowerCase())
-          ) || []
-        };
-      }
-      
-      setOddsData(filteredData);
-      
-      toast({
-        title: "Ricerca completata",
-        description: `Trovate ${filteredData?.data?.length || 0} quote`,
-      });
-    } catch (error: any) {
-      console.error('Error calling odds scraper:', error);
-      setOddsError(error.message);
-      toast({
-        title: "Errore",
-        description: error.message || 'Errore nel recupero delle quote',
-        variant: "destructive",
-      });
-    } finally {
-      setOddsLoading(false);
-    }
-  };
-
-  const handleSearchComparator = async () => {
-    setComparatorLoading(true);
-    setComparatorError(null);
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('odds-comparator', {
-        body: { 
-          sport: comparatoreFilters.sport,
-          market: comparatoreFilters.mercato,
-          league: comparatoreFilters.campionato || undefined
-        }
-      });
-
-      if (error) {
-        console.error('Comparator error:', error);
-        setComparatorError(error.message || 'Failed to fetch comparator data');
-        toast({
-          title: "Errore",
-          description: error.message || 'Errore nel recupero dati comparatore',
-          variant: "destructive",
-        });
-        return;
-      }
-
-      console.log('Comparator response:', data);
-      
-      // Extract the data array from the response
-      const events = data?.data || [];
-      setComparatorData(events);
-      
-      toast({
-        title: "Ricerca completata",
-        description: `Trovati ${events.length} eventi`,
-      });
-    } catch (error: any) {
-      console.error('Error calling comparator:', error);
-      setComparatorError(error.message);
-      toast({
-        title: "Errore",
-        description: error.message || 'Errore nel recupero dati comparatore',
-        variant: "destructive",
-      });
-    } finally {
-      setComparatorLoading(false);
-    }
+  const handleSearch = () => {
+    toast({
+      title: "Ricerca",
+      description: "Funzionalità di ricerca non attiva - solo frontend",
+    });
   };
 
   const tabs = [
@@ -539,14 +289,9 @@ const Index = () => {
             variant="outline" 
             size="sm" 
             className="gap-2 text-sm font-medium"
-            onClick={activeTab === "comparatore" ? handleSearchComparator : handleSearchOdds}
-            disabled={activeTab === "comparatore" ? comparatorLoading : oddsLoading}
+            onClick={handleSearch}
           >
-            {(activeTab === "comparatore" ? comparatorLoading : oddsLoading) ? (
-              <>CARICAMENTO... <RefreshCw className="h-3.5 w-3.5 animate-spin" /></>
-            ) : (
-              <>CERCA <Search className="h-3.5 w-3.5" /></>
-            )}
+            CERCA <Search className="h-3.5 w-3.5" />
           </Button>
           <Button 
             size="sm" 
@@ -1220,81 +965,37 @@ const Index = () => {
                   <SelectTrigger className="h-9 flex-1 max-w-[300px]">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[400px] overflow-y-auto">
-                    <SelectItem value="nessuno">Tutti i bookmakers</SelectItem>
-                    <SelectItem value="888sport">888sport</SelectItem>
-                    <SelectItem value="admiral">Admiral</SelectItem>
+                  <SelectContent>
+                    <SelectItem value="nessuno">Nessuno</SelectItem>
                     <SelectItem value="bet365">Bet365</SelectItem>
-                    <SelectItem value="betfair">Betfair</SelectItem>
-                    <SelectItem value="betflag">Betflag</SelectItem>
-                    <SelectItem value="betsson">Betsson</SelectItem>
-                    <SelectItem value="better">Better</SelectItem>
-                    <SelectItem value="betway">Betway</SelectItem>
-                    <SelectItem value="eurobet">Eurobet</SelectItem>
-                    <SelectItem value="goldbet">Goldbet</SelectItem>
-                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
-                    <SelectItem value="netbet">NetBet</SelectItem>
-                    <SelectItem value="sisal">Sisal</SelectItem>
                     <SelectItem value="snai">Snai</SelectItem>
-                    <SelectItem value="unibet">Unibet</SelectItem>
-                    <SelectItem value="williamhill">William Hill</SelectItem>
+                    <SelectItem value="sisal">Sisal</SelectItem>
+                    <SelectItem value="lottomatica">Lottomatica</SelectItem>
+                    <SelectItem value="goldbet">Goldbet</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Row 2: Bookmakers Secondari */}
+              {/* Row 2: Bookmaker Secondari */}
               <div className="flex items-center gap-3">
-                <div className="text-sm font-semibold text-white bg-[#29B6F6] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center">
-                  Bookmakers Secondari
+                <div className="text-sm font-semibold text-white bg-[#e89fad] px-3 py-1 rounded whitespace-nowrap w-[170px] flex items-center justify-center">
+                  Bookmaker Secondari
                 </div>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      className="h-9 w-[400px] justify-start text-left font-normal"
-                    >
-                      {trevieFilters.bookmakersSecondari.length === 0 
-                        ? "Nessuno" 
-                        : `${trevieFilters.bookmakersSecondari.length} selezionati`}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[400px] p-4 max-h-[300px] overflow-y-auto" align="start">
-                    <div className="space-y-2">
-                      {[
-                        "888sport", "admiral", "bet365", "betfair", "betflag", "betsson", 
-                        "better", "betway", "eurobet", "goldbet", "lottomatica", "netbet", 
-                        "planetwin365", "sisal", "snai", "unibet", "williamhill"
-                      ].map((bookmaker) => (
-                        <div key={bookmaker} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`book-${bookmaker}`}
-                            checked={trevieFilters.bookmakersSecondari.includes(bookmaker)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setTrevieFilters({
-                                  ...trevieFilters,
-                                  bookmakersSecondari: [...trevieFilters.bookmakersSecondari, bookmaker]
-                                });
-                              } else {
-                                setTrevieFilters({
-                                  ...trevieFilters,
-                                  bookmakersSecondari: trevieFilters.bookmakersSecondari.filter(b => b !== bookmaker)
-                                });
-                              }
-                            }}
-                            className="border-border"
-                          />
-                          <label 
-                            htmlFor={`book-${bookmaker}`} 
-                            className="text-sm cursor-pointer capitalize"
-                          >
-                            {bookmaker === "planetwin365" ? "Planetwin365" : bookmaker.charAt(0).toUpperCase() + bookmaker.slice(1)}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                <MultiSelect
+                  options={[
+                    { value: "sisal", label: "Sisal" },
+                    { value: "bet365", label: "Bet365" },
+                    { value: "lottomatica", label: "Lottomatica" },
+                    { value: "goldbet", label: "Goldbet" },
+                    { value: "planetwin365", label: "Planetwin365" },
+                    { value: "snai", label: "Snai" },
+                    { value: "eurobet", label: "Eurobet" },
+                    { value: "betfair", label: "Betfair" },
+                  ]}
+                  selected={trevieFilters.bookmakersSecondari}
+                  onChange={(selected) => setTrevieFilters({...trevieFilters, bookmakersSecondari: selected})}
+                  className="flex-1 max-w-[300px]"
+                />
                 <Button 
                   variant="outline" 
                   size="sm" 
@@ -1549,44 +1250,43 @@ const Index = () => {
           ) : null}
         </div>
 
-        {/* Results for different tabs */}
+        {/* Results placeholder for different tabs */}
         {activeTab === "singola" && (
-          <>
+          <div className="mt-6">
             <MatchedBettingResults 
-              data={oddsData} 
+              data={null} 
               filters={singolaFilters}
               commission={parseFloat(betfairCommission.replace('%', '').replace(',', '.'))}
-              loading={oddsLoading} 
-              error={oddsError} 
+              loading={false} 
+              error={null} 
             />
-            {/* Fallback: mostra sempre la lista quote per garantire visibilità dei risultati */}
             <div className="mt-6">
-              <OddsResults data={oddsData} loading={oddsLoading} error={oddsError} />
+              <OddsResults data={null} loading={false} error={null} />
             </div>
-          </>
+          </div>
         )}
 
         {activeTab === "multipla" && (
           <MultipleMatchedBettingResults 
-            data={oddsData} 
+            data={null} 
             filters={multiplaFilters}
             commission={parseFloat(betfairCommission.replace('%', '').replace(',', '.'))}
-            loading={oddsLoading} 
-            error={oddsError} 
+            loading={false} 
+            error={null} 
           />
         )}
 
         {activeTab === "trevie" && (
           <ThreeWayArbitrageResults 
-            data={oddsData} 
+            data={null} 
             filters={trevieFilters}
-            loading={oddsLoading} 
-            error={oddsError} 
+            loading={false} 
+            error={null} 
           />
         )}
 
         {activeTab === "bestodds" && (
-          <OddsResults data={oddsData} loading={oddsLoading} error={oddsError} />
+          <OddsResults data={null} loading={false} error={null} />
         )}
 
         {activeTab === "betfairlive" && (
@@ -1595,14 +1295,7 @@ const Index = () => {
 
         {activeTab === "comparatore" && (
           <div className="mt-6">
-            {comparatorLoading && <p className="text-center text-muted-foreground">Caricamento...</p>}
-            {comparatorError && <p className="text-center text-destructive">Errore: {comparatorError}</p>}
-            {!comparatorLoading && !comparatorError && comparatorData && (
-              <OddsComparator data={comparatorData} />
-            )}
-            {!comparatorLoading && !comparatorError && !comparatorData && (
-              <p className="text-center text-muted-foreground mt-8">Seleziona i filtri e clicca su CERCA per visualizzare il comparatore quote</p>
-            )}
+            <p className="text-center text-muted-foreground mt-8">Seleziona i filtri e clicca su CERCA per visualizzare il comparatore quote</p>
           </div>
         )}
 
