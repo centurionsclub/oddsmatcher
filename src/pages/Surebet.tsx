@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,40 +14,9 @@ export default function Surebet() {
   const [market, setMarket] = useState("1X2");
   const [minProfit, setMinProfit] = useState("0.5");
   const [budget, setBudget] = useState("100");
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const { data: result, error: functionError } = await supabase.functions.invoke('surebet-finder', {
-        body: {
-          sport,
-          market,
-          minProfit: parseFloat(minProfit.replace(',', '.')),
-          budget: parseFloat(budget.replace(',', '.'))
-        }
-      });
-
-      if (functionError) throw functionError;
-
-      if (result.success) {
-        setData(result);
-        toast.success(`Trovate ${result.count} opportunità di surebet!`);
-      } else {
-        throw new Error(result.error || 'Errore nella ricerca');
-      }
-
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Errore nella ricerca delle surebet';
-      setError(errorMsg);
-      toast.error(errorMsg);
-    } finally {
-      setLoading(false);
-    }
+  const handleSearch = () => {
+    toast.info("Funzionalità di ricerca non attiva - solo frontend");
   };
 
   return (
@@ -134,12 +102,11 @@ export default function Surebet() {
 
           <Button 
             onClick={handleSearch} 
-            disabled={loading}
             className="w-full md:w-auto"
             size="lg"
           >
             <Search className="mr-2 h-5 w-5" />
-            {loading ? 'Ricerca in corso...' : 'Cerca Surebet'}
+            Cerca Surebet
           </Button>
         </Card>
 
@@ -160,11 +127,11 @@ export default function Surebet() {
           </div>
         </Card>
 
-        {/* Results */}
+        {/* Results - empty state */}
         <SurebetResults 
-          data={data?.surebets ? { arbs: data.surebets } : null}
-          loading={loading}
-          error={error}
+          data={null}
+          loading={false}
+          error={null}
         />
       </div>
     </div>
