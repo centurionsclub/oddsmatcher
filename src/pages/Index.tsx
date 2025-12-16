@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DecimalInput } from "@/components/ui/decimal-input";
@@ -12,15 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { ArrowUp, RefreshCw, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Save, X, Search } from "lucide-react";
+import { ArrowUp, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Save, X, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OddsResults } from "@/components/OddsResults";
 import { MatchedBettingResults } from "@/components/MatchedBettingResults";
 import { MultipleMatchedBettingResults } from "@/components/MultipleMatchedBettingResults";
 import { ThreeWayArbitrageResults } from "@/components/ThreeWayArbitrageResults";
-import { BetfairQuotesTable } from "@/components/BetfairQuotesTable";
-import { OddsComparator } from "@/components/OddsComparator";
-import { OddsAlerts } from "@/components/OddsAlerts";
 import logoCenturion from "@/assets/logo_centurion_new.png";
 
 const Index = () => {
@@ -95,12 +91,6 @@ const Index = () => {
     partita: "",
   });
 
-  // Stati per COMPARATORE
-  const [comparatoreFilters, setComparatoreFilters] = useState({
-    sport: "calcio",
-    mercato: "1X2",
-    campionato: "",
-  });
 
   const handlePulisci = () => {
     if (activeTab === "singola") {
@@ -158,12 +148,6 @@ const Index = () => {
       setBestOddsFilters({
         mercato: "nessuno",
         partita: "",
-      });
-    } else if (activeTab === "comparatore") {
-      setComparatoreFilters({
-        sport: "calcio",
-        mercato: "1X2",
-        campionato: "",
       });
     }
     toast({
@@ -257,9 +241,6 @@ const Index = () => {
     { id: "multipla", label: "MULTIPLA" },
     { id: "trevie", label: "TRE VIE" },
     { id: "bestodds", label: "BEST ODDS" },
-    { id: "betfairlive", label: "BETFAIR LIVE" },
-    { id: "comparatore", label: "COMPARATORE" },
-    { id: "alert", label: "ALERT" },
   ];
 
   return (
@@ -383,18 +364,6 @@ const Index = () => {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          
-          {/* Link to dedicated Surebet page */}
-          <Link to="/surebet">
-            <Button 
-              variant="default"
-              size="sm" 
-              className="gap-2 text-sm font-medium bg-primary hover:bg-primary-hover"
-            >
-              <Trophy className="h-3.5 w-3.5" />
-              SUREBET FINDER
-            </Button>
-          </Link>
         </div>
 
         {/* Tabs */}
@@ -1195,58 +1164,6 @@ const Index = () => {
                 />
               </div>
             </>
-          ) : activeTab === "comparatore" ? (
-            <>
-              {/* Row 1: Sport */}
-              <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
-                  <Trophy className="h-4 w-4" />
-                  Sport
-                </div>
-                <Select value={comparatoreFilters.sport} onValueChange={(value) => setComparatoreFilters({...comparatoreFilters, sport: value})}>
-                  <SelectTrigger className="h-9 flex-1 max-w-[300px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="calcio">⚽ Calcio</SelectItem>
-                    <SelectItem value="tennis">🎾 Tennis</SelectItem>
-                    <SelectItem value="basket">🏀 Basket</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Row 2: Mercato */}
-              <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center gap-2">
-                  <ShoppingCart className="h-4 w-4" />
-                  Mercato
-                </div>
-                <Select value={comparatoreFilters.mercato} onValueChange={(value) => setComparatoreFilters({...comparatoreFilters, mercato: value})}>
-                  <SelectTrigger className="h-9 flex-1 max-w-[300px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1X2">⚽ 1X2</SelectItem>
-                    <SelectItem value="under25">⚽ Under 2.5</SelectItem>
-                    <SelectItem value="over25">⚽ Over 2.5</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Row 3: Campionato */}
-              <div className="flex items-center gap-3">
-                <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
-                  Campionato
-                </div>
-                <Input 
-                  type="text" 
-                  placeholder="Es: Serie A, Premier League..."
-                  value={comparatoreFilters.campionato}
-                  onChange={(e) => setComparatoreFilters({...comparatoreFilters, campionato: e.target.value})}
-                  className="h-9 flex-1 max-w-[300px] placeholder:text-muted-foreground/60"
-                />
-              </div>
-            </>
           ) : null}
         </div>
 
@@ -1289,28 +1206,6 @@ const Index = () => {
           <OddsResults data={null} loading={false} error={null} />
         )}
 
-        {activeTab === "betfairlive" && (
-          <BetfairQuotesTable />
-        )}
-
-        {activeTab === "comparatore" && (
-          <div className="mt-6">
-            <p className="text-center text-muted-foreground mt-8">Seleziona i filtri e clicca su CERCA per visualizzare il comparatore quote</p>
-          </div>
-        )}
-
-        {activeTab === "alert" && (
-          <div className="mt-6">
-            <div className="bg-card rounded-xl border border-border p-6">
-              <h2 className="text-xl font-semibold mb-4">Alert Quote Anomale</h2>
-              <p className="text-muted-foreground mb-6">
-                Gli alert vengono generati automaticamente quando vengono rilevate quote significativamente più alte della media. 
-                Riceverai notifiche in tempo reale quando nuovi alert vengono creati.
-              </p>
-            </div>
-            <OddsAlerts />
-          </div>
-        )}
       </div>
     </div>
   );
