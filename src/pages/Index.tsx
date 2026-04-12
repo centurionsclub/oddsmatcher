@@ -481,21 +481,18 @@ const Index = () => {
                 <MultiSelect
                   options={[
                     { value: "888sport", label: "888sport" },
-                    { value: "admiral", label: "Admiral" },
-                    { value: "bet365", label: "Bet365" },
-                    { value: "betfair", label: "Betfair" },
-                    { value: "betflag", label: "Betflag" },
-                    { value: "betsson", label: "Betsson" },
-                    { value: "better", label: "Better" },
-                    { value: "betway", label: "Betway" },
-                    { value: "eurobet", label: "Eurobet" },
-                    { value: "goldbet", label: "Goldbet" },
-                    { value: "lottomatica", label: "Lottomatica" },
-                    { value: "netbet", label: "NetBet" },
-                    { value: "sisal", label: "Sisal" },
-                    { value: "snai", label: "Snai" },
-                    { value: "unibet", label: "Unibet" },
-                    { value: "williamhill", label: "William Hill" },
+                    { value: "bet365.it", label: "Bet365" },
+                    { value: "BetflagIT", label: "Betflag" },
+                    { value: "BetssonIT", label: "Betsson" },
+                    { value: "bwin.it", label: "Bwin" },
+                    { value: "Eurobet.it", label: "Eurobet" },
+                    { value: "GoldBet", label: "GoldBet" },
+                    { value: "Lottomatica", label: "Lottomatica" },
+                    { value: "Netwin", label: "Netwin" },
+                    { value: "Planetwin365", label: "Planetwin365" },
+                    { value: "Sisal", label: "Sisal" },
+                    { value: "SNAI", label: "SNAI" },
+                    { value: "WilliamHill.it", label: "William Hill" },
                   ]}
                   selected={singolaFilters.bookmaker}
                   onChange={(selected) => setSingolaFilters({...singolaFilters, bookmaker: selected})}
@@ -627,14 +624,22 @@ const Index = () => {
                 <div className="text-sm font-normal text-foreground bg-secondary px-3 py-1 rounded whitespace-nowrap w-[120px] flex items-center justify-center">
                   Campionato
                 </div>
-                <Select value={singolaFilters.campionato} onValueChange={(value) => setSingolaFilters({...singolaFilters, campionato: value})}>
+                <Select value={singolaFilters.campionato} onValueChange={(value) => setSingolaFilters({...singolaFilters, campionato: value === "tutti" ? "" : value})}>
                   <SelectTrigger className="h-9 flex-1 max-w-[300px]">
                     <SelectValue placeholder="Cerca Campionato..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="seriea">Serie A</SelectItem>
-                    <SelectItem value="premierleague">Premier League</SelectItem>
-                    <SelectItem value="laliga">La Liga</SelectItem>
+                    <SelectItem value="tutti">Tutti i campionati</SelectItem>
+                    <SelectItem value="Serie A">Serie A</SelectItem>
+                    <SelectItem value="Serie B">Serie B</SelectItem>
+                    <SelectItem value="Premier League">Premier League</SelectItem>
+                    <SelectItem value="La Liga">La Liga</SelectItem>
+                    <SelectItem value="Bundesliga">Bundesliga</SelectItem>
+                    <SelectItem value="Ligue 1">Ligue 1</SelectItem>
+                    <SelectItem value="Champions League">Champions League</SelectItem>
+                    <SelectItem value="Europa League">Europa League</SelectItem>
+                    <SelectItem value="Conference League">Conference League</SelectItem>
+                    <SelectItem value="Coppa Italia">Coppa Italia</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

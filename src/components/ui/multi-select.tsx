@@ -1,9 +1,8 @@
 import * as React from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 
 interface MultiSelectProps {
   options: { value: string; label: string }[];
@@ -22,24 +21,29 @@ export function MultiSelect({
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false);
 
-  const handleToggle = (value: string) => {
-    if (value === "tutti") {
-      // Se seleziona "tutti", deseleziona tutto
-      onChange([]);
-      return;
-    }
+  const allSelected = selected.length === options.length;
 
+  const handleToggle = (value: string) => {
     const newSelected = selected.includes(value)
       ? selected.filter((item) => item !== value)
       : [...selected, value];
-    
     onChange(newSelected);
   };
 
-  const displayText = selected.length === 0 
-    ? "Tutti i bookmakers" 
+  const handleSelectAll = () => {
+    if (allSelected) {
+      onChange([]);
+    } else {
+      onChange(options.map(o => o.value));
+    }
+  };
+
+  const displayText = selected.length === 0
+    ? "Tutti i bookmakers"
+    : allSelected
+    ? "Tutti selezionati"
     : selected.length === 1
-    ? options.find(opt => opt.value === selected[0])?.label || "Selezionati"
+    ? options.find(opt => opt.value === selected[0])?.label || "1 selezionato"
     : `${selected.length} selezionati`;
 
   return (
@@ -49,54 +53,55 @@ export function MultiSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-            className={cn(
-              "justify-between h-9 bg-background border border-border text-foreground hover:bg-background/90",
-              className
-            )}
+          className={cn(
+            "justify-between h-9 bg-background border border-border text-foreground hover:bg-background/90",
+            className
+          )}
         >
           {displayText}
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent 
-        className="w-[300px] p-0 z-50" 
+      <PopoverContent
+        className="w-[300px] p-0 z-50"
         align="start"
         side="bottom"
         sideOffset={4}
         avoidCollisions={false}
       >
-        <div className="max-h-[400px] overflow-y-auto">
-          <div className="p-2">
-            {/* Opzione "Tutti" */}
-            <div
-              className="flex items-center space-x-2 px-2 py-2 hover:bg-secondary/50 cursor-pointer rounded"
-              onClick={() => onChange([])}
-            >
-              <Checkbox
-                checked={selected.length === 0}
-                onCheckedChange={() => onChange([])}
-              />
-              <span className="text-sm font-medium">Tutti i bookmakers</span>
-            </div>
-            
-            {/* Separatore */}
-            <div className="my-1 h-px bg-border" />
-            
-            {/* Opzioni multiple */}
-            {options.map((option) => (
+        <div className="max-h-[400px] overflow-y-auto p-2">
+          {/* Seleziona Tutti */}
+          <div
+            className={cn(
+              "flex items-center px-3 py-1.5 cursor-pointer rounded text-sm font-medium mb-1",
+              allSelected
+                ? "bg-[#29B6F6] text-white"
+                : "hover:bg-secondary/50"
+            )}
+            onClick={handleSelectAll}
+          >
+            Seleziona Tutti
+          </div>
+
+          <div className="my-1 h-px bg-border" />
+
+          {options.map((option) => {
+            const isSelected = selected.includes(option.value);
+            return (
               <div
                 key={option.value}
-                className="flex items-center space-x-2 px-2 py-2 hover:bg-secondary/50 cursor-pointer rounded"
+                className={cn(
+                  "flex items-center px-3 py-1.5 cursor-pointer rounded text-sm",
+                  isSelected
+                    ? "bg-[#29B6F6] text-white"
+                    : "hover:bg-secondary/50"
+                )}
                 onClick={() => handleToggle(option.value)}
               >
-                <Checkbox
-                  checked={selected.includes(option.value)}
-                  onCheckedChange={() => handleToggle(option.value)}
-                />
-                <span className="text-sm">{option.label}</span>
+                {option.label}
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       </PopoverContent>
     </Popover>

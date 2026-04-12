@@ -1,7 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ExternalLink } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface OddsData {
   bookmaker: string;
@@ -317,19 +316,7 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
   };
 
   return (
-    <div className="mt-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Opportunità Matched Betting</h3>
-        <div className="text-sm text-muted-foreground">
-          {data.metadata && (
-            <span className="mr-4">
-              {data.metadata.bookmakers} bookmaker · {data.metadata.totalResults} quote · {data.metadata.durationMs}ms
-            </span>
-          )}
-          Trovate {opportunities.length} opportunità
-        </div>
-      </div>
-
+    <div className="mt-4">
       {opportunities.length === 0 ? (
         <div className="flex items-center justify-center py-8">
           <div className="text-muted-foreground">
@@ -338,55 +325,57 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
-          <Table>
+          <Table className="text-xs">
             <TableHeader>
               <TableRow>
-                <TableHead>Evento</TableHead>
-                <TableHead>Campionato</TableHead>
-                <TableHead>Data/Ora</TableHead>
-                <TableHead>Bookmaker</TableHead>
-                <TableHead>Exchange</TableHead>
-                <TableHead>Mercato</TableHead>
-                <TableHead className="text-right">Quota Back</TableHead>
-                <TableHead className="text-right">Quota Lay</TableHead>
-                <TableHead className="text-right">Rating %</TableHead>
-                <TableHead className="text-right">Perdita €</TableHead>
-                <TableHead className="text-right">Punta €</TableHead>
-                <TableHead className="text-right">Banca €</TableHead>
-                <TableHead className="text-right">Passivo €</TableHead>
+                <TableHead className="py-2 px-2">Evento</TableHead>
+                <TableHead className="py-2 px-2">Lega</TableHead>
+                <TableHead className="py-2 px-2">Data/Ora</TableHead>
+                <TableHead className="py-2 px-2">Bookmaker</TableHead>
+                <TableHead className="py-2 px-2">Controparte</TableHead>
+                <TableHead className="py-2 px-2">Mercato</TableHead>
+                <TableHead className="py-2 px-2 text-right">Back</TableHead>
+                <TableHead className="py-2 px-2 text-right">Lay</TableHead>
+                <TableHead className="py-2 px-2 text-right">Rating</TableHead>
+                <TableHead className="py-2 px-2 text-right">Perdita</TableHead>
+                <TableHead className="py-2 px-2 text-right">Punta</TableHead>
+                <TableHead className="py-2 px-2 text-right">Banca</TableHead>
+                <TableHead className="py-2 px-2 text-right">Passivo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {opportunities.map((opp, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium max-w-[200px] truncate">{opp.eventName}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="text-xs">{opp.league}</Badge>
+              {opportunities.slice(0, 100).map((opp, index) => (
+                <TableRow key={index} className="h-8">
+                  <TableCell className="py-1 px-2 font-medium max-w-[150px] truncate">{opp.eventName}</TableCell>
+                  <TableCell className="py-1 px-2">
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{opp.league}</Badge>
                   </TableCell>
-                  <TableCell className="text-sm whitespace-nowrap">{formatDate(opp.eventTime)}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{opp.bookmaker}</Badge>
+                  <TableCell className="py-1 px-2 whitespace-nowrap">{formatDate(opp.eventTime)}</TableCell>
+                  <TableCell className="py-1 px-2">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{opp.bookmaker}</Badge>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={opp.exchange.includes('(book)')
-                      ? "bg-orange-500/10 text-orange-400 border-orange-500/30"
-                      : "bg-blue-500/10 text-blue-400 border-blue-500/30"
-                    }>{opp.exchange}</Badge>
+                  <TableCell className="py-1 px-2">
+                    <Badge variant="outline" className={cn(
+                      "text-[10px] px-1.5 py-0",
+                      opp.exchange.includes('(book)')
+                        ? "bg-orange-500/10 text-orange-400 border-orange-500/30"
+                        : "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                    )}>{opp.exchange}</Badge>
                   </TableCell>
-                  <TableCell className="text-sm">{opp.market}</TableCell>
-                  <TableCell className="text-right font-mono">{opp.backOdds.toFixed(2)}</TableCell>
-                  <TableCell className="text-right font-mono">{opp.layOdds.toFixed(2)}</TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant={opp.rating > -5 ? "default" : opp.rating > -8 ? "secondary" : "destructive"}>
+                  <TableCell className="py-1 px-2">{opp.market}</TableCell>
+                  <TableCell className="py-1 px-2 text-right font-mono">{opp.backOdds.toFixed(2)}</TableCell>
+                  <TableCell className="py-1 px-2 text-right font-mono">{opp.layOdds.toFixed(2)}</TableCell>
+                  <TableCell className="py-1 px-2 text-right">
+                    <Badge variant={opp.rating > -5 ? "default" : opp.rating > -8 ? "secondary" : "destructive"} className="text-[10px] px-1.5 py-0">
                       {opp.rating.toFixed(2)}%
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-red-400">
+                  <TableCell className="py-1 px-2 text-right font-mono text-red-400">
                     €{opp.profit.toFixed(2)}
                   </TableCell>
-                  <TableCell className="text-right font-mono">€{opp.backStake.toFixed(2)}</TableCell>
-                  <TableCell className="text-right font-mono">€{opp.layStake.toFixed(2)}</TableCell>
-                  <TableCell className="text-right font-mono text-red-400">
+                  <TableCell className="py-1 px-2 text-right font-mono">€{opp.backStake.toFixed(2)}</TableCell>
+                  <TableCell className="py-1 px-2 text-right font-mono">€{opp.layStake.toFixed(2)}</TableCell>
+                  <TableCell className="py-1 px-2 text-right font-mono text-red-400">
                     €{opp.liability.toFixed(2)}
                   </TableCell>
                 </TableRow>
