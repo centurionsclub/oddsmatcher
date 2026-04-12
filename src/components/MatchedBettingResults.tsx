@@ -305,7 +305,21 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
     });
 
     // Sort by rating (closest to 0 = best)
-    return opportunities.sort((a, b) => b.rating - a.rating);
+    let sorted = opportunities.sort((a, b) => b.rating - a.rating);
+
+    // If specific bookmakers are selected, show only opportunities
+    // where the "back" bookmaker is one of the selected ones
+    const selectedBookmakers: string[] = filters.bookmaker || [];
+    if (selectedBookmakers.length > 0) {
+      sorted = sorted.filter(opp =>
+        selectedBookmakers.some(bm =>
+          opp.bookmaker.toLowerCase().includes(bm.toLowerCase()) ||
+          bm.toLowerCase().includes(opp.bookmaker.toLowerCase())
+        )
+      );
+    }
+
+    return sorted;
   };
 
   const opportunities = calculateOpportunities();

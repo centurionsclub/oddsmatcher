@@ -49,14 +49,18 @@ export function useOddsSearch() {
         ? "tutti"
         : (filters.mercato || "tutti");
 
+      // Always fetch ALL bookmakers — the bookmaker filter is applied
+      // client-side in MatchedBettingResults to show opportunities where
+      // the selected bookmaker is the "back" side. We need all other
+      // bookmakers' odds to calculate counter-bets.
       const { data: responseData, error: fnError } = await supabase.functions.invoke(
         "odds-scraper",
         {
           body: {
             sport,
             market,
-            bookmakers: filters.bookmaker || [],
-            exchange: filters.exchange || [],
+            bookmakers: [],
+            exchange: [],
             partita: filters.partita || "",
             campionato: filters.campionato || "",
           },
