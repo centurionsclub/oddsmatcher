@@ -102,39 +102,56 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
     const bookmakerOdds = data.data.filter(odd => !isExchange(odd.bookmaker));
     const exchangeOdds = data.data.filter(odd => isExchange(odd.bookmaker));
 
-    // For each bookmaker event, find matching exchange event
-    bookmakerOdds.forEach(bmEvent => {
-      const normalizedBm = normalizeEventName(bmEvent.eventName);
+    // Helper: get outcomes for a market
+    const getOutcomes = (event: OddsData): Array<{ key: string; label: string }> => {
+      const outcomes: Array<{ key: string; label: string }> = [];
+      if (event.market === '1X2' || event.market === 'h2h') {
+        if (event.odds.home) outcomes.push({ key: 'home', label: '1' });
+        if (event.odds.draw) outcomes.push({ key: 'draw', label: 'X' });
+        if (event.odds.away) outcomes.push({ key: 'away', label: '2' });
+      } else if (event.market === '12') {
+        if (event.odds.home) outcomes.push({ key: 'home', label: '1' });
+        if (event.odds.away) outcomes.push({ key: 'away', label: '2' });
+      } else {
+        if (event.odds.over) outcomes.push({ key: 'over', label: 'Over' });
+        if (event.odds.under) outcomes.push({ key: 'under', label: 'Under' });
+      }
+      return outcomes;
+    };
 
-      // Find matching exchange events
-      const matchingExchanges = exchangeOdds.filter(exEvent => {
-        const normalizedEx = normalizeEventName(exEvent.eventName);
-        return normalizedBm === normalizedEx ||
-          normalizedBm.includes(normalizedEx.substring(0, 10)) ||
-          normalizedEx.includes(normalizedBm.substring(0, 10));
+    // Helper: apply user filters
+    const passesFilters = (backOdds: number, eventName: string): boolean => {
+      const quotaMin = parseFloat((filters.quotaMinima || '0').replace(',', '.'));
+      const quotaMax = parseFloat((filters.quotaMassima || '0').replace(',', '.'));
+      if (quotaMin > 0 && backOdds < quotaMin) return false;
+      if (quotaMax > 0 && backOdds > quotaMax) return false;
+      if (filters.partita && !eventName.toLowerCase().includes(filters.partita.toLowerCase())) return false;
+      return true;
+    };
+
+    // Helper: find matching events by name
+    const findMatchingEvents = (sourceEvent: OddsData, pool: OddsData[]): OddsData[] => {
+      const normalized = normalizeEventName(sourceEvent.eventName);
+      return pool.filter(ev => {
+        const norm = normalizeEventName(ev.eventName);
+        return normalized === norm ||
+          normalized.includes(norm.substring(0, 10)) ||
+          norm.includes(normalized.substring(0, 10));
       });
+    };
 
+    // ── 1) BOOK vs EXCHANGE (lay classico) ────────────────────────
+    bookmakerOdds.forEach(bmEvent => {
+      const matchingExchanges = findMatchingEvents(bmEvent, exchangeOdds);
       if (matchingExchanges.length === 0) return;
 
-      // Determine outcomes based on market
-      const outcomes: Array<{ key: string; label: string }> = [];
-      if (bmEvent.market === '1X2' || bmEvent.market === 'h2h') {
-        if (bmEvent.odds.home) outcomes.push({ key: 'home', label: '1' });
-        if (bmEvent.odds.draw) outcomes.push({ key: 'draw', label: 'X' });
-        if (bmEvent.odds.away) outcomes.push({ key: 'away', label: '2' });
-      } else if (bmEvent.market === '12') {
-        if (bmEvent.odds.home) outcomes.push({ key: 'home', label: '1' });
-        if (bmEvent.odds.away) outcomes.push({ key: 'away', label: '2' });
-      } else {
-        if (bmEvent.odds.over) outcomes.push({ key: 'over', label: 'Over' });
-        if (bmEvent.odds.under) outcomes.push({ key: 'under', label: 'Under' });
-      }
+      const outcomes = getOutcomes(bmEvent);
 
       outcomes.forEach(outcome => {
         const backOdds = bmEvent.odds[outcome.key];
         if (!backOdds || backOdds <= 1) return;
+        if (!passesFilters(backOdds, bmEvent.eventName)) return;
 
-        // Find best lay odds across all matching exchanges
         let bestLayOdds = Infinity;
         let bestExchange = '';
 
@@ -148,27 +165,12 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
 
         if (bestLayOdds === Infinity) return;
 
-        // Calculate lay stake and liability
         const layStake = (stake * backOdds) / (bestLayOdds - commissionRate * (bestLayOdds - 1));
         const liability = layStake * (bestLayOdds - 1);
-
-        // Calculate profit/loss for both scenarios
-        const backWin = stake * (backOdds - 1);
-        const layWin = layStake * (1 - commissionRate);
-
-        const profitIfWin = backWin - liability;
-        const profitIfLose = layWin - stake;
-
-        // Rating = qualifying loss percentage
+        const profitIfWin = stake * (backOdds - 1) - liability;
+        const profitIfLose = layStake * (1 - commissionRate) - stake;
         const averageProfit = (profitIfWin + profitIfLose) / 2;
         const rating = (averageProfit / stake) * 100;
-
-        // Apply filters
-        const quotaMin = parseFloat((filters.quotaMinima || '0').replace(',', '.'));
-        const quotaMax = parseFloat((filters.quotaMassima || '0').replace(',', '.'));
-        if (quotaMin > 0 && backOdds < quotaMin) return;
-        if (quotaMax > 0 && backOdds > quotaMax) return;
-        if (filters.partita && !bmEvent.eventName.toLowerCase().includes(filters.partita.toLowerCase())) return;
 
         opportunities.push({
           bookmaker: bmEvent.bookmaker,
@@ -187,6 +189,120 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
           liability,
         });
       });
+    });
+
+    // ── 2) BOOK vs BOOK (contropuntata) ───────────────────────────
+    // For 2-way markets: back outcome A at book1, back opposite at book2
+    // For 3-way (1X2): back "1" at book1, best combo of "X"+"2" at book2
+    // Simplified: for each pair of bookmakers on the same event,
+    // find the best counter-bet on opposite outcomes
+    const eventGroups = new Map<string, OddsData[]>();
+    bookmakerOdds.forEach(bm => {
+      const key = normalizeEventName(bm.eventName) + '|' + bm.market;
+      if (!eventGroups.has(key)) eventGroups.set(key, []);
+      eventGroups.get(key)!.push(bm);
+    });
+
+    eventGroups.forEach(group => {
+      if (group.length < 2) return;
+
+      const outcomes = getOutcomes(group[0]);
+
+      // For 2-way markets (Over/Under, 12): back one side, counter the other
+      if (outcomes.length === 2) {
+        const [outcomeA, outcomeB] = outcomes;
+
+        for (let i = 0; i < group.length; i++) {
+          for (let j = 0; j < group.length; j++) {
+            if (i === j) continue;
+            if (group[i].bookmaker === group[j].bookmaker) continue;
+
+            const backOdds = group[i].odds[outcomeA.key];
+            const counterOdds = group[j].odds[outcomeB.key];
+            if (!backOdds || backOdds <= 1 || !counterOdds || counterOdds <= 1) continue;
+            if (!passesFilters(backOdds, group[i].eventName)) continue;
+
+            // Counter stake: to equalize profit/loss
+            const counterStake = (stake * backOdds - stake) / (counterOdds - 1);
+            const totalInvested = stake + counterStake;
+
+            const profitIfBack = stake * (backOdds - 1) - counterStake;
+            const profitIfCounter = counterStake * (counterOdds - 1) - stake;
+            const averageProfit = (profitIfBack + profitIfCounter) / 2;
+            const rating = (averageProfit / stake) * 100;
+
+            opportunities.push({
+              bookmaker: group[i].bookmaker,
+              exchange: `${group[j].bookmaker} (book)`,
+              eventName: group[i].eventName,
+              league: group[i].league,
+              eventTime: group[i].eventTime,
+              market: `${group[i].market} - ${outcomeA.label}/${outcomeB.label}`,
+              outcome: `${outcomeA.label} vs ${outcomeB.label}`,
+              backOdds,
+              layOdds: counterOdds,
+              rating,
+              profit: averageProfit,
+              backStake: stake,
+              layStake: counterStake,
+              liability: totalInvested,
+            });
+          }
+        }
+      }
+
+      // For 1X2: back one outcome, counter with the single best opposite
+      if (outcomes.length === 3) {
+        for (const backOutcome of outcomes) {
+          const opposites = outcomes.filter(o => o.key !== backOutcome.key);
+
+          for (let i = 0; i < group.length; i++) {
+            const backOdds = group[i].odds[backOutcome.key];
+            if (!backOdds || backOdds <= 1) continue;
+            if (!passesFilters(backOdds, group[i].eventName)) continue;
+
+            // Find the best single opposite outcome at another bookmaker
+            for (const oppOutcome of opposites) {
+              let bestCounterOdds = 0;
+              let bestCounterBook = '';
+
+              for (let j = 0; j < group.length; j++) {
+                if (i === j || group[i].bookmaker === group[j].bookmaker) continue;
+                const cOdds = group[j].odds[oppOutcome.key];
+                if (cOdds && cOdds > bestCounterOdds) {
+                  bestCounterOdds = cOdds;
+                  bestCounterBook = group[j].bookmaker;
+                }
+              }
+
+              if (bestCounterOdds <= 1) continue;
+
+              const counterStake = (stake * backOdds - stake) / (bestCounterOdds - 1);
+              const profitIfBack = stake * (backOdds - 1) - counterStake;
+              const profitIfCounter = counterStake * (bestCounterOdds - 1) - stake;
+              const averageProfit = (profitIfBack + profitIfCounter) / 2;
+              const rating = (averageProfit / stake) * 100;
+
+              opportunities.push({
+                bookmaker: group[i].bookmaker,
+                exchange: `${bestCounterBook} (book)`,
+                eventName: group[i].eventName,
+                league: group[i].league,
+                eventTime: group[i].eventTime,
+                market: `${group[i].market} - ${backOutcome.label}/${oppOutcome.label}`,
+                outcome: `${backOutcome.label} vs ${oppOutcome.label}`,
+                backOdds,
+                layOdds: bestCounterOdds,
+                rating,
+                profit: averageProfit,
+                backStake: stake,
+                layStake: counterStake,
+                liability: stake + counterStake,
+              });
+            }
+          }
+        }
+      }
     });
 
     // Sort by rating (closest to 0 = best)
@@ -252,7 +368,10 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
                     <Badge variant="outline">{opp.bookmaker}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30">{opp.exchange}</Badge>
+                    <Badge variant="outline" className={opp.exchange.includes('(book)')
+                      ? "bg-orange-500/10 text-orange-400 border-orange-500/30"
+                      : "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                    }>{opp.exchange}</Badge>
                   </TableCell>
                   <TableCell className="text-sm">{opp.market}</TableCell>
                   <TableCell className="text-right font-mono">{opp.backOdds.toFixed(2)}</TableCell>
