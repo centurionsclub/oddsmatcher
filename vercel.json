@@ -3,5 +3,5 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "installCommand": "npm install",
-  "ignoreCommand": "exit 0"
+  "excludeFiles": "backend/**"
 }
