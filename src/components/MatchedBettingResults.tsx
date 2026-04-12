@@ -9,21 +9,18 @@ interface OddsData {
   league: string;
   eventTime: string;
   market: string;
-  odds: {
-    home?: number;
-    draw?: number;
-    away?: number;
-    over?: number;
-    under?: number;
-  };
+  sport: string;
+  odds: Record<string, number>;
 }
 
 interface MatchedBettingOpportunity {
   bookmaker: string;
+  exchange: string;
   eventName: string;
   league: string;
   eventTime: string;
   market: string;
+  outcome: string;
   backOdds: number;
   layOdds: number;
   rating: number;
@@ -41,11 +38,29 @@ interface MatchedBettingResultsProps {
       bookmakers: number;
       durationMs: number;
     };
-  };
+  } | null;
   filters: any;
   commission: number;
   loading: boolean;
   error: string | null;
+}
+
+// Bookmaker names that are exchanges (lay odds source)
+const EXCHANGE_NAMES = [
+  'betfair exchange', 'betfair', 'betflag exchange', 'betflag',
+  'smarkets', 'betdaq', 'matchbook',
+];
+
+function isExchange(bookmaker: string): boolean {
+  return EXCHANGE_NAMES.some(ex => bookmaker.toLowerCase().includes(ex));
+}
+
+function normalizeEventName(name: string): string {
+  return name.toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[-–—]/g, '')
+    .replace(/\./g, '')
+    .replace(/'/g, '');
 }
 
 export function MatchedBettingResults({ data, filters, commission, loading, error }: MatchedBettingResultsProps) {
@@ -68,119 +83,113 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
   if (!data?.data || data.data.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-muted-foreground">Nessuna opportunità trovata. Prova a modificare i filtri.</div>
+        <div className="text-muted-foreground">
+          {data === null
+            ? "Clicca CERCA per caricare le quote."
+            : "Nessuna opportunità trovata. Prova a modificare i filtri."}
+        </div>
       </div>
     );
   }
 
-  // Calculate matched betting opportunities confrontando Sisal con Betfair
   const calculateOpportunities = (): MatchedBettingOpportunity[] => {
     const opportunities: MatchedBettingOpportunity[] = [];
     const stakeValue = parseFloat(filters.stakePunta?.toString().replace(',', '.')) || 0;
-    const stake = stakeValue > 0 ? stakeValue : 100; // Default 100€
+    const stake = stakeValue > 0 ? stakeValue : 100;
     const commissionRate = commission / 100;
 
-    // Separa i dati di Sisal e Betfair
-    const sisalOdds = data.data.filter(odd => odd.bookmaker.toLowerCase() === 'sisal');
-    const betfairOdds = data.data.filter(odd => odd.bookmaker.toLowerCase() === 'betfair');
+    // Separate bookmaker odds and exchange odds
+    const bookmakerOdds = data.data.filter(odd => !isExchange(odd.bookmaker));
+    const exchangeOdds = data.data.filter(odd => isExchange(odd.bookmaker));
 
-    console.log('Sisal events:', sisalOdds.length, 'Betfair events:', betfairOdds.length);
+    // For each bookmaker event, find matching exchange event
+    bookmakerOdds.forEach(bmEvent => {
+      const normalizedBm = normalizeEventName(bmEvent.eventName);
 
-    // Normalizza il nome dell'evento per il confronto
-    const normalizeEventName = (name: string): string => {
-      return name.toLowerCase()
-        .replace(/\s+/g, '')
-        .replace(/[-–—]/g, '')
-        .replace(/\./g, '');
-    };
-
-    // Per ogni evento Sisal, cerca il corrispondente su Betfair
-    sisalOdds.forEach(sisalEvent => {
-      const normalizedSisal = normalizeEventName(sisalEvent.eventName);
-      
-      // Trova l'evento corrispondente su Betfair
-      const betfairEvent = betfairOdds.find(bf => {
-        const normalizedBetfair = normalizeEventName(bf.eventName);
-        return normalizedSisal === normalizedBetfair || 
-               normalizedSisal.includes(normalizedBetfair.substring(0, 10)) ||
-               normalizedBetfair.includes(normalizedSisal.substring(0, 10));
+      // Find matching exchange events
+      const matchingExchanges = exchangeOdds.filter(exEvent => {
+        const normalizedEx = normalizeEventName(exEvent.eventName);
+        return normalizedBm === normalizedEx ||
+          normalizedBm.includes(normalizedEx.substring(0, 10)) ||
+          normalizedEx.includes(normalizedBm.substring(0, 10));
       });
 
-      if (!betfairEvent) {
-        console.log('No Betfair match for:', sisalEvent.eventName);
-        return;
-      }
+      if (matchingExchanges.length === 0) return;
 
-      console.log('Matched:', sisalEvent.eventName, '<=>', betfairEvent.eventName);
-
-      // Per ogni esito, calcola l'opportunità
+      // Determine outcomes based on market
       const outcomes: Array<{ key: string; label: string }> = [];
-      
-      if (sisalEvent.market === '1X2') {
-        outcomes.push(
-          { key: 'home', label: '1' },
-          { key: 'draw', label: 'X' },
-          { key: 'away', label: '2' }
-        );
+      if (bmEvent.market === '1X2' || bmEvent.market === 'h2h') {
+        if (bmEvent.odds.home) outcomes.push({ key: 'home', label: '1' });
+        if (bmEvent.odds.draw) outcomes.push({ key: 'draw', label: 'X' });
+        if (bmEvent.odds.away) outcomes.push({ key: 'away', label: '2' });
+      } else if (bmEvent.market === '12') {
+        if (bmEvent.odds.home) outcomes.push({ key: 'home', label: '1' });
+        if (bmEvent.odds.away) outcomes.push({ key: 'away', label: '2' });
       } else {
-        outcomes.push(
-          { key: 'over', label: 'Over' },
-          { key: 'under', label: 'Under' }
-        );
+        if (bmEvent.odds.over) outcomes.push({ key: 'over', label: 'Over' });
+        if (bmEvent.odds.under) outcomes.push({ key: 'under', label: 'Under' });
       }
 
       outcomes.forEach(outcome => {
-        const backOdds = sisalEvent.odds[outcome.key as keyof typeof sisalEvent.odds];
-        const layOdds = betfairEvent.odds[outcome.key as keyof typeof betfairEvent.odds];
+        const backOdds = bmEvent.odds[outcome.key];
+        if (!backOdds || backOdds <= 1) return;
 
-        if (!backOdds || !layOdds || backOdds <= 1 || layOdds <= 1) {
-          return;
-        }
+        // Find best lay odds across all matching exchanges
+        let bestLayOdds = Infinity;
+        let bestExchange = '';
 
-        // Calcola lay stake e liability
-        const layStake = (stake * backOdds) / layOdds;
-        const liability = layStake * (layOdds - 1);
+        matchingExchanges.forEach(exEvent => {
+          const layOdds = exEvent.odds[outcome.key];
+          if (layOdds && layOdds > 1 && layOdds < bestLayOdds) {
+            bestLayOdds = layOdds;
+            bestExchange = exEvent.bookmaker;
+          }
+        });
 
-        // Calcola profitto/perdita
-        // Se vince la back: +backWin - liability
-        // Se perde la back: -stake + layWin
+        if (bestLayOdds === Infinity) return;
+
+        // Calculate lay stake and liability
+        const layStake = (stake * backOdds) / (bestLayOdds - commissionRate * (bestLayOdds - 1));
+        const liability = layStake * (bestLayOdds - 1);
+
+        // Calculate profit/loss for both scenarios
         const backWin = stake * (backOdds - 1);
         const layWin = layStake * (1 - commissionRate);
-        
+
         const profitIfWin = backWin - liability;
         const profitIfLose = layWin - stake;
-        
-        // La perdita totale è la media dei due scenari (qualifying bet)
+
+        // Rating = qualifying loss percentage
         const averageProfit = (profitIfWin + profitIfLose) / 2;
-        const lossPercent = (averageProfit / stake) * 100;
+        const rating = (averageProfit / stake) * 100;
 
-        // Filtra per perdite tra -10% e -5%
-        if (lossPercent > -10 && lossPercent < -5) {
-          // Applica altri filtri
-          if (filters.quotaMinima && backOdds < parseFloat(filters.quotaMinima.replace(',', '.'))) return;
-          if (filters.quotaMassima && backOdds > parseFloat(filters.quotaMassima.replace(',', '.'))) return;
-          if (filters.partita && !sisalEvent.eventName.toLowerCase().includes(filters.partita.toLowerCase())) return;
-          if (filters.campionato && filters.campionato !== sisalEvent.league.toLowerCase()) return;
+        // Apply filters
+        const quotaMin = parseFloat((filters.quotaMinima || '0').replace(',', '.'));
+        const quotaMax = parseFloat((filters.quotaMassima || '0').replace(',', '.'));
+        if (quotaMin > 0 && backOdds < quotaMin) return;
+        if (quotaMax > 0 && backOdds > quotaMax) return;
+        if (filters.partita && !bmEvent.eventName.toLowerCase().includes(filters.partita.toLowerCase())) return;
 
-          opportunities.push({
-            bookmaker: 'Sisal',
-            eventName: sisalEvent.eventName,
-            league: sisalEvent.league,
-            eventTime: sisalEvent.eventTime,
-            market: `${sisalEvent.market} - ${outcome.label}`,
-            backOdds,
-            layOdds,
-            rating: lossPercent,
-            profit: averageProfit,
-            backStake: stake,
-            layStake,
-            liability,
-          });
-        }
+        opportunities.push({
+          bookmaker: bmEvent.bookmaker,
+          exchange: bestExchange,
+          eventName: bmEvent.eventName,
+          league: bmEvent.league,
+          eventTime: bmEvent.eventTime,
+          market: `${bmEvent.market} - ${outcome.label}`,
+          outcome: outcome.label,
+          backOdds,
+          layOdds: bestLayOdds,
+          rating,
+          profit: averageProfit,
+          backStake: stake,
+          layStake,
+          liability,
+        });
       });
     });
 
-    // Ordina per rating (perdite minori per prime)
+    // Sort by rating (closest to 0 = best)
     return opportunities.sort((a, b) => b.rating - a.rating);
   };
 
@@ -196,64 +205,77 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">Opportunità Matched Betting</h3>
         <div className="text-sm text-muted-foreground">
+          {data.metadata && (
+            <span className="mr-4">
+              {data.metadata.bookmakers} bookmaker · {data.metadata.totalResults} quote · {data.metadata.durationMs}ms
+            </span>
+          )}
           Trovate {opportunities.length} opportunità
         </div>
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Evento</TableHead>
-              <TableHead>Campionato</TableHead>
-              <TableHead>Data/Ora</TableHead>
-              <TableHead>Bookmaker</TableHead>
-              <TableHead>Mercato</TableHead>
-              <TableHead className="text-right">Quota Back</TableHead>
-              <TableHead className="text-right">Quota Lay</TableHead>
-              <TableHead className="text-right">Perdita %</TableHead>
-              <TableHead className="text-right">Perdita €</TableHead>
-              <TableHead className="text-right">Punta €</TableHead>
-              <TableHead className="text-right">Banca €</TableHead>
-              <TableHead className="text-right">Passivo €</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {opportunities.map((opp, index) => (
-              <TableRow key={index}>
-                <TableCell className="font-medium">{opp.eventName}</TableCell>
-                <TableCell>{opp.league}</TableCell>
-                <TableCell className="text-sm">{formatDate(opp.eventTime)}</TableCell>
-                <TableCell>
-                  <Badge variant="outline">{opp.bookmaker}</Badge>
-                </TableCell>
-                <TableCell className="text-sm">{opp.market}</TableCell>
-                <TableCell className="text-right font-mono">{opp.backOdds.toFixed(2)}</TableCell>
-                <TableCell className="text-right font-mono">{opp.layOdds.toFixed(2)}</TableCell>
-                <TableCell className="text-right">
-                  <Badge variant={opp.rating > -7 ? "default" : "secondary"}>
-                    {opp.rating.toFixed(2)}%
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right font-mono text-red-600">
-                  €{opp.profit.toFixed(2)}
-                </TableCell>
-                <TableCell className="text-right font-mono">€{opp.backStake.toFixed(2)}</TableCell>
-                <TableCell className="text-right font-mono">€{opp.layStake.toFixed(2)}</TableCell>
-                <TableCell className="text-right font-mono text-red-600">
-                  €{opp.liability.toFixed(2)}
-                </TableCell>
-                <TableCell>
-                  <Button variant="ghost" size="sm">
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
-                </TableCell>
+      {opportunities.length === 0 ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="text-muted-foreground">
+            Nessuna opportunità di matched betting trovata con i filtri attuali.
+          </div>
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Evento</TableHead>
+                <TableHead>Campionato</TableHead>
+                <TableHead>Data/Ora</TableHead>
+                <TableHead>Bookmaker</TableHead>
+                <TableHead>Exchange</TableHead>
+                <TableHead>Mercato</TableHead>
+                <TableHead className="text-right">Quota Back</TableHead>
+                <TableHead className="text-right">Quota Lay</TableHead>
+                <TableHead className="text-right">Rating %</TableHead>
+                <TableHead className="text-right">Perdita €</TableHead>
+                <TableHead className="text-right">Punta €</TableHead>
+                <TableHead className="text-right">Banca €</TableHead>
+                <TableHead className="text-right">Passivo €</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {opportunities.map((opp, index) => (
+                <TableRow key={index}>
+                  <TableCell className="font-medium max-w-[200px] truncate">{opp.eventName}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="text-xs">{opp.league}</Badge>
+                  </TableCell>
+                  <TableCell className="text-sm whitespace-nowrap">{formatDate(opp.eventTime)}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{opp.bookmaker}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30">{opp.exchange}</Badge>
+                  </TableCell>
+                  <TableCell className="text-sm">{opp.market}</TableCell>
+                  <TableCell className="text-right font-mono">{opp.backOdds.toFixed(2)}</TableCell>
+                  <TableCell className="text-right font-mono">{opp.layOdds.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">
+                    <Badge variant={opp.rating > -5 ? "default" : opp.rating > -8 ? "secondary" : "destructive"}>
+                      {opp.rating.toFixed(2)}%
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-red-400">
+                    €{opp.profit.toFixed(2)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">€{opp.backStake.toFixed(2)}</TableCell>
+                  <TableCell className="text-right font-mono">€{opp.layStake.toFixed(2)}</TableCell>
+                  <TableCell className="text-right font-mono text-red-400">
+                    €{opp.liability.toFixed(2)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

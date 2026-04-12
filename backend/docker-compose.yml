@@ -1,0 +1,16 @@
+services:
+  scraper:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    command: ["oddsmatcher", "scheduler"]
+    environment:
+      - SCRAPE_INTERVAL_MINUTES=30
+      - SCHEDULER_ENABLED=true
+
+  # One-shot scrape (use: docker compose run --rm scrape-once)
+  scrape-once:
+    build: .
+    env_file: .env
+    profiles: ["manual"]
+    command: ["oddsmatcher", "scrape", "--sport", "calcio", "-v"]

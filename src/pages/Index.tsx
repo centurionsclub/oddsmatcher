@@ -11,8 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { ArrowUp, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Save, X, Search } from "lucide-react";
+import { ArrowUp, Trash2, Archive, ChevronUp, ChevronDown, Trophy, ShoppingCart, Building2, ArrowLeftRight, Coins, Gift, Save, X, Search, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useOddsSearch } from "@/hooks/use-odds-search";
 import { OddsResults } from "@/components/OddsResults";
 import { MatchedBettingResults } from "@/components/MatchedBettingResults";
 import { MultipleMatchedBettingResults } from "@/components/MultipleMatchedBettingResults";
@@ -24,7 +25,8 @@ const Index = () => {
   const [betfairCommission, setBetfairCommission] = useState("4,50%");
   const [betflagCommission, setBetflagCommission] = useState("5,00%");
   const { toast } = useToast();
-  
+  const { data: oddsData, loading: oddsLoading, error: oddsError, search: searchOdds, reset: resetOdds } = useOddsSearch();
+
   // Stati per salvare filtri (solo locale, nessun database)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [filterName, setFilterName] = useState("");
@@ -230,9 +232,33 @@ const Index = () => {
   };
 
   const handleSearch = () => {
+    let filters: any = {};
+    if (activeTab === "singola") {
+      filters = singolaFilters;
+    } else if (activeTab === "multipla") {
+      filters = multiplaFilters;
+    } else if (activeTab === "trevie") {
+      filters = {
+        sport: "calcio",
+        mercato: "tutti",
+        bookmaker: [trevieFilters.bookmakerPrincipale, ...trevieFilters.bookmakersSecondari].filter(b => b !== "nessuno"),
+        partita: trevieFilters.partita,
+        campionato: trevieFilters.campionato,
+        daData: trevieFilters.daData,
+        aData: trevieFilters.aData,
+      };
+    } else if (activeTab === "bestodds") {
+      filters = {
+        sport: "tutti",
+        mercato: bestOddsFilters.mercato,
+        partita: bestOddsFilters.partita,
+      };
+    }
+
+    searchOdds(filters);
     toast({
-      title: "Ricerca",
-      description: "Funzionalità di ricerca non attiva - solo frontend",
+      title: "Ricerca avviata",
+      description: "Caricamento quote in corso...",
     });
   };
 
@@ -266,13 +292,18 @@ const Index = () => {
           >
             FILTRA <ArrowUp className="h-3.5 w-3.5" />
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="gap-2 text-sm font-medium"
             onClick={handleSearch}
+            disabled={oddsLoading}
           >
-            CERCA <Search className="h-3.5 w-3.5" />
+            {oddsLoading ? (
+              <>CARICAMENTO <Loader2 className="h-3.5 w-3.5 animate-spin" /></>
+            ) : (
+              <>CERCA <Search className="h-3.5 w-3.5" /></>
+            )}
           </Button>
           <Button 
             size="sm" 
@@ -1170,40 +1201,37 @@ const Index = () => {
         {/* Results placeholder for different tabs */}
         {activeTab === "singola" && (
           <div className="mt-6">
-            <MatchedBettingResults 
-              data={null} 
+            <MatchedBettingResults
+              data={oddsData}
               filters={singolaFilters}
               commission={parseFloat(betfairCommission.replace('%', '').replace(',', '.'))}
-              loading={false} 
-              error={null} 
+              loading={oddsLoading}
+              error={oddsError}
             />
-            <div className="mt-6">
-              <OddsResults data={null} loading={false} error={null} />
-            </div>
           </div>
         )}
 
         {activeTab === "multipla" && (
-          <MultipleMatchedBettingResults 
-            data={null} 
+          <MultipleMatchedBettingResults
+            data={oddsData}
             filters={multiplaFilters}
             commission={parseFloat(betfairCommission.replace('%', '').replace(',', '.'))}
-            loading={false} 
-            error={null} 
+            loading={oddsLoading}
+            error={oddsError}
           />
         )}
 
         {activeTab === "trevie" && (
-          <ThreeWayArbitrageResults 
-            data={null} 
+          <ThreeWayArbitrageResults
+            data={oddsData}
             filters={trevieFilters}
-            loading={false} 
-            error={null} 
+            loading={oddsLoading}
+            error={oddsError}
           />
         )}
 
         {activeTab === "bestodds" && (
-          <OddsResults data={null} loading={false} error={null} />
+          <OddsResults data={oddsData} loading={oddsLoading} error={oddsError} />
         )}
 
       </div>
