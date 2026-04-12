@@ -44,10 +44,7 @@ export function useOddsSearch() {
     setError(null);
 
     try {
-      // Map frontend sport names to API sport names
-      const sport = filters.sport === "tutti" ? "calcio" : (filters.sport || "calcio");
-
-      // Map market filter
+      const sport = filters.sport || "tutti";
       const market = filters.mercato === "tutti" || filters.mercato === "nessuno"
         ? "tutti"
         : (filters.mercato || "tutti");
@@ -59,7 +56,9 @@ export function useOddsSearch() {
             sport,
             market,
             bookmakers: filters.bookmaker || [],
-            exchange: filters.exchange || ["betfair_exchange"],
+            exchange: filters.exchange || [],
+            partita: filters.partita || "",
+            campionato: filters.campionato || "",
           },
         }
       );
@@ -112,13 +111,7 @@ export function useOddsSearch() {
         },
       };
 
-      // Check if the API key is missing
-      if (response.error && response.error.includes("ODDS_API_KEY")) {
-        setError("API Key non configurata. Configura ODDS_API_KEY nelle secrets di Supabase.");
-        setData(result);
-      } else {
-        setData(result);
-      }
+      setData(result);
     } catch (err: any) {
       setError(err.message || "Errore durante la ricerca");
       setData(null);
