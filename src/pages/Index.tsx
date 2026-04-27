@@ -331,7 +331,7 @@ const Index = () => {
 
             {/* Partita */}
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-red-400 bg-red-900/30 px-3 py-1.5 rounded w-[110px] text-center">Partita</span>
+              <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Partita</span>
               <input
                 type="text"
                 value={partita}
@@ -343,7 +343,7 @@ const Index = () => {
 
             {/* Campionato */}
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-[#c8922d] bg-[#c8922d]/10 px-3 py-1.5 rounded w-[110px] text-center">Campionato</span>
+              <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Campionato</span>
               <input
                 type="text"
                 value={campionato}
