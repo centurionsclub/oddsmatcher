@@ -89,7 +89,7 @@ export default function PuntaBanca() {
                 placeholder="0 €"
                 className="flex-1 border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <label className="flex items-center gap-2 text-sm text-white">
+              <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#1e2d42] px-3 py-1 rounded">
                 <input type="checkbox" checked={freeBet} onChange={(e) => setFreeBet(e.target.checked)} className="accent-[#c8922d]" />
                 Free Bet
               </label>
