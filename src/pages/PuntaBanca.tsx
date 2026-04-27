@@ -97,7 +97,7 @@ export default function PuntaBanca() {
 
             {/* Bonus Book */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-[#c8922d] w-[130px] text-right bg-[#c8922d]/10 px-2 py-1 rounded">Bonus Book</label>
+              <label className="text-sm font-medium text-[#c8922d] w-[130px] text-center bg-[#c8922d]/10 px-2 py-1 rounded">Bonus Book</label>
               <input
                 type="text"
                 value={bonusBook}
@@ -113,7 +113,7 @@ export default function PuntaBanca() {
 
             {/* Quota Punta */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-white w-[130px] text-right bg-[#6b9db0] px-2 py-1 rounded">Quota Punta</label>
+              <label className="text-sm font-medium text-white w-[130px] text-center bg-[#6b9db0] px-2 py-1 rounded">Quota Punta</label>
               <input
                 type="text"
                 value={quotaPunta}
@@ -125,7 +125,7 @@ export default function PuntaBanca() {
 
             {/* Quota Banca */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-white w-[130px] text-right bg-[#c87878] px-2 py-1 rounded">Quota Banca</label>
+              <label className="text-sm font-medium text-white w-[130px] text-center bg-[#c87878] px-2 py-1 rounded">Quota Banca</label>
               <input
                 type="text"
                 value={quotaBanca}
@@ -137,7 +137,7 @@ export default function PuntaBanca() {
 
             {/* Commissioni */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-white w-[130px] text-right bg-[#d4a0a8] px-2 py-1 rounded">Commissioni</label>
+              <label className="text-sm font-medium text-white w-[130px] text-center bg-[#c87878] px-2 py-1 rounded">Commissioni</label>
               <div className="flex items-center gap-1">
                 <input
                   type="text"
