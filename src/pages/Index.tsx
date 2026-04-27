@@ -242,9 +242,34 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Exchange */}
+            {/* Exchange / Bookmaker */}
+            {(() => {
+              const hasBookInExchange = selectedExchanges.some(e => BOOKMAKERS.includes(e));
+              const allExchangesSelected = EXCHANGES.every(e => selectedExchanges.includes(e));
+              const allBookmakersSelected = BOOKMAKERS.every(b => selectedExchanges.includes(b));
+              const toggleAllExchanges = () => {
+                if (allExchangesSelected) {
+                  setSelectedExchanges(prev => prev.filter(e => !EXCHANGES.includes(e)));
+                } else {
+                  setSelectedExchanges(prev => [...new Set([...prev, ...EXCHANGES])]);
+                }
+              };
+              const toggleAllBookmakers = () => {
+                if (allBookmakersSelected) {
+                  setSelectedExchanges(prev => prev.filter(e => !BOOKMAKERS.includes(e)));
+                } else {
+                  setSelectedExchanges(prev => [...new Set([...prev, ...BOOKMAKERS])]);
+                }
+              };
+              return (
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-semibold text-[#2d0d1a] bg-[#f4a9ba] px-3 py-1.5 rounded w-[110px] text-center">Exchange</span>
+              <span className={`text-sm font-semibold w-[110px] text-center px-3 py-1.5 rounded transition-all ${
+                hasBookInExchange
+                  ? "text-[#0d2035] bg-[#87c4e8]"
+                  : "text-[#2d0d1a] bg-[#f4a9ba]"
+              }`}>
+                {hasBookInExchange ? "Bookmaker" : "Exchange"}
+              </span>
               <div className="relative">
                 <button
                   onClick={() => { setExchangeOpen(!exchangeOpen); setMarketsOpen(false); setBookmakerOpen(false); }}
@@ -256,14 +281,26 @@ const Index = () => {
                   <span className="text-slate-500">▾</span>
                 </button>
                 {exchangeOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[280px] max-h-[300px] overflow-y-auto">
+                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[280px] max-h-[320px] overflow-y-auto">
                     <button
                       onClick={() => setSelectedExchanges([])}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#f4a9ba] border-b border-[#253347]"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-white border-b border-[#253347]"
                     >
-                      Deseleziona tutti
+                      ✕ Deseleziona tutti
                     </button>
-                    <div className="px-3 py-1 text-xs text-[#f4a9ba] font-semibold uppercase tracking-wide border-b border-[#253347] bg-[#1e2d42]">Exchange</div>
+                    {/* Exchange group */}
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#253347] bg-[#1e2d42]">
+                      <span className="text-xs text-[#f4a9ba] font-semibold uppercase tracking-wide">Exchange</span>
+                      <label className="flex items-center gap-1.5 text-xs text-[#f4a9ba] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={allExchangesSelected}
+                          onChange={toggleAllExchanges}
+                          className="accent-[#f4a9ba]"
+                        />
+                        Tutti
+                      </label>
+                    </div>
                     {EXCHANGES.map(e => (
                       <button
                         key={e}
@@ -272,10 +309,22 @@ const Index = () => {
                           selectedExchanges.includes(e) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
                         }`}
                       >
-                        {e}
+                        {selectedExchanges.includes(e) ? "✓ " : ""}{e}
                       </button>
                     ))}
-                    <div className="px-3 py-1 text-xs text-[#87c4e8] font-semibold uppercase tracking-wide border-b border-[#253347] bg-[#1e2d42]">Bookmaker</div>
+                    {/* Bookmaker group */}
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#253347] border-t border-[#253347] bg-[#1e2d42]">
+                      <span className="text-xs text-[#87c4e8] font-semibold uppercase tracking-wide">Bookmaker</span>
+                      <label className="flex items-center gap-1.5 text-xs text-[#87c4e8] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={allBookmakersSelected}
+                          onChange={toggleAllBookmakers}
+                          className="accent-[#87c4e8]"
+                        />
+                        Tutti
+                      </label>
+                    </div>
                     {BOOKMAKERS.map(b => (
                       <button
                         key={b}
@@ -284,7 +333,7 @@ const Index = () => {
                           selectedExchanges.includes(b) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
                         }`}
                       >
-                        {b}
+                        {selectedExchanges.includes(b) ? "✓ " : ""}{b}
                       </button>
                     ))}
                   </div>
@@ -300,6 +349,8 @@ const Index = () => {
                 Filtro Liquidit&agrave;
               </label>
             </div>
+              );
+            })()}
 
             {/* Stake Punta */}
             <div className="flex items-center gap-3 mb-3">
