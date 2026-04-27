@@ -118,12 +118,11 @@ const Index = () => {
         <h1 className="text-xl font-bold tracking-widest text-[#c8922d]" style={{ fontFamily: "'Roboto', sans-serif" }}>ODDSMATCHER</h1>
       </div>
 
-      {/* Info Bar */}
-      <div className="bg-[#101828] text-white text-xs px-6 py-2 leading-relaxed border-b border-[#1e3050]">
-        Le quote dei bookmaker possono differire rispetto a quelle mostrate nell'oddsmatcher. Questo accade quando si registrano flussi di denaro significativi su un evento.
-      </div>
-
       <div className="max-w-[1600px] mx-auto px-4 py-4">
+        {/* Info Bar */}
+        <div className="text-white text-xs py-2 leading-relaxed mb-2">
+          Le quote dei bookmaker possono differire rispetto a quelle mostrate nell'oddsmatcher. Questo accade quando si registrano flussi di denaro significativi su un evento.
+        </div>
         {/* Action Buttons */}
         <div className="flex gap-2 mb-4">
           <button
