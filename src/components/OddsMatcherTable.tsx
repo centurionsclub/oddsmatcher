@@ -508,9 +508,9 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
                 <th className="text-center py-2.5 px-3 font-semibold">Mercato</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Esito</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Miglior Book</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-green-400">Quota Max</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota Max</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Peggior Book</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-red-400">Quota Min</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota Min</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Diff</th>
               </tr>
             </thead>
@@ -529,11 +529,11 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: bestColor.bg, color: bestColor.text }}>{row.bestBookmaker}</span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm font-bold text-green-400 bg-green-900/20">{row.bestOdds.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">{row.bestOdds.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: worstColor.bg, color: worstColor.text }}>{row.worstBookmaker}</span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm text-red-400 bg-red-900/20">{row.worstOdds.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm text-[#2d0d1a] bg-[#f4a9ba]">{row.worstOdds.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center text-xs font-medium text-[#c8922d]">+{diff}%</td>
                   </tr>
                 );
@@ -562,10 +562,10 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
                 <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Esito 1</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Book 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-green-400">Quota</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Esito 2</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Book 2</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-red-400">Quota</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Margine</th>
               </tr>
             </thead>
@@ -582,12 +582,12 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: c1.bg, color: c1.text }}>{row.book1}</span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm text-green-400 bg-green-900/20">{row.odds1.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm text-[#0d2035] bg-[#87c4e8]">{row.odds1.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center text-sm font-medium text-white">{row.outcome2}</td>
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: c2.bg, color: c2.text }}>{row.book2}</span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm text-red-400 bg-red-900/20">{row.odds2.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm text-[#2d0d1a] bg-[#f4a9ba]">{row.odds2.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center">
                       <span className={`text-sm font-bold ${row.margin < 100 ? "text-green-400" : "text-red-400"}`}>
                         {row.margin.toFixed(1)}%
@@ -632,9 +632,9 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
                 <th className="text-center py-2.5 px-3 font-semibold">Scommessa</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Bookmaker</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-green-400">Quota</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
                 <th className="text-center py-2.5 px-3 font-semibold">{isBookVsBook ? "Controparte" : "Exchange"}</th>
-                {!isBookVsBook && <th className="text-center py-2.5 px-3 font-semibold text-red-400">Quota</th>}
+                {!isBookVsBook && <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
@@ -662,14 +662,14 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
                         {opp.bookmaker}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm text-green-400 bg-green-900/20">{opp.quotaBook.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm text-[#0d2035] bg-[#87c4e8]">{opp.quotaBook.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
                         {opp.exchange}
                       </span>
                     </td>
                     {!isBookVsBook && (
-                      <td className="py-2 px-3 text-center font-mono text-sm text-red-400 bg-red-900/20">{opp.quotaExchange.toFixed(2).replace(".", ",")}</td>
+                      <td className="py-2 px-3 text-center font-mono text-sm text-[#2d0d1a] bg-[#f4a9ba]">{opp.quotaExchange.toFixed(2).replace(".", ",")}</td>
                     )}
                   </tr>
                 );
