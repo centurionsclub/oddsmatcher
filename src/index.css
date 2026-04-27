@@ -4,27 +4,27 @@
 
 @layer base {
   :root {
-    /* Club Elite Golden Theme */
-    --background: 37 55% 55%;
-    --foreground: 0 0% 20%;
+    /* Dark Navy Theme */
+    --background: 215 40% 8%;
+    --foreground: 215 20% 88%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 20%;
+    --card: 215 35% 14%;
+    --card-foreground: 215 20% 88%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 20%;
+    --popover: 215 35% 14%;
+    --popover-foreground: 215 20% 88%;
 
-    --primary: 168 50% 30%;
+    --primary: 37 65% 48%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 168 50% 25%;
+    --primary-hover: 37 65% 40%;
 
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 30%;
+    --secondary: 215 30% 20%;
+    --secondary-foreground: 215 20% 88%;
 
-    --muted: 0 0% 93%;
-    --muted-foreground: 0 0% 50%;
+    --muted: 215 28% 18%;
+    --muted-foreground: 215 15% 55%;
 
-    --accent: 168 50% 30%;
+    --accent: 37 65% 48%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
@@ -33,27 +33,27 @@
     --warning: 37 90% 51%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 0 0% 85%;
-    --input: 0 0% 85%;
-    --ring: 168 50% 30%;
+    --border: 215 30% 22%;
+    --input: 215 30% 22%;
+    --ring: 37 65% 48%;
 
     --radius: 0.375rem;
 
     --profit: 145 63% 42%;
     --loss: 0 72% 51%;
-    --neutral: 0 0% 50%;
+    --neutral: 215 15% 55%;
 
-    --navbar: 168 45% 25%;
+    --navbar: 215 45% 6%;
     --navbar-foreground: 0 0% 100%;
 
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 0 0% 20%;
-    --sidebar-primary: 168 50% 30%;
+    --sidebar-background: 215 35% 14%;
+    --sidebar-foreground: 215 20% 88%;
+    --sidebar-primary: 37 65% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 96%;
-    --sidebar-accent-foreground: 0 0% 20%;
-    --sidebar-border: 0 0% 85%;
-    --sidebar-ring: 168 50% 30%;
+    --sidebar-accent: 215 30% 20%;
+    --sidebar-accent-foreground: 215 20% 88%;
+    --sidebar-border: 215 30% 22%;
+    --sidebar-ring: 37 65% 48%;
   }
 }
 
@@ -77,9 +77,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(0 0% 70%);
+  background: hsl(215 30% 30%);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(0 0% 55%);
+  background: hsl(215 30% 40%);
 }

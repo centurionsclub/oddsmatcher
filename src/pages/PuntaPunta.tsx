@@ -29,19 +29,12 @@ export default function PuntaPunta() {
     const totalStake1 = stake1 + bonus;
     const effectiveStake1 = freeBet ? 0 : stake1;
 
-    // Equalized counter stake: same payout regardless of outcome
-    // payout1 = totalStake1 * q1
-    // payout2 = stake2 * q2
-    // Set payout1 = payout2: stake2 = totalStake1 * q1 / q2
     const stake2 = totalStake1 * q1 / q2;
     const totalInvested = effectiveStake1 + stake2;
 
-    // If outcome 1 wins: profit = totalStake1 * (q1 - 1) - stake2
     const profitIf1 = totalStake1 * (q1 - 1) - stake2;
-    // If outcome 2 wins: profit = stake2 * (q2 - 1) - effectiveStake1
     const profitIf2 = stake2 * (q2 - 1) - effectiveStake1;
 
-    // Adjust for rimborso
     const adjustedProfitIf2 = rimborso ? profitIf2 + bonus : profitIf2;
 
     const worstProfit = Math.min(profitIf1, adjustedProfitIf2);
@@ -69,110 +62,110 @@ export default function PuntaPunta() {
   const fmt = (n: number) => n.toFixed(2).replace(".", ",");
 
   return (
-    <div className="min-h-screen bg-[#c8922d]">
+    <div className="min-h-screen bg-[#0d1320]">
       <Navbar />
       <div className="max-w-[700px] mx-auto mt-8 px-4">
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="bg-[#1a6b5a] text-white text-center py-4">
-            <h1 className="text-xl font-bold tracking-wide">PUNTA → PUNTA</h1>
+        <div className="bg-[#152033] rounded-lg border border-[#1e3050] overflow-hidden shadow-lg">
+          <div className="bg-[#0a0e1a] text-white text-center py-4 border-b border-[#1e3050]">
+            <h1 className="text-xl font-bold tracking-wide text-[#c8922d]">PUNTA → PUNTA</h1>
           </div>
 
           <div className="p-6 space-y-4">
             {/* Stake Punta 1 */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-gray-600 w-[130px] text-right">Stake Punta 1</label>
+              <label className="text-sm font-medium text-white w-[130px] text-right">Stake Punta 1</label>
               <input
                 type="text"
                 value={stakePunta1}
                 onChange={(e) => setStakePunta1(e.target.value)}
-                placeholder="0 &euro;"
-                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a6b5a]/30"
+                placeholder="0 €"
+                className="flex-1 border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={freeBet} onChange={(e) => setFreeBet(e.target.checked)} className="accent-[#1a6b5a]" />
+              <label className="flex items-center gap-2 text-sm text-white">
+                <input type="checkbox" checked={freeBet} onChange={(e) => setFreeBet(e.target.checked)} className="accent-[#c8922d]" />
                 Free Bet
               </label>
             </div>
 
             {/* Bonus Punta 1 */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-[#c8922d] w-[130px] text-right bg-[#fdf3e0] px-2 py-1 rounded">Bonus Punta 1</label>
+              <label className="text-sm font-medium text-[#c8922d] w-[130px] text-right bg-[#c8922d]/10 px-2 py-1 rounded">Bonus Punta 1</label>
               <input
                 type="text"
                 value={bonusPunta1}
                 onChange={(e) => setBonusPunta1(e.target.value)}
-                placeholder="0 &euro;"
-                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a6b5a]/30"
+                placeholder="0 €"
+                className="flex-1 border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-[#1a6b5a]" />
+              <label className="flex items-center gap-2 text-sm text-white">
+                <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-[#c8922d]" />
                 Rimborso
               </label>
             </div>
 
             {/* Quota Punta 1 */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-[#1a6b5a] w-[130px] text-right bg-[#e8f5f1] px-2 py-1 rounded">Quota Punta 1</label>
+              <label className="text-sm font-medium text-green-400 w-[130px] text-right bg-green-900/20 px-2 py-1 rounded">Quota Punta 1</label>
               <input
                 type="text"
                 value={quotaPunta1}
                 onChange={(e) => setQuotaPunta1(e.target.value)}
                 placeholder="0,00"
-                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a6b5a]/30"
+                className="flex-1 border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
             </div>
 
             {/* Quota Punta 2 */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-[#1a6b5a] w-[130px] text-right bg-[#e8f5f1] px-2 py-1 rounded">Quota Punta 2</label>
+              <label className="text-sm font-medium text-green-400 w-[130px] text-right bg-green-900/20 px-2 py-1 rounded">Quota Punta 2</label>
               <input
                 type="text"
                 value={quotaPunta2}
                 onChange={(e) => setQuotaPunta2(e.target.value)}
                 placeholder="0,00"
-                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a6b5a]/30"
+                className="flex-1 border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
             </div>
 
             {/* Buttons */}
             <div className="flex items-center gap-3 pt-2">
-              <button onClick={handleCalcola} className="px-6 py-2 border-2 border-[#1a6b5a] text-[#1a6b5a] rounded font-semibold text-sm hover:bg-[#1a6b5a] hover:text-white transition-colors">
+              <button onClick={handleCalcola} className="px-6 py-2 border border-[#c8922d] text-[#c8922d] rounded font-semibold text-sm hover:bg-[#c8922d] hover:text-white transition-colors">
                 CALCOLA →
               </button>
-              <button onClick={handlePulisci} className="px-6 py-2 bg-red-500 text-white rounded font-semibold text-sm hover:bg-red-600 transition-colors">
+              <button onClick={handlePulisci} className="px-6 py-2 bg-red-600 text-white rounded font-semibold text-sm hover:bg-red-700 transition-colors">
                 PULISCI
               </button>
             </div>
 
             {/* Results */}
             <div className="mt-4">
-              <div className="bg-[#8b8b8b] text-white text-center py-3 rounded-t font-bold text-sm">
+              <div className="bg-[#1e2d42] text-white text-center py-3 rounded-t font-bold text-sm border border-[#253347]">
                 COPERTURA STANDARD
               </div>
-              <div className="border border-gray-200 rounded-b divide-y divide-gray-200">
+              <div className="border border-[#253347] border-t-0 rounded-b divide-y divide-[#1e3050]">
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-gray-600">Stake Punta 2</span>
-                  <span className="text-sm font-semibold">{result ? `${fmt(result.stakePunta2)} €` : ""}</span>
+                  <span className="text-sm text-white">Stake Punta 2</span>
+                  <span className="text-sm font-semibold text-white">{result ? `${fmt(result.stakePunta2)} €` : ""}</span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-gray-600">Investimento Totale</span>
-                  <span className="text-sm font-semibold">{result ? `${fmt(result.totalInvested)} €` : ""}</span>
+                  <span className="text-sm text-white">Investimento Totale</span>
+                  <span className="text-sm font-semibold text-white">{result ? `${fmt(result.totalInvested)} €` : ""}</span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-gray-600">Rating</span>
-                  <span className={`text-sm font-bold ${result && result.rating >= 100 ? "text-green-600" : "text-red-600"}`}>
+                  <span className="text-sm text-white">Rating</span>
+                  <span className={`text-sm font-bold ${result && result.rating >= 100 ? "text-green-400" : "text-red-400"}`}>
                     {result ? `${result.rating.toFixed(2)}%` : ""}
                   </span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-gray-600">Se vince Punta 1</span>
-                  <span className={`text-sm font-semibold ${result && result.profitIf1 >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  <span className="text-sm text-white">Se vince Punta 1</span>
+                  <span className={`text-sm font-semibold ${result && result.profitIf1 >= 0 ? "text-green-400" : "text-red-400"}`}>
                     {result ? `${fmt(result.profitIf1)} €` : ""}
                   </span>
                 </div>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-gray-600">Se vince Punta 2</span>
-                  <span className={`text-sm font-semibold ${result && result.profitIf2 >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  <span className="text-sm text-white">Se vince Punta 2</span>
+                  <span className={`text-sm font-semibold ${result && result.profitIf2 >= 0 ? "text-green-400" : "text-red-400"}`}>
                     {result ? `${fmt(result.profitIf2)} €` : ""}
                   </span>
                 </div>

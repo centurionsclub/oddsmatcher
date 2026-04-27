@@ -110,16 +110,16 @@ const Index = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#c8922d]">
+    <div className="min-h-screen bg-[#0d1320]">
       <Navbar />
 
       {/* Title Banner */}
-      <div className="bg-[#1a6b5a] text-white text-center py-3">
-        <h1 className="text-xl font-bold tracking-widest">ODDSMATCHER</h1>
+      <div className="bg-[#0a0e1a] text-white text-center py-3 border-b border-[#1e3050]">
+        <h1 className="text-xl font-bold tracking-widest text-[#c8922d]">ODDSMATCHER</h1>
       </div>
 
       {/* Info Bar */}
-      <div className="bg-[#f5f0e0] text-gray-700 text-xs px-6 py-2 leading-relaxed">
+      <div className="bg-[#101828] text-white text-xs px-6 py-2 leading-relaxed border-b border-[#1e3050]">
         Le quote dei bookmaker possono differire rispetto a quelle mostrate nell'oddsmatcher. Questo accade quando si registrano flussi di denaro significativi su un evento.
       </div>
 
@@ -128,20 +128,20 @@ const Index = () => {
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => setFiltersOpen(!filtersOpen)}
-            className="px-4 py-2 border-2 border-[#1a6b5a] text-[#1a6b5a] bg-white rounded font-semibold text-sm hover:bg-[#1a6b5a] hover:text-white transition-colors"
+            className="px-4 py-2 border border-[#c8922d] text-[#c8922d] bg-transparent rounded font-semibold text-sm hover:bg-[#c8922d] hover:text-white transition-colors"
           >
             FILTRA {filtersOpen ? "▼" : "▲"}
           </button>
           <button
             onClick={handleAggiorna}
             disabled={oddsLoading}
-            className="px-4 py-2 border-2 border-[#1a6b5a] text-[#1a6b5a] bg-white rounded font-semibold text-sm hover:bg-[#1a6b5a] hover:text-white transition-colors disabled:opacity-50"
+            className="px-4 py-2 border border-[#c8922d] text-[#c8922d] bg-transparent rounded font-semibold text-sm hover:bg-[#c8922d] hover:text-white transition-colors disabled:opacity-50"
           >
             {oddsLoading ? "CARICAMENTO..." : "AGGIORNA ↻"}
           </button>
           <button
             onClick={handlePulisci}
-            className="px-4 py-2 bg-red-500 text-white rounded font-semibold text-sm hover:bg-red-600 transition-colors"
+            className="px-4 py-2 bg-red-600 text-white rounded font-semibold text-sm hover:bg-red-700 transition-colors"
           >
             PULISCI ✕
           </button>
@@ -149,17 +149,17 @@ const Index = () => {
 
         {/* Filters Panel */}
         {filtersOpen && (
-          <div className="bg-white rounded-lg shadow p-5 mb-4">
+          <div className="bg-[#152033] rounded-lg border border-[#1e3050] p-5 mb-4">
             {/* Sub-tabs */}
-            <div className="flex gap-0 mb-5 border-b border-gray-200">
+            <div className="flex gap-0 mb-5 border-b border-[#1e3050]">
               {subTabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveSubTab(tab.id)}
                   className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${
                     activeSubTab === tab.id
-                      ? "border-[#1a6b5a] text-[#1a6b5a]"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
+                      ? "border-[#c8922d] text-[#c8922d]"
+                      : "border-transparent text-white hover:text-white"
                   }`}
                 >
                   {tab.label}
@@ -169,20 +169,20 @@ const Index = () => {
 
             {/* Mercati */}
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1.5 rounded w-[110px] text-center">Mercati</span>
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Mercati</span>
               <div className="relative">
                 <button
                   onClick={() => { setMarketsOpen(!marketsOpen); setBookmakerOpen(false); setExchangeOpen(false); }}
-                  className="border border-gray-300 rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-white"
+                  className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                 >
-                  <span className="text-gray-600">{selectedMarkets.length === 0 ? "Tutti" : `${selectedMarkets.length} selezionati`}</span>
-                  <span className="text-gray-400">▾</span>
+                  <span className="text-white">{selectedMarkets.length === 0 ? "Tutti" : `${selectedMarkets.length} selezionati`}</span>
+                  <span className="text-slate-500">▾</span>
                 </button>
                 {marketsOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 w-[250px] max-h-[300px] overflow-y-auto">
+                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[250px] max-h-[300px] overflow-y-auto">
                     <button
                       onClick={() => setSelectedMarkets([])}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 font-medium text-[#1a6b5a]"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#c8922d]"
                     >
                       Tutti (deseleziona)
                     </button>
@@ -190,8 +190,8 @@ const Index = () => {
                       <button
                         key={m.value}
                         onClick={() => toggleMarket(m.value)}
-                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 ${
-                          selectedMarkets.includes(m.value) ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700"
+                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[#1e2d42] ${
+                          selectedMarkets.includes(m.value) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
                         }`}
                       >
                         {m.label}
@@ -208,16 +208,16 @@ const Index = () => {
               <div className="relative">
                 <button
                   onClick={() => { setBookmakerOpen(!bookmakerOpen); setMarketsOpen(false); setExchangeOpen(false); }}
-                  className="border border-gray-300 rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-white"
+                  className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                 >
-                  <span className="text-gray-600">{selectedBookmakers.length === 0 ? "Tutti" : `${selectedBookmakers.length} selezionati`}</span>
-                  <span className="text-gray-400">▾</span>
+                  <span className="text-white">{selectedBookmakers.length === 0 ? "Tutti" : `${selectedBookmakers.length} selezionati`}</span>
+                  <span className="text-slate-500">▾</span>
                 </button>
                 {bookmakerOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 w-[250px] max-h-[300px] overflow-y-auto">
+                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[250px] max-h-[300px] overflow-y-auto">
                     <button
                       onClick={() => setSelectedBookmakers([])}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 font-medium text-[#1a6b5a]"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#c8922d]"
                     >
                       Tutti (deseleziona)
                     </button>
@@ -225,8 +225,8 @@ const Index = () => {
                       <button
                         key={b}
                         onClick={() => toggleBookmaker(b)}
-                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 ${
-                          selectedBookmakers.includes(b) ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700"
+                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[#1e2d42] ${
+                          selectedBookmakers.includes(b) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
                         }`}
                       >
                         {b}
@@ -239,25 +239,25 @@ const Index = () => {
 
             {/* Exchange */}
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-semibold text-white bg-[#e89fad] px-3 py-1.5 rounded w-[110px] text-center">Exchange</span>
+              <span className="text-sm font-semibold text-white bg-[#7c3aed] px-3 py-1.5 rounded w-[110px] text-center">Exchange</span>
               <div className="relative">
                 <button
                   onClick={() => { setExchangeOpen(!exchangeOpen); setMarketsOpen(false); setBookmakerOpen(false); }}
-                  className="border border-gray-300 rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-white"
+                  className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                 >
-                  <span className="text-gray-600">
+                  <span className="text-white">
                     {selectedExchanges.length === 0 ? "Nessuno" : selectedExchanges.length === EXCHANGES.length ? "Tutti gli Exchange" : selectedExchanges.join(", ")}
                   </span>
-                  <span className="text-gray-400">▾</span>
+                  <span className="text-slate-500">▾</span>
                 </button>
                 {exchangeOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 w-[250px]">
+                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[250px]">
                     {EXCHANGES.map(e => (
                       <button
                         key={e}
                         onClick={() => toggleExchange(e)}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
-                          selectedExchanges.includes(e) ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700"
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] ${
+                          selectedExchanges.includes(e) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
                         }`}
                       >
                         {e}
@@ -271,24 +271,24 @@ const Index = () => {
                   type="checkbox"
                   checked={filtroLiquidita}
                   onChange={(e) => setFiltroLiquidita(e.target.checked)}
-                  className="accent-[#1a6b5a]"
+                  className="accent-[#c8922d]"
                 />
-                <span className="text-[#1a6b5a] font-medium">Filtro Liquidit&agrave;</span>
+                <span className="text-white font-medium">Filtro Liquidit&agrave;</span>
               </label>
             </div>
 
             {/* Stake Punta */}
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1.5 rounded w-[110px] text-center">Stake Punta</span>
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Stake Punta</span>
               <input
                 type="text"
                 value={stakePunta}
                 onChange={(e) => setStakePunta(e.target.value)}
-                placeholder="0 &euro;"
-                className="border border-gray-300 rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#1a6b5a]/30"
+                placeholder="0 €"
+                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={freeBet} onChange={(e) => setFreeBet(e.target.checked)} className="accent-[#1a6b5a]" />
+              <label className="flex items-center gap-2 text-sm text-white">
+                <input type="checkbox" checked={freeBet} onChange={(e) => setFreeBet(e.target.checked)} className="accent-[#c8922d]" />
                 Free Bet
               </label>
             </div>
@@ -300,56 +300,56 @@ const Index = () => {
                 type="text"
                 value={bonus}
                 onChange={(e) => setBonus(e.target.value)}
-                placeholder="0 &euro;"
-                className="border border-gray-300 rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#1a6b5a]/30"
+                placeholder="0 €"
+                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-[#1a6b5a]" />
+              <label className="flex items-center gap-2 text-sm text-white">
+                <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-[#c8922d]" />
                 Rimborso
               </label>
             </div>
 
             {/* Quota Minima / Massima */}
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1.5 rounded w-[110px] text-center">Quota Minima</span>
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Quota Minima</span>
               <input
                 type="text"
                 value={quotaMinima}
                 onChange={(e) => setQuotaMinima(e.target.value)}
                 placeholder="0,00"
-                className="border border-gray-300 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#1a6b5a]/30"
+                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1.5 rounded">Quota Massima</span>
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded">Quota Massima</span>
               <input
                 type="text"
                 value={quotaMassima}
                 onChange={(e) => setQuotaMassima(e.target.value)}
                 placeholder="0,00"
-                className="border border-gray-300 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#1a6b5a]/30"
+                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
             </div>
 
             {/* Partita */}
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-gray-600 bg-red-50 text-red-600 px-3 py-1.5 rounded w-[110px] text-center">Partita</span>
+              <span className="text-sm font-medium text-red-400 bg-red-900/30 px-3 py-1.5 rounded w-[110px] text-center">Partita</span>
               <input
                 type="text"
                 value={partita}
                 onChange={(e) => setPartita(e.target.value)}
                 placeholder="Cerca per nome..."
-                className="border border-gray-300 rounded px-3 py-1.5 text-sm flex-1 max-w-[300px] focus:outline-none focus:ring-2 focus:ring-[#1a6b5a]/30"
+                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm flex-1 max-w-[300px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
             </div>
 
             {/* Campionato */}
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-gray-600 bg-[#e8f5f1] text-[#1a6b5a] px-3 py-1.5 rounded w-[110px] text-center">Campionato</span>
+              <span className="text-sm font-medium text-[#c8922d] bg-[#c8922d]/10 px-3 py-1.5 rounded w-[110px] text-center">Campionato</span>
               <input
                 type="text"
                 value={campionato}
                 onChange={(e) => setCampionato(e.target.value)}
                 placeholder="Cerca Campionato..."
-                className="border border-gray-300 rounded px-3 py-1.5 text-sm flex-1 max-w-[300px] focus:outline-none focus:ring-2 focus:ring-[#1a6b5a]/30"
+                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm flex-1 max-w-[300px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
             </div>
           </div>
@@ -364,9 +364,9 @@ const Index = () => {
         )}
 
         {/* Results Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-[#152033] rounded-lg border border-[#1e3050] overflow-hidden">
           {oddsError && (
-            <div className="text-red-600 text-sm p-4">Errore: {oddsError}</div>
+            <div className="text-red-400 text-sm p-4">Errore: {oddsError}</div>
           )}
 
           <OddsMatcherTable

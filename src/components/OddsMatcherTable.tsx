@@ -112,7 +112,7 @@ function getBookColor(name: string): { bg: string; text: string } {
   for (const [key, colors] of Object.entries(BOOK_COLORS)) {
     if (lower.includes(key)) return colors;
   }
-  return { bg: "#555", text: "#fff" };
+  return { bg: "#2a3a50", text: "#fff" };
 }
 
 function getOutcomes(event: OddsData): Array<{ key: string; label: string }> {
@@ -182,7 +182,6 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
         });
         if (bestLayOdds === Infinity) return;
 
-        // Standard lay formula
         const layStake = backOdds / (bestLayOdds - commissionRate);
         const profitIfWin = (backOdds - 1) - layStake * (bestLayOdds - 1);
         const profitIfLose = layStake * (1 - commissionRate) - 1;
@@ -227,10 +226,8 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
       if (group.length < 2) return;
       const outcomes = getOutcomes(group[0]);
 
-      // 2-way markets (Over/Under, BTTS, Double Chance with 2 outcomes)
       if (outcomes.length === 2) {
         const [oA, oB] = outcomes;
-        // Find best odds for each outcome
         let bestA = { odds: 0, book: "" };
         let bestB = { odds: 0, book: "" };
         for (const bm of group) {
@@ -241,9 +238,8 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
         }
         if (bestA.odds <= 1 || bestB.odds <= 1) return;
 
-        // 2-way dutching: margin = 1/oddA + 1/oddB
         const margin = 1 / bestA.odds + 1 / bestB.odds;
-        const rating = (1 / margin) * 100; // 100% = break even, >100 = arb
+        const rating = (1 / margin) * 100;
 
         if (rating > 85 && rating < 105) {
           opps.push({
@@ -262,7 +258,6 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
         }
       }
 
-      // 3-way (1X2)
       if (outcomes.length === 3) {
         const bestForOutcome: Record<string, { odds: number; bookmaker: string }> = {};
         for (const outcome of outcomes) {
@@ -276,12 +271,10 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
         }
         if (outcomes.some(o => bestForOutcome[o.key].odds <= 1)) return;
 
-        // 3-way margin: 1/home + 1/draw + 1/away
         const margin = outcomes.reduce((sum, o) => sum + 1 / bestForOutcome[o.key].odds, 0);
         const rating = (1 / margin) * 100;
 
         if (rating > 85 && rating < 105) {
-          // Show one entry per main outcome
           for (const mainOutcome of outcomes) {
             const mainOdds = bestForOutcome[mainOutcome.key].odds;
             const mainBook = bestForOutcome[mainOutcome.key].bookmaker;
@@ -311,7 +304,7 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
     return opps.sort((a, b) => b.rating - a.rating);
   }, [data]);
 
-  // ═══ BEST ODDS: Migliori quote per evento ═══
+  // ═══ BEST ODDS ═══
   const bestOddsRows = useMemo(() => {
     if (!data?.data || data.data.length === 0) return [];
     const rows: BestOddsRow[] = [];
@@ -354,7 +347,7 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
     return rows.sort((a, b) => b.bestOdds - a.bestOdds);
   }, [data]);
 
-  // ═══ BEST OPPOSITE: Migliori quote opposte ═══
+  // ═══ BEST OPPOSITE ═══
   const bestOppositeRows = useMemo(() => {
     if (!data?.data || data.data.length === 0) return [];
     const rows: Array<{
@@ -377,7 +370,6 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
       const outcomes = getOutcomes(group[0]);
       if (outcomes.length < 2) return;
 
-      // For each pair of opposite outcomes
       for (let a = 0; a < outcomes.length; a++) {
         for (let b = a + 1; b < outcomes.length; b++) {
           let bestA = { odds: 0, book: "" };
@@ -412,7 +404,6 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
     return rows.sort((a, b) => a.margin - b.margin).slice(0, 200);
   }, [data]);
 
-  // Apply common filters
   const applyFilters = <T extends { eventName: string; bookmaker?: string; quotaBook?: number }>(items: T[]): T[] => {
     let result = items;
     if (filters.bookmaker.length > 0) {
@@ -454,8 +445,8 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
 
   if (loading) {
     return (
-      <div className="text-center py-12 text-gray-500">
-        <div className="animate-spin inline-block w-6 h-6 border-2 border-[#1a6b5a] border-t-transparent rounded-full mb-2"></div>
+      <div className="text-center py-12 text-white">
+        <div className="animate-spin inline-block w-6 h-6 border-2 border-[#c8922d] border-t-transparent rounded-full mb-2"></div>
         <div>Caricamento quote...</div>
       </div>
     );
@@ -463,7 +454,7 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
 
   if (!data?.data || data.data.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-500">
+      <div className="text-center py-12 text-white">
         {data === null ? "Clicca AGGIORNA per caricare le quote." : "Nessuna quota trovata nel database."}
       </div>
     );
@@ -476,9 +467,9 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
     if (!hasExchangeData) {
       return (
         <div className="text-center py-12">
-          <div className="text-gray-500 mb-2">Nessun dato Exchange disponibile (Betfair/BetFlag Exchange).</div>
-          <div className="text-gray-400 text-sm">La modalit&agrave; SINGOLA richiede quote exchange per il calcolo back/lay.</div>
-          <div className="text-gray-400 text-sm mt-1">Usa la tab <strong>TRE VIE</strong> per le opportunit&agrave; book vs book, o <strong>BEST ODDS</strong> per le migliori quote.</div>
+          <div className="text-white mb-2">Nessun dato Exchange disponibile (Betfair/BetFlag Exchange).</div>
+          <div className="text-white text-sm">La modalit&agrave; SINGOLA richiede quote exchange per il calcolo back/lay.</div>
+          <div className="text-white text-sm mt-1">Usa la tab <strong className="text-white">TRE VIE</strong> per le opportunit&agrave; book vs book, o <strong className="text-white">BEST ODDS</strong> per le migliori quote.</div>
         </div>
       );
     }
@@ -491,7 +482,7 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
     const filtered = applyFilters(trevieOpps).slice(0, 200);
     if (filtered.length === 0) {
       return (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-white">
           Nessuna opportunit&agrave; tre vie trovata con rating tra 85% e 105%. I dati potrebbero essere non aggiornati.
         </div>
       );
@@ -504,46 +495,46 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
     const filtered = applyFilters(bestOddsRows).slice(0, 200);
     return (
       <div>
-        <div className="text-right text-xs text-gray-400 px-4 py-2">
+        <div className="text-right text-xs text-white px-4 py-2">
           {filtered.length} risultati
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-[#1a6b5a] text-white text-[12px] uppercase tracking-wide">
+              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2.5 px-2 font-semibold w-10">Sport</th>
                 <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Mercato</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Esito</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Miglior Book</th>
-                <th className="text-center py-2.5 px-3 font-semibold bg-[#e8f5f1] text-[#1a6b5a]">Quota Max</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-green-400">Quota Max</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Peggior Book</th>
-                <th className="text-center py-2.5 px-3 font-semibold bg-[#fde8ec] text-[#c0392b]">Quota Min</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-red-400">Quota Min</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Diff</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[#1e3050]">
               {filtered.map((row, i) => {
                 const bestColor = getBookColor(row.bestBookmaker);
                 const worstColor = getBookColor(row.worstBookmaker);
                 const diff = ((row.bestOdds - row.worstOdds) / row.worstOdds * 100).toFixed(1);
                 return (
-                  <tr key={i} className="hover:bg-gray-50 transition-colors">
-                    <td className="py-2 px-3 text-xs text-gray-600 whitespace-nowrap">{formatDate(row.eventTime)}</td>
+                  <tr key={i} className="hover:bg-[#1e2d42] transition-colors">
+                    <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
                     <td className="py-2 px-2 text-center text-base">{getSportIcon(row.sport)}</td>
-                    <td className="py-2 px-3 text-sm text-gray-800 font-medium max-w-[220px] truncate">{row.eventName}</td>
-                    <td className="py-2 px-3 text-center text-xs text-gray-500">{row.market}</td>
-                    <td className="py-2 px-3 text-center text-sm font-medium">{row.outcome}</td>
+                    <td className="py-2 px-3 text-sm text-white font-medium max-w-[220px] truncate">{row.eventName}</td>
+                    <td className="py-2 px-3 text-center text-xs text-white">{row.market}</td>
+                    <td className="py-2 px-3 text-center text-sm font-medium text-white">{row.outcome}</td>
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: bestColor.bg, color: bestColor.text }}>{row.bestBookmaker}</span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm font-bold text-green-700 bg-[#f0faf5]">{row.bestOdds.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm font-bold text-green-400 bg-green-900/20">{row.bestOdds.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: worstColor.bg, color: worstColor.text }}>{row.worstBookmaker}</span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm text-red-600 bg-[#fef5f5]">{row.worstOdds.toFixed(2).replace(".", ",")}</td>
-                    <td className="py-2 px-3 text-center text-xs font-medium text-blue-600">+{diff}%</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm text-red-400 bg-red-900/20">{row.worstOdds.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center text-xs font-medium text-[#c8922d]">+{diff}%</td>
                   </tr>
                 );
               })}
@@ -559,46 +550,46 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
     const filtered = applyFilters(bestOppositeRows as any).slice(0, 200);
     return (
       <div>
-        <div className="text-right text-xs text-gray-400 px-4 py-2">
+        <div className="text-right text-xs text-white px-4 py-2">
           {filtered.length} risultati &middot; Margine pi&ugrave; basso = migliore opportunit&agrave;
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-[#1a6b5a] text-white text-[12px] uppercase tracking-wide">
+              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2.5 px-2 font-semibold w-10">Sport</th>
                 <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Esito 1</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Book 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold bg-[#e8f5f1] text-[#1a6b5a]">Quota</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-green-400">Quota</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Esito 2</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Book 2</th>
-                <th className="text-center py-2.5 px-3 font-semibold bg-[#fde8ec] text-[#c0392b]">Quota</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-red-400">Quota</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Margine</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[#1e3050]">
               {(filtered as typeof bestOppositeRows).map((row, i) => {
                 const c1 = getBookColor(row.book1);
                 const c2 = getBookColor(row.book2);
                 return (
-                  <tr key={i} className="hover:bg-gray-50 transition-colors">
-                    <td className="py-2 px-3 text-xs text-gray-600 whitespace-nowrap">{formatDate(row.eventTime)}</td>
+                  <tr key={i} className="hover:bg-[#1e2d42] transition-colors">
+                    <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
                     <td className="py-2 px-2 text-center text-base">{getSportIcon(row.sport)}</td>
-                    <td className="py-2 px-3 text-sm text-gray-800 font-medium max-w-[200px] truncate">{row.eventName}</td>
-                    <td className="py-2 px-3 text-center text-sm font-medium">{row.outcome1}</td>
+                    <td className="py-2 px-3 text-sm text-white font-medium max-w-[200px] truncate">{row.eventName}</td>
+                    <td className="py-2 px-3 text-center text-sm font-medium text-white">{row.outcome1}</td>
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: c1.bg, color: c1.text }}>{row.book1}</span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm bg-[#f0faf5]">{row.odds1.toFixed(2).replace(".", ",")}</td>
-                    <td className="py-2 px-3 text-center text-sm font-medium">{row.outcome2}</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm text-green-400 bg-green-900/20">{row.odds1.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center text-sm font-medium text-white">{row.outcome2}</td>
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: c2.bg, color: c2.text }}>{row.book2}</span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm bg-[#fef5f5]">{row.odds2.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm text-red-400 bg-red-900/20">{row.odds2.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center">
-                      <span className={`text-sm font-bold ${row.margin < 100 ? "text-green-600" : "text-red-600"}`}>
+                      <span className={`text-sm font-bold ${row.margin < 100 ? "text-green-400" : "text-red-400"}`}>
                         {row.margin.toFixed(1)}%
                       </span>
                     </td>
@@ -615,53 +606,53 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
   // ═══ RENDER: MULTIPLA (placeholder) ═══
   if (activeTab === "multipla") {
     return (
-      <div className="text-center py-12 text-gray-500">
+      <div className="text-center py-12 text-white">
         <div>La sezione MULTIPLA &egrave; in fase di sviluppo.</div>
-        <div className="text-sm mt-1">Usa le altre tab per trovare opportunit&agrave;.</div>
+        <div className="text-sm mt-1 text-white">Usa le altre tab per trovare opportunit&agrave;.</div>
       </div>
     );
   }
 
   return null;
 
-  // ═══ Helper: render opportunity table (shared by SINGOLA and TRE VIE) ═══
+  // ═══ Helper: render opportunity table ═══
   function renderOpportunityTable(opps: Opportunity[], isBookVsBook: boolean) {
     return (
       <div>
-        <div className="text-right text-xs text-gray-400 px-4 py-2">
+        <div className="text-right text-xs text-white px-4 py-2">
           {opps.length} opportunit&agrave;
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-[#1a6b5a] text-white text-[12px] uppercase tracking-wide">
+              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2.5 px-2 font-semibold w-10">Sport</th>
                 <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Scommessa</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Bookmaker</th>
-                <th className="text-center py-2.5 px-3 font-semibold bg-[#e8f5f1] text-[#1a6b5a]">Quota</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-green-400">Quota</th>
                 <th className="text-center py-2.5 px-3 font-semibold">{isBookVsBook ? "Controparte" : "Exchange"}</th>
-                {!isBookVsBook && <th className="text-center py-2.5 px-3 font-semibold bg-[#fde8ec] text-[#c0392b]">Quota</th>}
+                {!isBookVsBook && <th className="text-center py-2.5 px-3 font-semibold text-red-400">Quota</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[#1e3050]">
               {opps.map((opp, i) => {
                 const bookColor = getBookColor(opp.bookmaker);
                 const exchColor = getBookColor(opp.exchange);
                 return (
-                  <tr key={i} className="hover:bg-gray-50 transition-colors">
-                    <td className="py-2 px-3 text-xs text-gray-600 whitespace-nowrap">{formatDate(opp.eventTime)}</td>
+                  <tr key={i} className="hover:bg-[#1e2d42] transition-colors">
+                    <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(opp.eventTime)}</td>
                     <td className="py-2 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
-                    <td className="py-2 px-3 text-sm text-gray-800 font-medium max-w-[250px] truncate">{opp.eventName}</td>
-                    <td className="py-2 px-3 text-center text-sm font-medium text-gray-700">{opp.scommessa}</td>
+                    <td className="py-2 px-3 text-sm text-white font-medium max-w-[250px] truncate">{opp.eventName}</td>
+                    <td className="py-2 px-3 text-center text-sm font-medium text-white">{opp.scommessa}</td>
                     <td className="py-2 px-3 text-center">
                       <span className={`text-sm font-bold ${
-                        opp.rating >= 100 ? "text-green-600" :
-                        opp.rating >= 98 ? "text-gray-800" :
-                        opp.rating >= 95 ? "text-orange-600" :
-                        "text-red-600"
+                        opp.rating >= 100 ? "text-green-400" :
+                        opp.rating >= 98 ? "text-white" :
+                        opp.rating >= 95 ? "text-[#c8922d]" :
+                        "text-red-400"
                       }`}>
                         {opp.rating.toFixed(2)}%
                       </span>
@@ -671,14 +662,14 @@ export function OddsMatcherTable({ data, loading, activeTab, filters, commission
                         {opp.bookmaker}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm bg-[#f0faf5]">{opp.quotaBook.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm text-green-400 bg-green-900/20">{opp.quotaBook.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
                         {opp.exchange}
                       </span>
                     </td>
                     {!isBookVsBook && (
-                      <td className="py-2 px-3 text-center font-mono text-sm bg-[#fef5f5]">{opp.quotaExchange.toFixed(2).replace(".", ",")}</td>
+                      <td className="py-2 px-3 text-center font-mono text-sm text-red-400 bg-red-900/20">{opp.quotaExchange.toFixed(2).replace(".", ",")}</td>
                     )}
                   </tr>
                 );
