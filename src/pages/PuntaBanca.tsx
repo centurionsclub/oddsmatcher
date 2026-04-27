@@ -97,7 +97,7 @@ export default function PuntaBanca() {
 
             {/* Bonus Book */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-[#c8922d] w-[130px] text-center bg-[#c8922d]/10 px-2 py-1 rounded">Bonus Book</label>
+              <label className="text-sm font-medium text-white w-[130px] text-center bg-[#c8922d] px-2 py-1 rounded">Bonus Book</label>
               <input
                 type="text"
                 value={bonusBook}
