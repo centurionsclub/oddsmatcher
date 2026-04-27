@@ -204,7 +204,7 @@ const Index = () => {
 
             {/* Bookmaker */}
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-semibold text-white bg-[#c8922d] px-3 py-1.5 rounded w-[110px] text-center">Bookmaker</span>
+              <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Bookmaker</span>
               <div className="relative">
                 <button
                   onClick={() => { setBookmakerOpen(!bookmakerOpen); setMarketsOpen(false); setExchangeOpen(false); }}
@@ -239,7 +239,7 @@ const Index = () => {
 
             {/* Exchange */}
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-semibold text-white bg-[#7c3aed] px-3 py-1.5 rounded w-[110px] text-center">Exchange</span>
+              <span className="text-sm font-semibold text-[#2d0d1a] bg-[#f4a9ba] px-3 py-1.5 rounded w-[110px] text-center">Exchange</span>
               <div className="relative">
                 <button
                   onClick={() => { setExchangeOpen(!exchangeOpen); setMarketsOpen(false); setBookmakerOpen(false); }}
