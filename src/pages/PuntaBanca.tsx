@@ -81,7 +81,7 @@ export default function PuntaBanca() {
           <div className="p-6 space-y-4">
             {/* Stake Book */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-white w-[130px] text-right">Stake Book</label>
+              <label className="text-sm font-medium text-white w-[130px] text-center bg-[#1e2d42] px-2 py-1 rounded">Stake Book</label>
               <input
                 type="text"
                 value={stakeBook}
