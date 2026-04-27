@@ -115,7 +115,7 @@ const Index = () => {
 
       {/* Title Banner */}
       <div className="bg-[#0a0e1a] text-white text-center py-3 border-b border-[#1e3050]">
-        <h1 className="text-xl font-bold tracking-widest text-[#c8922d]">ODDSMATCHER</h1>
+        <h1 className="text-xl font-bold tracking-widest text-[#c8922d]" style={{ fontFamily: "'Roboto', sans-serif" }}>ODDSMATCHER</h1>
       </div>
 
       {/* Info Bar */}
