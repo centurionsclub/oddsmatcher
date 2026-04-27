@@ -208,6 +208,8 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
       const outcomes = getOutcomes(group[0]);
 
       // For 2-way markets (Over/Under, 12): back one side, counter the other
+      // Equalized formula: counterStake = stake * backOdds / counterOdds
+      // guarantees same profit regardless of outcome
       if (outcomes.length === 2) {
         const [outcomeA, outcomeB] = outcomes;
 
@@ -221,14 +223,13 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
             if (!backOdds || backOdds <= 1 || !counterOdds || counterOdds <= 1) continue;
             if (!passesFilters(backOdds, group[i].eventName)) continue;
 
-            // Counter stake: to equalize profit/loss
-            const counterStake = (stake * backOdds - stake) / (counterOdds - 1);
+            // Equalized counter stake: same payout regardless of outcome
+            const counterStake = stake * backOdds / counterOdds;
             const totalInvested = stake + counterStake;
 
-            const profitIfBack = stake * (backOdds - 1) - counterStake;
-            const profitIfCounter = counterStake * (counterOdds - 1) - stake;
-            const averageProfit = (profitIfBack + profitIfCounter) / 2;
-            const rating = (averageProfit / stake) * 100;
+            // Both profits are equal with this formula
+            const profit = stake * backOdds - totalInvested;
+            const rating = (profit / stake) * 100;
 
             opportunities.push({
               bookmaker: group[i].bookmaker,
@@ -241,7 +242,7 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
               backOdds,
               layOdds: counterOdds,
               rating,
-              profit: averageProfit,
+              profit,
               backStake: stake,
               layStake: counterStake,
               liability: totalInvested,
@@ -250,56 +251,72 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
         }
       }
 
-      // For 1X2: back one outcome, counter with the single best opposite
+      // For 1X2: 3-way dutching — cover ALL 3 outcomes using best odds
+      // from different bookmakers. Guarantees same payout regardless of result.
       if (outcomes.length === 3) {
-        for (const backOutcome of outcomes) {
-          const opposites = outcomes.filter(o => o.key !== backOutcome.key);
-
-          for (let i = 0; i < group.length; i++) {
-            const backOdds = group[i].odds[backOutcome.key];
-            if (!backOdds || backOdds <= 1) continue;
-            if (!passesFilters(backOdds, group[i].eventName)) continue;
-
-            // Find the best single opposite outcome at another bookmaker
-            for (const oppOutcome of opposites) {
-              let bestCounterOdds = 0;
-              let bestCounterBook = '';
-
-              for (let j = 0; j < group.length; j++) {
-                if (i === j || group[i].bookmaker === group[j].bookmaker) continue;
-                const cOdds = group[j].odds[oppOutcome.key];
-                if (cOdds && cOdds > bestCounterOdds) {
-                  bestCounterOdds = cOdds;
-                  bestCounterBook = group[j].bookmaker;
-                }
-              }
-
-              if (bestCounterOdds <= 1) continue;
-
-              const counterStake = (stake * backOdds - stake) / (bestCounterOdds - 1);
-              const profitIfBack = stake * (backOdds - 1) - counterStake;
-              const profitIfCounter = counterStake * (bestCounterOdds - 1) - stake;
-              const averageProfit = (profitIfBack + profitIfCounter) / 2;
-              const rating = (averageProfit / stake) * 100;
-
-              opportunities.push({
-                bookmaker: group[i].bookmaker,
-                exchange: `${bestCounterBook} (book)`,
-                eventName: group[i].eventName,
-                league: group[i].league,
-                eventTime: group[i].eventTime,
-                market: `${group[i].market} - ${backOutcome.label}/${oppOutcome.label}`,
-                outcome: `${backOutcome.label} vs ${oppOutcome.label}`,
-                backOdds,
-                layOdds: bestCounterOdds,
-                rating,
-                profit: averageProfit,
-                backStake: stake,
-                layStake: counterStake,
-                liability: stake + counterStake,
-              });
+        // Find best odds for each outcome across all bookmakers
+        const bestForOutcome: Record<string, { odds: number; bookmaker: string }> = {};
+        for (const outcome of outcomes) {
+          bestForOutcome[outcome.key] = { odds: 0, bookmaker: '' };
+          for (const bm of group) {
+            const o = bm.odds[outcome.key];
+            if (o && o > bestForOutcome[outcome.key].odds) {
+              bestForOutcome[outcome.key] = { odds: o, bookmaker: bm.bookmaker };
             }
           }
+        }
+
+        // Check all outcomes have valid odds
+        if (outcomes.some(o => bestForOutcome[o.key].odds <= 1)) return;
+
+        // For each outcome as the "main" back bet
+        for (const mainOutcome of outcomes) {
+          const mainOdds = bestForOutcome[mainOutcome.key].odds;
+          const mainBook = bestForOutcome[mainOutcome.key].bookmaker;
+
+          if (!passesFilters(mainOdds, group[0].eventName)) continue;
+
+          const otherOutcomes = outcomes.filter(o => o.key !== mainOutcome.key);
+
+          // Equalized payout: if main wins, payout = stake * mainOdds
+          // Counter stakes set so each counter also returns same payout
+          const payout = stake * mainOdds;
+          let totalCounterStake = 0;
+          const counterBooks: string[] = [];
+
+          for (const other of otherOutcomes) {
+            const counterOdds = bestForOutcome[other.key].odds;
+            const cs = payout / counterOdds;
+            totalCounterStake += cs;
+            if (!counterBooks.includes(bestForOutcome[other.key].bookmaker)) {
+              counterBooks.push(bestForOutcome[other.key].bookmaker);
+            }
+          }
+
+          const totalInvested = stake + totalCounterStake;
+          // Guaranteed profit (same for any outcome)
+          const profit = payout - totalInvested;
+          const rating = (profit / stake) * 100;
+
+          // Show effective counter-odds (what the combined counter is worth)
+          const effectiveCounterOdds = payout / totalCounterStake;
+
+          opportunities.push({
+            bookmaker: mainBook,
+            exchange: counterBooks.join(' + ') + ' (book)',
+            eventName: group[0].eventName,
+            league: group[0].league,
+            eventTime: group[0].eventTime,
+            market: `${group[0].market} - ${mainOutcome.label}`,
+            outcome: mainOutcome.label,
+            backOdds: mainOdds,
+            layOdds: effectiveCounterOdds,
+            rating,
+            profit,
+            backStake: stake,
+            layStake: totalCounterStake,
+            liability: totalInvested,
+          });
         }
       }
     });
