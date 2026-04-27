@@ -266,14 +266,14 @@ const Index = () => {
                   </div>
                 )}
               </div>
-              <label className="flex items-center gap-2 text-sm ml-2">
+              <label className="flex items-center gap-2 text-sm text-[#2d0d1a] font-medium bg-[#f4a9ba] px-3 py-1 rounded ml-2">
                 <input
                   type="checkbox"
                   checked={filtroLiquidita}
                   onChange={(e) => setFiltroLiquidita(e.target.checked)}
-                  className="accent-[#c8922d]"
+                  className="accent-[#2d0d1a]"
                 />
-                <span className="text-white font-medium">Filtro Liquidit&agrave;</span>
+                Filtro Liquidit&agrave;
               </label>
             </div>
 
@@ -287,7 +287,7 @@ const Index = () => {
                 placeholder="0 €"
                 className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <label className="flex items-center gap-2 text-sm text-white">
+              <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#1e2d42] px-3 py-1 rounded">
                 <input type="checkbox" checked={freeBet} onChange={(e) => setFreeBet(e.target.checked)} className="accent-[#c8922d]" />
                 Free Bet
               </label>
@@ -303,8 +303,8 @@ const Index = () => {
                 placeholder="0 €"
                 className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <label className="flex items-center gap-2 text-sm text-white">
-                <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-[#c8922d]" />
+              <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#c8922d] px-3 py-1 rounded">
+                <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-white" />
                 Rimborso
               </label>
             </div>
