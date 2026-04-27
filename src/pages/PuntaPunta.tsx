@@ -73,7 +73,7 @@ export default function PuntaPunta() {
           <div className="p-6 space-y-4">
             {/* Stake Punta 1 */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-white w-[130px] text-right">Stake Punta 1</label>
+              <label className="text-sm font-medium text-white w-[130px] text-center bg-[#1e2d42] px-2 py-1 rounded">Stake Punta 1</label>
               <input
                 type="text"
                 value={stakePunta1}
@@ -81,7 +81,7 @@ export default function PuntaPunta() {
                 placeholder="0 €"
                 className="flex-1 border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <label className="flex items-center gap-2 text-sm text-white">
+              <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#1e2d42] px-3 py-1 rounded">
                 <input type="checkbox" checked={freeBet} onChange={(e) => setFreeBet(e.target.checked)} className="accent-[#c8922d]" />
                 Free Bet
               </label>
@@ -89,7 +89,7 @@ export default function PuntaPunta() {
 
             {/* Bonus Punta 1 */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-[#c8922d] w-[130px] text-right bg-[#c8922d]/10 px-2 py-1 rounded">Bonus Punta 1</label>
+              <label className="text-sm font-medium text-white w-[130px] text-center bg-[#c8922d] px-2 py-1 rounded">Bonus Punta 1</label>
               <input
                 type="text"
                 value={bonusPunta1}
@@ -97,15 +97,15 @@ export default function PuntaPunta() {
                 placeholder="0 €"
                 className="flex-1 border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <label className="flex items-center gap-2 text-sm text-white">
-                <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-[#c8922d]" />
+              <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#c8922d] px-3 py-1 rounded">
+                <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-white" />
                 Rimborso
               </label>
             </div>
 
             {/* Quota Punta 1 */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-green-400 w-[130px] text-right bg-green-900/20 px-2 py-1 rounded">Quota Punta 1</label>
+              <label className="text-sm font-medium text-white w-[130px] text-center bg-[#6b9db0] px-2 py-1 rounded">Quota Punta 1</label>
               <input
                 type="text"
                 value={quotaPunta1}
@@ -117,7 +117,7 @@ export default function PuntaPunta() {
 
             {/* Quota Punta 2 */}
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium text-green-400 w-[130px] text-right bg-green-900/20 px-2 py-1 rounded">Quota Punta 2</label>
+              <label className="text-sm font-medium text-white w-[130px] text-center bg-[#6b9db0] px-2 py-1 rounded">Quota Punta 2</label>
               <input
                 type="text"
                 value={quotaPunta2}
