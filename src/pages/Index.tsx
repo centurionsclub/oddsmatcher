@@ -15,6 +15,12 @@ const EXCHANGES = [
   "Betfair Exchange", "BetFlag Exchange",
 ];
 
+// Exchange dropdown includes real exchanges + all bookmakers (for punta-punta)
+const EXCHANGE_OPTIONS = [
+  ...EXCHANGES,
+  ...BOOKMAKERS,
+];
+
 const MARKETS = [
   { value: "tutti", label: "Tutti" },
   { value: "1", label: "1", group: "1X2" },
@@ -245,12 +251,19 @@ const Index = () => {
                   className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                 >
                   <span className="text-white">
-                    {selectedExchanges.length === 0 ? "Nessuno" : selectedExchanges.length === EXCHANGES.length ? "Tutti gli Exchange" : selectedExchanges.join(", ")}
+                    {selectedExchanges.length === 0 ? "Nessuno" : `${selectedExchanges.length} selezionati`}
                   </span>
                   <span className="text-slate-500">▾</span>
                 </button>
                 {exchangeOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[250px]">
+                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[280px] max-h-[300px] overflow-y-auto">
+                    <button
+                      onClick={() => setSelectedExchanges([])}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#f4a9ba] border-b border-[#253347]"
+                    >
+                      Deseleziona tutti
+                    </button>
+                    <div className="px-3 py-1 text-xs text-[#f4a9ba] font-semibold uppercase tracking-wide border-b border-[#253347] bg-[#1e2d42]">Exchange</div>
                     {EXCHANGES.map(e => (
                       <button
                         key={e}
@@ -260,6 +273,18 @@ const Index = () => {
                         }`}
                       >
                         {e}
+                      </button>
+                    ))}
+                    <div className="px-3 py-1 text-xs text-[#87c4e8] font-semibold uppercase tracking-wide border-b border-[#253347] bg-[#1e2d42]">Bookmaker</div>
+                    {BOOKMAKERS.map(b => (
+                      <button
+                        key={b}
+                        onClick={() => toggleExchange(b)}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] ${
+                          selectedExchanges.includes(b) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
+                        }`}
+                      >
+                        {b}
                       </button>
                     ))}
                   </div>
@@ -372,6 +397,7 @@ const Index = () => {
             data={oddsData}
             loading={oddsLoading}
             activeTab={activeSubTab}
+            selectedExchanges={selectedExchanges}
             filters={{
               bookmaker: selectedBookmakers,
               stakePunta,
