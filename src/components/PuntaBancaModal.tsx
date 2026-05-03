@@ -53,7 +53,7 @@ function getUrl(name: string) {
 }
 
 // Betfair Exchange deep link
-// marketId is like "1.234567890" → strip the "1." prefix for the URL
+// marketId is like "1.234567890" — used as-is in the URL
 const BF_SPORT_SLUG: Record<string, string> = {
   calcio:  "football",
   tennis:  "tennis",
@@ -68,12 +68,10 @@ const BF_MARKET_SLUG: Record<string, string> = {
 
 function getBetfairUrl(sport: string, market: string, marketId?: string): string {
   if (!marketId) return "https://www.betfair.it/exchange/plus/football";
-  const numericId = marketId.replace(/^1\./, "");
   const sportSlug = BF_SPORT_SLUG[sport] ?? "football";
-  // Try to get market-specific slug; fall back to match-odds
   const mktKey = Object.keys(BF_MARKET_SLUG).find(k => market.startsWith(k));
   const mktSlug = mktKey ? BF_MARKET_SLUG[mktKey] : "match-odds";
-  return `https://www.betfair.it/exchange/plus/${sportSlug}/${mktSlug}/${numericId}`;
+  return `https://www.betfair.it/exchange/plus/${sportSlug}/${mktSlug}/${marketId}`;
 }
 
 function formatDt(iso: string) {
@@ -316,10 +314,7 @@ export function PuntaBancaModal({ opp, commission, onClose }: Props) {
             >
               {opp.exchange} ↗
             </a>
-            {/* DEBUG */}
-            <div className="text-[9px] text-[#8fa8c8] mt-1 break-all opacity-60">
-              id: {opp.marketId ?? "—"} | mkt: {opp.market}
-            </div>
+
             <div className="mt-3 flex items-center gap-2">
               <span className="text-[#8fa8c8] text-sm">Esito</span>
               <span className="px-2.5 py-0.5 rounded-full text-sm font-black text-[#0d2035]" style={{ backgroundColor: isBackLay ? "#f4a9ba" : "#87c4e8" }}>{sc2}</span>
