@@ -48,12 +48,13 @@ const Index = () => {
   const { data: oddsData, loading: oddsLoading, error: oddsError, search: searchOdds, reset: resetOdds } = useOddsSearch();
 
   const [filtersOpen, setFiltersOpen] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState("singola");
+  const [activeSubTab, setActiveSubTab] = useState("bestodds");
 
   // Filter states
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
   const [selectedBookmakers, setSelectedBookmakers] = useState<string[]>([]);
   const [selectedExchanges, setSelectedExchanges] = useState<string[]>(["Betfair Exchange", "BetFlag Exchange"]);
+  const [selectedSport, setSelectedSport] = useState("tutti");
   const [filtroLiquidita, setFiltroLiquidita] = useState(true);
   const [stakePunta, setStakePunta] = useState("");
   const [freeBet, setFreeBet] = useState(false);
@@ -72,7 +73,7 @@ const Index = () => {
 
   const handleAggiorna = () => {
     searchOdds({
-      sport: "tutti",
+      sport: selectedSport,
       mercato: "tutti",
       partita,
       campionato,
@@ -92,6 +93,7 @@ const Index = () => {
     setCampionato("");
     setFreeBet(false);
     setRimborso(false);
+    setSelectedSport("tutti");
     resetOdds();
   };
 
@@ -170,6 +172,31 @@ const Index = () => {
                   {tab.label}
                 </button>
               ))}
+            </div>
+
+            {/* Sport */}
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Sport</span>
+              <div className="flex gap-1">
+                {[
+                  { value: "tutti", label: "Tutti" },
+                  { value: "calcio", label: "⚽ Calcio" },
+                  { value: "tennis", label: "🎾 Tennis" },
+                  { value: "basket", label: "🏀 Basket" },
+                ].map(s => (
+                  <button
+                    key={s.value}
+                    onClick={() => setSelectedSport(s.value)}
+                    className={`px-3 py-1.5 text-sm rounded font-medium transition-colors ${
+                      selectedSport === s.value
+                        ? "bg-[#c8922d] text-white"
+                        : "bg-[#1a2535] border border-[#253347] text-white hover:bg-[#1e2d42]"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Mercati */}
@@ -339,15 +366,17 @@ const Index = () => {
                   </div>
                 )}
               </div>
-              <label className="flex items-center gap-2 text-sm text-[#2d0d1a] font-medium bg-[#f4a9ba] px-3 py-1 rounded ml-2">
-                <input
-                  type="checkbox"
-                  checked={filtroLiquidita}
-                  onChange={(e) => setFiltroLiquidita(e.target.checked)}
-                  className="accent-[#2d0d1a]"
-                />
-                Filtro Liquidit&agrave;
-              </label>
+              {!hasBookInExchange && (
+                <label className="flex items-center gap-2 text-sm text-[#2d0d1a] font-medium bg-[#f4a9ba] px-3 py-1 rounded ml-2">
+                  <input
+                    type="checkbox"
+                    checked={filtroLiquidita}
+                    onChange={(e) => setFiltroLiquidita(e.target.checked)}
+                    className="accent-[#2d0d1a]"
+                  />
+                  Filtro Liquidit&agrave;
+                </label>
+              )}
             </div>
               );
             })()}

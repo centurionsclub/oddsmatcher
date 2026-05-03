@@ -9,6 +9,7 @@ export interface OddsData {
   market: string;
   sport: string;
   odds: Record<string, number>;
+  marketId?: string;  // Betfair market ID for deep links
 }
 
 export interface OddsResponse {
@@ -49,18 +50,12 @@ export function useOddsSearch() {
         ? "tutti"
         : (filters.mercato || "tutti");
 
-      // Always fetch ALL bookmakers — the bookmaker filter is applied
-      // client-side in MatchedBettingResults to show opportunities where
-      // the selected bookmaker is the "back" side. We need all other
-      // bookmakers' odds to calculate counter-bets.
       const { data: responseData, error: fnError } = await supabase.functions.invoke(
         "odds-scraper",
         {
           body: {
             sport,
             market,
-            bookmakers: [],
-            exchange: [],
             partita: filters.partita || "",
             campionato: filters.campionato || "",
           },

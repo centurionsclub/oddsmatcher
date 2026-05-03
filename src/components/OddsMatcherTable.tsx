@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { PuntaBancaModal } from "./PuntaBancaModal";
 
 interface OddsData {
   bookmaker: string;
@@ -8,6 +9,8 @@ interface OddsData {
   market: string;
   sport: string;
   odds: Record<string, number>;
+  volume?: Record<string, number>;  // lay volume per outcome (Betfair Exchange only)
+  marketId?: string;                // Betfair market ID for deep links
 }
 
 interface Opportunity {
@@ -15,6 +18,7 @@ interface Opportunity {
   sport: string;
   eventName: string;
   league: string;
+  market: string;           // e.g. "1X2", "Over/Under", "DC", "BTTS"
   scommessa: string;
   rating: number;
   bookmaker: string;
@@ -22,6 +26,8 @@ interface Opportunity {
   exchange: string;
   quotaExchange: number;
   isBookVsBook: boolean;
+  volumeExchange?: number;  // Betfair lay volume (€) — only in back-lay mode
+  marketId?: string;        // Betfair market ID for direct exchange link
 }
 
 interface BestOddsRow {
@@ -70,7 +76,30 @@ function isExchange(bookmaker: string): boolean {
 }
 
 function normalizeEventName(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, "").replace(/[-–—]/g, "").replace(/\./g, "").replace(/'/g, "");
+  // Base cleanup: lowercase, remove accents, strip punctuation & separators
+  const base = name
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")   // remove accents
+    .replace(/[.\-–—']/g, " ")
+    .replace(/\b(v|vs|versus)\b/g, " ")                  // remove match separators
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Keep only words longer than 2 chars (filters initials: "h.", "r.", "gi", etc.)
+  // Then sort alphabetically so order doesn't matter:
+  //   "Hurkacz H. - Burruchaga"  →  ["burruchaga","hurkacz"]  →  "burruchagahurkacz"
+  //   "H Hurkacz v Burruchaga"   →  ["burruchaga","hurkacz"]  →  "burruchagahurkacz"  ✓
+  const words = base.split(" ").filter(w => w.length > 2);
+  return words.sort().join("");
+}
+
+function eventNamesMatch(a: string, b: string): boolean {
+  const na = normalizeEventName(a);
+  const nb = normalizeEventName(b);
+  if (na === nb) return true;
+  // Partial match: one is a subset of the other (handles truncated names)
+  if (na.length >= 8 && nb.length >= 8 && (na.includes(nb) || nb.includes(na))) return true;
+  return false;
 }
 
 function cleanEventName(name: string): string {
@@ -117,41 +146,49 @@ function getBookColor(name: string): { bg: string; text: string } {
 }
 
 function getOutcomes(event: OddsData): Array<{ key: string; label: string }> {
-  const outcomes: Array<{ key: string; label: string }> = [];
+  const o = event.odds;
   if (event.market === "1X2" || event.market === "h2h") {
-    if (event.odds.home) outcomes.push({ key: "home", label: "1" });
-    if (event.odds.draw) outcomes.push({ key: "draw", label: "X" });
-    if (event.odds.away) outcomes.push({ key: "away", label: "2" });
-  } else if (event.market === "12") {
-    if (event.odds.home) outcomes.push({ key: "home", label: "1" });
-    if (event.odds.away) outcomes.push({ key: "away", label: "2" });
-  } else if (event.market === "BTTS") {
-    if (event.odds.yes) outcomes.push({ key: "yes", label: "Goal" });
-    if (event.odds.no) outcomes.push({ key: "no", label: "No Goal" });
-  } else if (event.market === "Double Chance") {
-    if (event.odds["1X"]) outcomes.push({ key: "1X", label: "1X" });
-    if (event.odds["X2"]) outcomes.push({ key: "X2", label: "X2" });
-    if (event.odds["12"]) outcomes.push({ key: "12", label: "12" });
-  } else {
-    if (event.odds.over) outcomes.push({ key: "over", label: "Over" });
-    if (event.odds.under) outcomes.push({ key: "under", label: "Under" });
+    const outcomes: Array<{ key: string; label: string }> = [];
+    // Scraper stores "1"/"X"/"2"; legacy may use "home"/"draw"/"away"
+    if (o["1"]) outcomes.push({ key: "1", label: "1" });
+    if (o["X"]) outcomes.push({ key: "X", label: "X" });
+    if (o["2"]) outcomes.push({ key: "2", label: "2" });
+    if (!outcomes.length) {
+      if (o["home"]) outcomes.push({ key: "home", label: "1" });
+      if (o["draw"]) outcomes.push({ key: "draw", label: "X" });
+      if (o["away"]) outcomes.push({ key: "away", label: "2" });
+    }
+    return outcomes;
   }
-  return outcomes;
+  if (event.market === "DC" || event.market === "Double Chance") {
+    const outcomes: Array<{ key: string; label: string }> = [];
+    if (o["1X"]) outcomes.push({ key: "1X", label: "1X" });
+    if (o["X2"]) outcomes.push({ key: "X2", label: "X2" });
+    if (o["12"]) outcomes.push({ key: "12", label: "12" });
+    return outcomes;
+  }
+  if (event.market === "BTTS") {
+    const outcomes: Array<{ key: string; label: string }> = [];
+    if (o["Goal"]) outcomes.push({ key: "Goal", label: "Goal" });
+    if (o["No Goal"]) outcomes.push({ key: "No Goal", label: "No Goal" });
+    if (!outcomes.length) {
+      if (o["yes"]) outcomes.push({ key: "yes", label: "Goal" });
+      if (o["no"]) outcomes.push({ key: "no", label: "No Goal" });
+    }
+    return outcomes;
+  }
+  // Over/Under and any other market: return all available outcome keys
+  return Object.entries(o)
+    .filter(([, v]) => v > 1)
+    .map(([k]) => ({ key: k, label: k }));
 }
 
 function findMatchingEvents(sourceEvent: OddsData, pool: OddsData[]): OddsData[] {
-  const normalized = normalizeEventName(sourceEvent.eventName);
-  return pool.filter(ev => {
-    const norm = normalizeEventName(ev.eventName);
-    return normalized === norm ||
-      (normalized.length > 10 && norm.length > 10 && (
-        normalized.includes(norm.substring(0, 10)) ||
-        norm.includes(normalized.substring(0, 10))
-      ));
-  });
+  return pool.filter(ev => eventNamesMatch(sourceEvent.eventName, ev.eventName));
 }
 
 export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, filters, commission }: Props) {
+  const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
 
   const REAL_EXCHANGE_NAMES = ["betfair exchange", "betflag exchange", "smarkets", "betdaq", "matchbook"];
 
@@ -180,53 +217,140 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     const commissionRate = commission / 100;
 
     const bookmakerSide = data.data.filter(odd => !isOnExchangeSide(odd.bookmaker));
-    const exchangeSide = data.data.filter(odd => isOnExchangeSide(odd.bookmaker));
+    const rawExchangeSide = data.data.filter(odd => isOnExchangeSide(odd.bookmaker));
+
+    // Punta-punta only when the user explicitly selects bookmakers as counter side.
+    // In punta-punta mode use ALL data for both sides so no bookmaker is accidentally
+    // excluded — the inner loop already prevents same-bookmaker comparisons.
+    const effectivePuntaPunta = isPuntaPuntaMode;
+    const allPool = data.data;
+    const exchangeSide = effectivePuntaPunta ? allPool : rawExchangeSide;
 
     if (exchangeSide.length === 0) return [];
 
-    if (isPuntaPuntaMode) {
-      // ── PUNTA-PUNTA: back-back on opposite outcomes (2-way markets) ──
-      // Map of opposite outcome pairs
-      const OPPOSITE: Record<string, string> = {
-        over: "under", under: "over",
-        yes: "no", no: "yes",
-        "1X": "2", "2": "1X",
-        "X2": "1", "1": "X2",
-        "12": "draw", draw: "12",
-        home: "away", away: "home",
-      };
-
-      bookmakerSide.forEach(bmEvent => {
+    if (effectivePuntaPunta) {
+      // ── PUNTA-PUNTA ──
+      allPool.forEach(bmEvent => {
         const matchingCounters = findMatchingEvents(bmEvent, exchangeSide);
         if (matchingCounters.length === 0) return;
         const outcomes = getOutcomes(bmEvent);
+        const hasDrawKey = "X" in bmEvent.odds || "draw" in bmEvent.odds;
+
+        // ── 3-way 1X2 (football): punta-punta ──
+        // Primary: DC counter (real Double Chance quote from centroquote.it)
+        //   "1 vs X2", "2 vs 1X", "X vs 12"
+        // Fallback: Dutch on 1X2 if DC data not yet in DB
+        const DC_COUNTER: Record<string, string> = { "1": "X2", "2": "1X", "X": "12" };
+
+        if (hasDrawKey && outcomes.length === 3) {
+          if (bmEvent.market !== "1X2") return;
+
+          const dcCounters = findMatchingEvents(bmEvent, allPool).filter(e => e.market === "DC");
+          const sameMarket1x2 = matchingCounters.filter(e => e.market === "1X2");
+
+          outcomes.forEach(outcome => {
+            const backOdds = bmEvent.odds[outcome.key];
+            if (!backOdds || backOdds <= 1) return;
+            const dcKey = DC_COUNTER[outcome.key];
+            if (!dcKey) return;
+
+            // ── Primary: DC counter ──
+            dcCounters.forEach(dcEvent => {
+              if (dcEvent.bookmaker === bmEvent.bookmaker) return;
+              const counterOdds = dcEvent.odds[dcKey];
+              if (!counterOdds || counterOdds <= 1) return;
+              const stake2 = backOdds / counterOdds;
+              const profitIf1 = (backOdds - 1) - stake2;
+              const profitIf2 = stake2 * (counterOdds - 1) - 1;
+              const rating = 100 + Math.min(profitIf1, profitIf2) * 100;
+              if (rating > 75 && rating < 105) {
+                opps.push({
+                  eventTime: bmEvent.eventTime, sport: bmEvent.sport || "calcio",
+                  eventName: cleanEventName(bmEvent.eventName), league: bmEvent.league,
+                  market: bmEvent.market,
+                  scommessa: `${outcome.label} vs ${dcKey}`,
+                  rating, bookmaker: bmEvent.bookmaker, quotaBook: backOdds,
+                  exchange: dcEvent.bookmaker, quotaExchange: counterOdds,
+                  isBookVsBook: true,
+                });
+              }
+            });
+
+            // ── Fallback: Dutch on 1X2 when no DC data available ──
+            if (dcCounters.length === 0) {
+              const compOutcomes = outcomes.filter(o => o.key !== outcome.key);
+              sameMarket1x2.forEach(exEvent => {
+                if (exEvent.bookmaker === bmEvent.bookmaker) return;
+                const compOdds = compOutcomes.map(o => ({ key: o.key, label: o.label, odds: exEvent.odds[o.key] }));
+                if (compOdds.some(o => !o.odds || o.odds <= 1)) return;
+                const dutchMargin = compOdds.reduce((sum, o) => sum + 1 / o.odds!, 0);
+                const effectiveCounterOdds = 1 / dutchMargin;
+                if (effectiveCounterOdds <= 1) return;
+                const stake2 = backOdds / effectiveCounterOdds;
+                const profitIf1 = (backOdds - 1) - stake2;
+                const profitIf2 = stake2 * (effectiveCounterOdds - 1) - 1;
+                const rating = 100 + Math.min(profitIf1, profitIf2) * 100;
+                if (rating > 75 && rating < 105) {
+                  const compLabel = compOutcomes.map(o => o.label).join("+");
+                  opps.push({
+                    eventTime: bmEvent.eventTime, sport: bmEvent.sport || "calcio",
+                    eventName: cleanEventName(bmEvent.eventName), league: bmEvent.league,
+                    market: bmEvent.market,
+                    scommessa: `${outcome.label} vs ${compLabel}`,
+                    rating, bookmaker: bmEvent.bookmaker, quotaBook: backOdds,
+                    exchange: exEvent.bookmaker, quotaExchange: effectiveCounterOdds,
+                    isBookVsBook: true,
+                  });
+                }
+              });
+            }
+          });
+          return;
+        }
+
+        // ── 2-way markets only: tennis/NBA 1X2, BTTS, Over/Under ──
+        // (3-way football 1X2 is already handled above via Dutch coverage)
+        // No DC cross-market entries — DC scraping removed (unreliable data).
+        const OPPOSITE: Record<string, string> = {
+          "1": "2", "2": "1",           // tennis/NBA (no draw)
+          "Goal": "No Goal", "No Goal": "Goal",
+          "yes": "no", "no": "yes",
+          "home": "away", "away": "home",
+        };
+        outcomes.forEach(({ key }) => {
+          if (key.startsWith("Over ")) OPPOSITE[key] = key.replace("Over ", "Under ");
+          if (key.startsWith("Under ")) OPPOSITE[key] = key.replace("Under ", "Over ");
+        });
+
+        // Skip if this is still a 3-way market that slipped through (safety guard)
+        if (hasDrawKey && outcomes.length === 3) return;
 
         outcomes.forEach(outcome => {
           const backOdds = bmEvent.odds[outcome.key];
           if (!backOdds || backOdds <= 1) return;
-
           const oppositeKey = OPPOSITE[outcome.key];
           if (!oppositeKey) return;
 
           matchingCounters.forEach(exEvent => {
+            if (exEvent.market !== bmEvent.market) return; // same market only
             const counterOdds = exEvent.odds[oppositeKey];
             if (!counterOdds || counterOdds <= 1) return;
             if (bmEvent.bookmaker === exEvent.bookmaker) return;
 
-            // Punta-punta formula: equalize payouts
             const stake2 = backOdds / counterOdds;
             const profitIf1 = (backOdds - 1) - stake2;
             const profitIf2 = stake2 * (counterOdds - 1) - 1;
             const worstProfit = Math.min(profitIf1, profitIf2);
             const rating = 100 + worstProfit * 100;
 
-            if (rating > 85 && rating < 105) {
+            if (rating > 75 && rating < 105) {
               opps.push({
                 eventTime: bmEvent.eventTime,
                 sport: bmEvent.sport || "calcio",
                 eventName: cleanEventName(bmEvent.eventName),
                 league: bmEvent.league,
-                scommessa: outcome.label,
+                market: bmEvent.market,
+                scommessa: `${outcome.label} vs ${oppositeKey}`,
                 rating,
                 bookmaker: bmEvent.bookmaker,
                 quotaBook: backOdds,
@@ -240,52 +364,80 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       });
     } else {
       // ── BACK-LAY: standard book vs exchange ──
+      // For events with no exchange match, fall back to punta-punta (book vs book)
+      const OPPOSITE: Record<string, string> = {
+        "1": "2", "2": "1",
+        "Goal": "No Goal", "No Goal": "Goal",
+        "yes": "no", "no": "yes",
+        "home": "away", "away": "home",
+      };
+
       bookmakerSide.forEach(bmEvent => {
         const matchingExchanges = findMatchingEvents(bmEvent, exchangeSide);
-        if (matchingExchanges.length === 0) return;
         const outcomes = getOutcomes(bmEvent);
+        const hasDrawKey = "X" in bmEvent.odds || "draw" in bmEvent.odds;
+        const is3Way = hasDrawKey && outcomes.length === 3;
 
-        outcomes.forEach(outcome => {
-          const backOdds = bmEvent.odds[outcome.key];
-          if (!backOdds || backOdds <= 1) return;
+        // ── Try back-lay first ──
+        if (matchingExchanges.length > 0) {
+          outcomes.forEach(outcome => {
+            const backOdds = bmEvent.odds[outcome.key];
+            if (!backOdds || backOdds <= 1) return;
 
-          let bestLayOdds = Infinity;
-          let bestExchange = "";
-          matchingExchanges.forEach(exEvent => {
-            const layOdds = exEvent.odds[outcome.key];
-            if (layOdds && layOdds > 1 && layOdds < bestLayOdds) {
-              bestLayOdds = layOdds;
-              bestExchange = exEvent.bookmaker;
+            let bestLayOdds = Infinity;
+            let bestExchange = "";
+            let bestVolume: number | undefined;
+            let bestMarketId: string | undefined;
+            matchingExchanges.forEach(exEvent => {
+              const layOdds = exEvent.odds[outcome.key];
+              if (layOdds && layOdds > 1 && layOdds < bestLayOdds) {
+                bestLayOdds = layOdds;
+                bestExchange = exEvent.bookmaker;
+                bestVolume = exEvent.volume?.[outcome.key];
+                bestMarketId = exEvent.marketId;
+              }
+            });
+            if (bestLayOdds === Infinity) return;
+
+            const layStake = backOdds / (bestLayOdds - commissionRate);
+            const profitIfWin = (backOdds - 1) - layStake * (bestLayOdds - 1);
+            const profitIfLose = layStake * (1 - commissionRate) - 1;
+            const worstProfit = Math.min(profitIfWin, profitIfLose);
+            const rating = 100 + worstProfit * 100;
+
+            if (rating > 70 && rating < 105) {
+              opps.push({
+                eventTime: bmEvent.eventTime,
+                sport: bmEvent.sport || "calcio",
+                eventName: cleanEventName(bmEvent.eventName),
+                league: bmEvent.league,
+                market: bmEvent.market,
+                scommessa: outcome.label,
+                rating,
+                bookmaker: bmEvent.bookmaker,
+                quotaBook: backOdds,
+                exchange: bestExchange,
+                quotaExchange: bestLayOdds,
+                isBookVsBook: false,
+                volumeExchange: bestVolume,
+                marketId: bestMarketId,
+              });
             }
           });
-          if (bestLayOdds === Infinity) return;
-
-          const layStake = backOdds / (bestLayOdds - commissionRate);
-          const profitIfWin = (backOdds - 1) - layStake * (bestLayOdds - 1);
-          const profitIfLose = layStake * (1 - commissionRate) - 1;
-          const worstProfit = Math.min(profitIfWin, profitIfLose);
-          const rating = 100 + worstProfit * 100;
-
-          if (rating > 70 && rating < 105) {
-            opps.push({
-              eventTime: bmEvent.eventTime,
-              sport: bmEvent.sport || "calcio",
-              eventName: cleanEventName(bmEvent.eventName),
-              league: bmEvent.league,
-              scommessa: outcome.label,
-              rating,
-              bookmaker: bmEvent.bookmaker,
-              quotaBook: backOdds,
-              exchange: bestExchange,
-              quotaExchange: bestLayOdds,
-              isBookVsBook: false,
-            });
-          }
-        });
+          return; // back-lay handled
+        }
+        // No exchange found for this event → skip (stay in back-lay mode, no punta-punta mixing)
       });
     }
 
-    return opps.sort((a, b) => b.rating - a.rating);
+    // Deduplicate: keep best rating per (eventName, scommessa, bookmaker)
+    const dedupMap = new Map<string, Opportunity>();
+    for (const opp of opps) {
+      const key = `${normalizeEventName(opp.eventName)}|${opp.scommessa}|${opp.bookmaker}`;
+      const existing = dedupMap.get(key);
+      if (!existing || opp.rating > existing.rating) dedupMap.set(key, opp);
+    }
+    return Array.from(dedupMap.values()).sort((a, b) => b.rating - a.rating);
   }, [data, commission, selectedExchanges, isPuntaPuntaMode]);
 
   // ═══ TRE VIE: Book vs Book 3-way dutching ═══
@@ -326,6 +478,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             sport: group[0].sport || "calcio",
             eventName: cleanEventName(group[0].eventName),
             league: group[0].league,
+            market: group[0].market,
             scommessa: `${oA.label}/${oB.label}`,
             rating,
             bookmaker: bestA.book,
@@ -367,6 +520,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
               sport: group[0].sport || "calcio",
               eventName: cleanEventName(group[0].eventName),
               league: group[0].league,
+              market: group[0].market,
               scommessa: mainOutcome.label,
               rating,
               bookmaker: mainBook,
@@ -522,6 +676,22 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     }
   };
 
+  const getLeagueFlag = (league: string): string => {
+    const l = league.toLowerCase();
+    if (l.includes("serie a") || l.includes("serie b") || l.includes("coppa italia")) return "🇮🇹";
+    if (l.includes("premier") || l.includes("championship") || l.includes("fa cup") || l.includes("league one") || l.includes("league two")) return "🏴󠁧󠁢󠁥󠁮󠁧󠁿";
+    if (l.includes("laliga") || l.includes("la liga") || l.includes("segunda")) return "🇪🇸";
+    if (l.includes("bundesliga") || l.includes("bundesliga 2")) return "🇩🇪";
+    if (l.includes("ligue 1") || l.includes("ligue 2")) return "🇫🇷";
+    if (l.includes("champions") || l.includes("europa league") || l.includes("conference")) return "🇪🇺";
+    if (l.includes("nba")) return "🇺🇸";
+    if (l.includes("atp") || l.includes("wta")) return "🌍";
+    if (l.includes("eredivisie") || l.includes("olanda")) return "🇳🇱";
+    if (l.includes("primeira") || l.includes("portogallo")) return "🇵🇹";
+    if (l.includes("super lig") || l.includes("turchia")) return "🇹🇷";
+    return "🏳";
+  };
+
   if (loading) {
     return (
       <div className="text-center py-12 text-white">
@@ -543,16 +713,16 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
   // ═══ RENDER: SINGOLA ═══
   if (activeTab === "singola") {
-    if (!isPuntaPuntaMode && !hasExchangeData) {
+    const filtered = applyFilters(singolaOpps).slice(0, 200);
+    if (filtered.length === 0) {
       return (
-        <div className="text-center py-12">
-          <div className="text-white mb-2">Nessun dato Exchange disponibile (Betfair/BetFlag Exchange).</div>
-          <div className="text-white text-sm">La modalit&agrave; SINGOLA richiede quote exchange per il calcolo back/lay.</div>
-          <div className="text-white text-sm mt-1">Usa la tab <strong className="text-white">TRE VIE</strong> per le opportunit&agrave; book vs book, o <strong className="text-white">BEST ODDS</strong> per le migliori quote.</div>
+        <div className="text-center py-12 text-white">
+          {isPuntaPuntaMode
+            ? "Nessuna opportunità punta-punta trovata con rating tra 85% e 105%."
+            : "Nessuna opportunità trovata. Seleziona i Bookmaker come counter per la modalità Punta-Punta."}
         </div>
       );
     }
-    const filtered = applyFilters(singolaOpps).slice(0, 200);
     return renderOpportunityTable(filtered, isPuntaPuntaMode);
   }
 
@@ -582,8 +752,9 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
-                <th className="text-center py-2.5 px-2 font-semibold w-10">Sport</th>
+                <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
+                <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Mercato</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Esito</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Miglior Book</th>
@@ -603,6 +774,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                     <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
                     <td className="py-2 px-2 text-center text-base">{getSportIcon(row.sport)}</td>
                     <td className="py-2 px-3 text-sm text-white font-medium max-w-[220px] truncate">{row.eventName}</td>
+                    <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(row.league)}</td>
                     <td className="py-2 px-3 text-center text-xs text-white">{row.market}</td>
                     <td className="py-2 px-3 text-center text-sm font-medium text-white">{row.outcome}</td>
                     <td className="py-2 px-3 text-center">
@@ -637,15 +809,16 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
-                <th className="text-center py-2.5 px-2 font-semibold w-10">Sport</th>
+                <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Esito 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Book 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Esito 2</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Book 2</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota</th>
+                <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 1</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 2</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Margine</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 1</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota 1</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 2</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota 2</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
@@ -657,21 +830,22 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                     <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
                     <td className="py-2 px-2 text-center text-base">{getSportIcon(row.sport)}</td>
                     <td className="py-2 px-3 text-sm text-white font-medium max-w-[200px] truncate">{row.eventName}</td>
+                    <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(row.league)}</td>
                     <td className="py-2 px-3 text-center text-sm font-medium text-white">{row.outcome1}</td>
-                    <td className="py-2 px-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: c1.bg, color: c1.text }}>{row.book1}</span>
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm text-[#0d2035] bg-[#87c4e8]">{row.odds1.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center text-sm font-medium text-white">{row.outcome2}</td>
-                    <td className="py-2 px-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: c2.bg, color: c2.text }}>{row.book2}</span>
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm text-[#2d0d1a] bg-[#f4a9ba]">{row.odds2.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center">
                       <span className={`text-sm font-bold ${row.margin < 100 ? "text-green-400" : "text-red-400"}`}>
                         {row.margin.toFixed(1)}%
                       </span>
                     </td>
+                    <td className="py-2 px-3 text-center">
+                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: c1.bg, color: c1.text }}>{row.book1}</span>
+                    </td>
+                    <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">{row.odds1.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center">
+                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: c2.bg, color: c2.text }}>{row.book2}</span>
+                    </td>
+                    <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#2d0d1a] bg-[#f4a9ba]">{row.odds2.toFixed(2).replace(".", ",")}</td>
                   </tr>
                 );
               })}
@@ -694,9 +868,26 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
   return null;
 
+  // Format volume: €1.234 / €12.3K / €1.2M
+  function formatVolume(v: number | undefined): string {
+    if (v == null) return "";
+    if (v >= 1_000_000) return `€${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `€${(v / 1_000).toFixed(1)}K`;
+    return `€${Math.round(v)}`;
+  }
+
   // ═══ Helper: render opportunity table ═══
   function renderOpportunityTable(opps: Opportunity[], isBookVsBook: boolean) {
+    const showVolume = !isBookVsBook; // volume only in back-lay mode
     return (
+      <>
+      {selectedOpp && (
+        <PuntaBancaModal
+          opp={selectedOpp}
+          commission={commission}
+          onClose={() => setSelectedOpp(null)}
+        />
+      )}
       <div>
         <div className="flex items-center justify-between px-4 py-2">
           <span className="text-xs font-medium px-2 py-0.5 rounded" style={{ backgroundColor: isBookVsBook ? "#87c4e820" : "#f4a9ba20", color: isBookVsBook ? "#87c4e8" : "#f4a9ba" }}>
@@ -709,26 +900,37 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
-                <th className="text-center py-2.5 px-2 font-semibold w-10">Sport</th>
+                <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Scommessa</th>
+                <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 1</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 2</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
-                <th className="text-center py-2.5 px-3 font-semibold">{isBookVsBook ? "Book 2" : "Exchange"}</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 1</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota 1</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 2</th>
+                <th className={`text-center py-2.5 px-3 font-semibold ${isBookVsBook ? "text-[#87c4e8]" : "text-[#f4a9ba]"}`}>Quota 2</th>
+                {showVolume && <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Volume</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
               {opps.map((opp, i) => {
                 const bookColor = getBookColor(opp.bookmaker);
                 const exchColor = getBookColor(opp.exchange);
+                // Split "1 vs X+2" → sc1="1", sc2="X+2"
+                const vsSplit = opp.scommessa.split(" vs ");
+                const sc1 = vsSplit[0] ?? opp.scommessa;
+                const sc2 = vsSplit[1] ?? opp.scommessa;
+                // Counter quota display for Quota 2
+                const counterQuota = opp.quotaExchange > 0 ? opp.quotaExchange.toFixed(2).replace(".", ",") : "—";
                 return (
-                  <tr key={i} className="hover:bg-[#1e2d42] transition-colors">
+                  <tr key={i} className="hover:bg-[#1e2d42] transition-colors cursor-pointer" onClick={() => setSelectedOpp(opp)}>
                     <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(opp.eventTime)}</td>
                     <td className="py-2 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
-                    <td className="py-2 px-3 text-sm text-white font-medium max-w-[250px] truncate">{opp.eventName}</td>
-                    <td className="py-2 px-3 text-center text-sm font-medium text-white">{opp.scommessa}</td>
+                    <td className="py-2 px-3 text-sm text-white font-medium max-w-[220px] truncate">{opp.eventName}</td>
+                    <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(opp.league)}</td>
+                    <td className="py-2 px-3 text-center text-sm font-bold text-white">{sc1}</td>
+                    <td className="py-2 px-3 text-center text-sm font-bold text-white">{sc2}</td>
                     <td className="py-2 px-3 text-center">
                       <span className={`text-sm font-bold ${
                         opp.rating >= 100 ? "text-green-400" :
@@ -744,15 +946,20 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                         {opp.bookmaker}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm text-[#0d2035] bg-[#87c4e8]">{opp.quotaBook.toFixed(2).replace(".", ",")}</td>
+                    <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">{opp.quotaBook.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
                         {opp.exchange}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm text-[#2d0d1a] bg-[#f4a9ba]">
-                      {opp.quotaExchange > 0 ? opp.quotaExchange.toFixed(2).replace(".", ",") : "—"}
+                    <td className={`py-2 px-3 text-center font-mono text-sm ${isBookVsBook ? "text-[#0d2035] bg-[#87c4e8]" : "text-[#2d0d1a] bg-[#f4a9ba]"}`}>
+                      {counterQuota}
                     </td>
+                    {showVolume && (
+                      <td className="py-2 px-3 text-center text-xs font-mono text-[#f4a9ba]">
+                        {opp.volumeExchange != null ? formatVolume(opp.volumeExchange) : <span className="text-white opacity-30">—</span>}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -760,6 +967,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
           </table>
         </div>
       </div>
+      </>
     );
   }
 }
