@@ -53,25 +53,10 @@ function getUrl(name: string) {
 }
 
 // Betfair Exchange deep link
-// marketId is like "1.234567890" — used as-is in the URL
-const BF_SPORT_SLUG: Record<string, string> = {
-  calcio:  "football",
-  tennis:  "tennis",
-  basket:  "basketball",
-};
-const BF_MARKET_SLUG: Record<string, string> = {
-  "1X2":        "match-odds",
-  "DC":         "double-chance",
-  "BTTS":       "both-teams-score",
-  "Over/Under": "over-under-goals",
-};
-
-function getBetfairUrl(sport: string, market: string, marketId?: string): string {
-  if (!marketId) return "https://www.betfair.it/exchange/plus/football";
-  const sportSlug = BF_SPORT_SLUG[sport] ?? "football";
-  const mktKey = Object.keys(BF_MARKET_SLUG).find(k => market.startsWith(k));
-  const mktSlug = mktKey ? BF_MARKET_SLUG[mktKey] : "match-odds";
-  return `https://www.betfair.it/exchange/plus/${sportSlug}/${mktSlug}/${marketId}`;
+// Direct market URL format: /exchange/market/?marketId=1.xxxxxxxxxx
+function getBetfairUrl(_sport: string, _market: string, marketId?: string): string {
+  if (!marketId) return "https://www.betfair.it/exchange/plus/";
+  return `https://www.betfair.it/exchange/market/?marketId=${marketId}`;
 }
 
 function formatDt(iso: string) {
