@@ -13,7 +13,8 @@ interface ModalOpportunity {
   quotaExchange: number;
   isBookVsBook: boolean;
   volumeExchange?: number;
-  marketId?: string;  // Betfair market ID per link diretto
+  marketId?: string;  // Betfair market ID
+  eventId?: string;   // Betfair event ID per link diretto
 }
 
 interface Props {
@@ -53,10 +54,29 @@ function getUrl(name: string) {
 }
 
 // Betfair Exchange deep link
-// Direct market URL format: /exchange/market/?marketId=1.xxxxxxxxxx
-function getBetfairUrl(_sport: string, _market: string, marketId?: string): string {
-  if (!marketId) return "https://www.betfair.it/exchange/plus/";
-  return `https://www.betfair.it/exchange/market/?marketId=${marketId}`;
+// Format: /exchange/plus/it/{sport}/{leagueSlug}/{teamsSlug}-scommesse-{eventId}
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/\s+v\s+|\s+vs\.?\s+|\s+-\s+/g, "-")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+const BF_SPORT_IT: Record<string, string> = {
+  calcio: "calcio",
+  tennis: "tennis",
+  basket: "basket",
+};
+function getBetfairUrl(sport: string, _market: string, marketId?: string, eventId?: string, eventName?: string, league?: string): string {
+  if (!eventId) {
+    // Fallback: link generico exchange
+    return "https://www.betfair.it/exchange/plus/";
+  }
+  const sportSlug = BF_SPORT_IT[sport] ?? "calcio";
+  const leagueSlug = slugify(league ?? "");
+  const teamsSlug = slugify(eventName ?? "");
+  return `https://www.betfair.it/exchange/plus/it/${sportSlug}/${leagueSlug}/${teamsSlug}-scommesse-${eventId}`;
 }
 
 function formatDt(iso: string) {
@@ -292,7 +312,7 @@ export function PuntaBancaModal({ opp, commission, onClose }: Props) {
               {isBackLay ? "Banca su" : "Punta su"}
             </div>
             <a
-              href={isBackLay ? getBetfairUrl(opp.sport, opp.market, opp.marketId) : getUrl(opp.exchange)}
+              href={isBackLay ? getBetfairUrl(opp.sport, opp.market, opp.marketId, opp.eventId, opp.eventName, opp.league) : getUrl(opp.exchange)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-white font-bold text-base hover:opacity-80 transition-opacity"

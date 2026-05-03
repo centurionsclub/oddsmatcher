@@ -377,6 +377,7 @@ def _extract_rows(
         event_time = datetime.now(timezone.utc)
 
     event_name = event.get("name", "Unknown")
+    event_id = str(event.get("id", ""))
     league = competition.get("name", "Unknown")
 
     # Build runner map: selectionId → (runnerName, sortPriority)
@@ -442,6 +443,7 @@ def _extract_rows(
             "volume": float(lay_size),
             "expires_at": expires_at,
             "market_id": market_id,
+            "event_id": event_id,
         })
 
     return rows

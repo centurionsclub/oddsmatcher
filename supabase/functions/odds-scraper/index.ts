@@ -15,7 +15,8 @@ interface OddsData {
   sport: string;
   odds: Record<string, number>;
   volume: Record<string, number>;  // lay volume per outcome (Betfair only)
-  marketId?: string;               // Betfair market ID for deep links (e.g. "1.234567890")
+  marketId?: string;               // Betfair market ID (e.g. "1.234567890")
+  eventId?: string;                // Betfair event ID for direct URL (e.g. "35512774")
 }
 
 serve(async (req) => {
@@ -44,7 +45,7 @@ serve(async (req) => {
     const cutoff = new Date(Date.now() + 20 * 60 * 1000).toISOString();
     let query = supabase
       .from("live_odds")
-      .select("bookmaker, sport, league, event_name, event_time, market, outcome, odds, volume, market_id")
+      .select("bookmaker, sport, league, event_name, event_time, market, outcome, odds, volume, market_id, event_id")
       .gt("expires_at", new Date().toISOString())
       .gt("event_time", cutoff)
       .order("event_time", { ascending: true })
@@ -107,6 +108,7 @@ serve(async (req) => {
           odds: {},
           volume: {},
           marketId: row.market_id ?? undefined,
+          eventId: row.event_id ?? undefined,
         });
       }
       const entry = grouped.get(key)!;

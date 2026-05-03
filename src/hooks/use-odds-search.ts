@@ -9,7 +9,8 @@ export interface OddsData {
   market: string;
   sport: string;
   odds: Record<string, number>;
-  marketId?: string;  // Betfair market ID for deep links
+  marketId?: string;  // Betfair market ID
+  eventId?: string;   // Betfair event ID for direct URL
 }
 
 export interface OddsResponse {

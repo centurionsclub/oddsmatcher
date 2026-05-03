@@ -10,7 +10,8 @@ interface OddsData {
   sport: string;
   odds: Record<string, number>;
   volume?: Record<string, number>;  // lay volume per outcome (Betfair Exchange only)
-  marketId?: string;                // Betfair market ID for deep links
+  marketId?: string;                // Betfair market ID
+  eventId?: string;                 // Betfair event ID for direct URL
 }
 
 interface Opportunity {
@@ -27,7 +28,8 @@ interface Opportunity {
   quotaExchange: number;
   isBookVsBook: boolean;
   volumeExchange?: number;  // Betfair lay volume (€) — only in back-lay mode
-  marketId?: string;        // Betfair market ID for direct exchange link
+  marketId?: string;        // Betfair market ID
+  eventId?: string;         // Betfair event ID for direct URL
 }
 
 interface BestOddsRow {
@@ -388,6 +390,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             let bestExchange = "";
             let bestVolume: number | undefined;
             let bestMarketId: string | undefined;
+            let bestEventId: string | undefined;
             matchingExchanges.forEach(exEvent => {
               const layOdds = exEvent.odds[outcome.key];
               if (layOdds && layOdds > 1 && layOdds < bestLayOdds) {
@@ -395,6 +398,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 bestExchange = exEvent.bookmaker;
                 bestVolume = exEvent.volume?.[outcome.key];
                 bestMarketId = exEvent.marketId;
+                bestEventId = exEvent.eventId;
               }
             });
             if (bestLayOdds === Infinity) return;
@@ -421,6 +425,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 isBookVsBook: false,
                 volumeExchange: bestVolume,
                 marketId: bestMarketId,
+                eventId: bestEventId,
               });
             }
           });
