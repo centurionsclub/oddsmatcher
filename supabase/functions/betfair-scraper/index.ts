@@ -62,9 +62,16 @@ async function betfairLogin(appKey: string, username: string, password: string):
     },
     body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
   });
-  const body = await resp.json();
+  const rawText = await resp.text();
+  console.log(`[BF] Login HTTP ${resp.status}, content-type: ${resp.headers.get("content-type")}, body: ${rawText.slice(0, 500)}`);
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(rawText);
+  } catch {
+    throw new Error(`Betfair login returned non-JSON (HTTP ${resp.status}): ${rawText.slice(0, 300)}`);
+  }
   if (body.status !== "SUCCESS") throw new Error(`Betfair login failed: ${JSON.stringify(body)}`);
-  return body.token;
+  return body.token as string;
 }
 
 async function apiPost(url: string, payload: unknown, token: string, appKey: string): Promise<unknown> {

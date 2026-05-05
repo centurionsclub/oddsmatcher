@@ -2,8 +2,8 @@ name: Betfair Scraper
 
 on:
   schedule:
-    # Ogni 5 minuti (minimo GitHub Actions)
-    - cron: '*/5 * * * *'
+    # Ogni 30 minuti — Python scraper via GitHub Actions (non IP-bloccato da Betfair)
+    - cron: '*/30 * * * *'
   workflow_dispatch: # avvio manuale se serve
 
 jobs:
