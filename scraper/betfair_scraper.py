@@ -263,7 +263,7 @@ async def list_market_catalogue(
                 try:
                     page = await _fetch_catalogue_page(
                         client, token, event_type_ids, market_types,
-                        hours_ahead=168,
+                        hours_ahead=336,  # 14 giorni
                         extra_filter={"competitionIds": batch},
                     )
                     for m in page:
@@ -483,13 +483,13 @@ async def scrape_betfair(sports: list[str] | None = None) -> int:
         catalogue_list: list[dict[str, Any]] = []
         if football_ids:
             try:
-                fb_cat = await list_market_catalogue(client, token, football_ids, MARKET_TYPES)
+                fb_cat = await list_market_catalogue(client, token, football_ids, MARKET_TYPES, hours_ahead=336)
                 catalogue_list.extend(fb_cat)
             except Exception as exc:
                 print(f"[Betfair] listMarketCatalogue (football) error: {exc}")
         if other_ids:
             try:
-                ot_cat = await list_market_catalogue(client, token, other_ids, MARKET_TYPES)
+                ot_cat = await list_market_catalogue(client, token, other_ids, MARKET_TYPES, hours_ahead=72)
                 catalogue_list.extend(ot_cat)
             except Exception as exc:
                 print(f"[Betfair] listMarketCatalogue (other sports) error: {exc}")
