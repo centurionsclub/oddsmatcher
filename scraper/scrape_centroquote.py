@@ -59,9 +59,9 @@ LEAGUES = [
     {"url": "/football/spain/laliga2/",               "name": "LaLiga2",          "sport": "calcio"},
     {"url": "/football/germany/bundesliga/",          "name": "Bundesliga",       "sport": "calcio"},
     {"url": "/football/france/ligue-1/",              "name": "Ligue 1",          "sport": "calcio"},
-    # Tennis
-    {"url": "/tennis/",  "name": "ATP Singles", "sport": "tennis", "discover": "uomini"},
-    {"url": "/tennis/",  "name": "WTA Singles", "sport": "tennis", "discover": "donne"},
+    # Tennis — discovery per tutti i tornei ATP e WTA attivi
+    {"url": "/tennis/",  "name": "ATP Singles", "sport": "tennis", "discover": "atp"},
+    {"url": "/tennis/",  "name": "WTA Singles", "sport": "tennis", "discover": "wta"},
     # Basket
     {"url": "/basketball/usa/nba/",                   "name": "NBA",              "sport": "basket"},
 ]
@@ -668,7 +668,7 @@ async def _discover_tennis_tournament_urls(context: BrowserContext, gender_keywo
                 const kw = '{gender_keyword}';
                 return Array.from(document.querySelectorAll('a[href]'))
                     .map(a => a.getAttribute('href'))
-                    .filter(h => h && h.startsWith('/tennis/') && h.includes(kw) && !h.includes('doppio'))
+                    .filter(h => h && h.startsWith('/tennis/') && h !== '/tennis/' && h.includes(kw) && !h.includes('doppio'))
                     .filter((v, i, a) => a.indexOf(v) === i);
             }}
         """)
