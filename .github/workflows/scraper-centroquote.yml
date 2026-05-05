@@ -2,8 +2,8 @@ name: CentroQuote Scraper
 
 on:
   schedule:
-    # Ogni 30 minuti
-    - cron: '*/30 * * * *'
+    # Ogni 8 ore (Betfair gestito da Supabase pg_cron, CQ su GitHub ogni 8h)
+    - cron: '0 */8 * * *'
   workflow_dispatch:
 
 jobs:

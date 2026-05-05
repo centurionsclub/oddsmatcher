@@ -35,7 +35,7 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 BASE_URL = "https://www.centroquote.it"
-CACHE_TTL_MINUTES = 50   # 50 min: slow loop runs every 30 min, 50 min TTL avoids gaps
+CACHE_TTL_MINUTES = 600  # 10 ore: GitHub Actions gira ogni 8h, 10h TTL evita gap
 CONCURRENCY = 12         # parallel match pages
 PAGE_WAIT_MS = 1500      # ms to wait after navigation (Vue.js renders in ~1s)
 GOTO_TIMEOUT_MS = 15000  # page load timeout — fail fast to avoid 45s hangs
