@@ -376,7 +376,9 @@ def _extract_rows(
     except Exception:
         event_time = datetime.now(timezone.utc)
 
-    event_name = event.get("name", "Unknown")
+    # Normalizza "Team A v Team B" → "Team A - Team B" per matchare i bookmaker
+    raw_event_name = event.get("name", "Unknown")
+    event_name = re.sub(r"\s+v\s+", " - ", raw_event_name)
     event_id = str(event.get("id", ""))
     league = competition.get("name", "Unknown")
 
