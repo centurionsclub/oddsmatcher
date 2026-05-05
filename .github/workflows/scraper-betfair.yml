@@ -20,10 +20,10 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-          cache-dependency-path: scraper/requirements.txt
+          cache-dependency-path: scraper/requirements-betfair.txt
 
       - name: Install dependencies
-        run: pip install -r scraper/requirements.txt
+        run: pip install -r scraper/requirements-betfair.txt
 
       - name: Run Betfair scraper
         working-directory: scraper
