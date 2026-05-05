@@ -124,14 +124,15 @@ BM_ALIASES: dict[str, str] = {
 }
 
 
-def normalise_bookmaker(raw: str) -> str:
+def normalise_bookmaker(raw: str) -> str | None:
+    """Ritorna il nome canonico del bookmaker, o None se non è un bookmaker italiano noto."""
     key = raw.strip().lower()
     if key in BM_ALIASES:
         return BM_ALIASES[key]
     for alias, canonical in BM_ALIASES.items():
         if alias in key:
             return canonical
-    return raw.strip().title()
+    return None  # bookmaker non italiano/non riconosciuto → scarta
 
 
 # ──────────────────────────────────────────────
@@ -301,6 +302,8 @@ async def scrape_match_page(
 
         for bm_raw, odds in rows_1x2:
             bm = normalise_bookmaker(bm_raw)
+            if not bm:
+                continue
             for i, out in enumerate(outcomes_1x2):
                 if i < len(odds):
                     db_rows.append(_make_row(bm, league, event_name, event_time, market_key, out, odds[i], expires))
@@ -339,6 +342,8 @@ async def scrape_match_page(
 
             for bm_raw, odds in rows:
                 bm = normalise_bookmaker(bm_raw)
+            if not bm:
+                continue
                 for i, out in enumerate(market_cfg["outcomes"]):
                     if i < len(odds):
                         db_rows.append(_make_row(bm, league, event_name, event_time, market_cfg["key"], out, odds[i], expires))
@@ -374,6 +379,8 @@ async def scrape_match_page(
                     if bm_raw.lower().startswith("over/under") or bm_raw.startswith("Over/Under"):
                         continue
                     bm = normalise_bookmaker(bm_raw)
+            if not bm:
+                continue
                     if len(odds) >= 2:
                         db_rows.append(_make_row(bm, league, event_name, event_time, "Over/Under", f"Over {threshold}", odds[0], expires))
                         db_rows.append(_make_row(bm, league, event_name, event_time, "Over/Under", f"Under {threshold}", odds[1], expires))
@@ -652,6 +659,8 @@ def _parse_inline_odds(match: dict, league: dict, outcomes: list[str], market_ke
         if not bm_raw or len(odds) < len(outcomes):
             continue
         bm = normalise_bookmaker(bm_raw)
+        if not bm:
+            continue
         for i, out in enumerate(outcomes):
             rows.append(_make_row(bm, league, event_name, event_time, market_key, out, odds[i], expires))
     return rows
