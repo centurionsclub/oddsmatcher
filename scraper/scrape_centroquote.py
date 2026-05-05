@@ -342,8 +342,8 @@ async def scrape_match_page(
 
             for bm_raw, odds in rows:
                 bm = normalise_bookmaker(bm_raw)
-            if not bm:
-                continue
+                if not bm:
+                    continue
                 for i, out in enumerate(market_cfg["outcomes"]):
                     if i < len(odds):
                         db_rows.append(_make_row(bm, league, event_name, event_time, market_cfg["key"], out, odds[i], expires))
@@ -379,8 +379,8 @@ async def scrape_match_page(
                     if bm_raw.lower().startswith("over/under") or bm_raw.startswith("Over/Under"):
                         continue
                     bm = normalise_bookmaker(bm_raw)
-            if not bm:
-                continue
+                    if not bm:
+                        continue
                     if len(odds) >= 2:
                         db_rows.append(_make_row(bm, league, event_name, event_time, "Over/Under", f"Over {threshold}", odds[0], expires))
                         db_rows.append(_make_row(bm, league, event_name, event_time, "Over/Under", f"Under {threshold}", odds[1], expires))
