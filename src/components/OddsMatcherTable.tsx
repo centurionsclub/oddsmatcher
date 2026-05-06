@@ -946,7 +946,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
           commission={commission}
           onClose={() => setSelectedOpp(null)}
           initialBonus={parseFloat(filters.bonus) || 0}
-          initialStake={parseFloat(filters.stakePunta) || 100}
+          initialStake={filters.stakePunta === "" ? 0 : (parseFloat(filters.stakePunta) || 0)}
           initialFreeBet={filters.freebet}
           initialRimborso={filters.rimborso}
         />

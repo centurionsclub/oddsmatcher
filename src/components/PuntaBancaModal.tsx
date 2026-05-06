@@ -186,7 +186,7 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
 
 // ─── Main modal ──────────────────────────────────────────────────────────────
 export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, initialStake = 100, initialFreeBet = false, initialRimborso = false }: Props) {
-  const [stake, setStake] = useState(initialStake > 1 ? initialStake : 100);
+  const [stake, setStake] = useState(initialStake);
   const [bonus, setBonus] = useState(initialBonus);
   const [freeBet, setFreeBet] = useState(initialFreeBet);
   const [rimborso, setRimborso] = useState(initialRimborso);
@@ -199,7 +199,7 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
     setFreeBet(initialFreeBet);
     setRimborso(initialRimborso);
     setBonus(initialBonus);
-    if (initialStake > 1) setStake(initialStake);
+    setStake(initialStake);
   }, [opp, initialBonus, initialStake, initialFreeBet, initialRimborso]);
 
   useEffect(() => {
@@ -216,16 +216,20 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
       ? (stake * (qPunta - 1)) / (qBanca - c)
       : (stake * qPunta) / (qBanca - c);
     const rischio = layStake * (qBanca - 1);
+    // win: in standard mode the bonus is received regardless of outcome → add it
     const win = freeBet
-      ? stake * (qPunta - 1) - rischio
-      : stake * (qPunta - 1) - rischio;
+      ? stake * (qPunta - 1) - rischio              // freeBet: stake isn't yours, no bonus on win
+      : rimborso
+        ? stake * (qPunta - 1) - rischio             // rimborso: refund only on loss, not win
+        : stake * (qPunta - 1) - rischio + bonus;    // standard: bonus received on win too
     const lose = rimborso
       ? layStake * (1 - c) - stake + (bonus || stake)
       : freeBet
         ? layStake * (1 - c) + bonus
         : layStake * (1 - c) - stake + bonus;
     const worst = Math.min(win, lose);
-    return { layStake, rischio, win, lose, worst, rating: 100 + (worst / stake) * 100 };
+    const base = stake > 0 ? stake : bonus > 0 ? bonus : 1;
+    return { layStake, rischio, win, lose, worst, rating: 100 + (worst / base) * 100 };
   }, [stake, bonus, freeBet, rimborso, qPunta, qBanca, c])();
 
   const vs = opp.scommessa.split(" vs ");
