@@ -242,8 +242,12 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
         : layStake * (1 - c) - stake;      // normale: deduci solo stake reale
 
     const worst = Math.min(win, lose);
-    const base = stake > 0 ? stake : bonus;   // rating su costo reale (stake) o sul bonus se stake=0
-    return { totalStake, layStake, rischio, win, lose, worst, rating: 100 + (worst / base) * 100 };
+    // Rating = quanto recuperi dall'exchange sul totale puntato al book
+    // (= layStake×(1−c) / totalStake × 100, come i tool standard di matched betting)
+    // >100% = guadagno, <100% = perdita
+    const exchangeReturn = layStake * (1 - c);
+    const rating = (exchangeReturn / totalStake) * 100;
+    return { totalStake, layStake, rischio, win, lose, worst, rating };
   }, [stake, bonus, freeBet, rimborso, qPunta, qBanca, c])();
 
   const vs = opp.scommessa.split(" vs ");
@@ -257,10 +261,10 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
   const fmtE = (n: number) => fmt(n) + " €";
 
   const ratingColor = !result ? "#8fa8c8"
-    : result.rating >= 100 ? "#4ade80"
-    : result.rating >= 98  ? "#facc15"
-    : result.rating >= 95  ? "#c8922d"
-    : "#f87171";
+    : result.rating >= 100   ? "#4ade80"   // profitto → verde
+    : result.rating >= 99    ? "#facc15"   // quasi pari → giallo
+    : result.rating >= 97    ? "#c8922d"   // piccola perdita → arancione
+    : "#f87171";                           // perdita → rosso
 
   return (
     <div
@@ -402,9 +406,12 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
               >
                 <span className="text-xs font-bold uppercase tracking-widest text-[#8fa8c8]">
                   {isBackLay ? "Bancata Standard" : "Punta-Punta"}
+                  {bonus > 0 ? " + Bonus" : ""}
+                  {rimborso ? " + Rimborso" : ""}
+                  {freeBet ? " (Free Bet)" : ""}
                 </span>
                 <span className="text-2xl font-black" style={{ color: ratingColor }}>
-                  {isFinite(result.rating) ? fmt(result.rating) : "—"}%
+                  Rating {isFinite(result.rating) ? fmt(result.rating) : "—"}%
                 </span>
               </div>
 
@@ -449,13 +456,13 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
                   style={{ background: result.worst >= 0 ? "#4ade8010" : "#f8717110" }}
                 >
                   <span className="text-sm font-semibold" style={{ color: result.worst >= 0 ? "#4ade80" : "#f87171" }}>
-                    {result.worst >= 0 ? "✓ Guadagno garantito" : "⚡ Perdita massima"}
+                    {result.worst >= 0 ? "✓ Guadagnerai" : "⚠ Perdita massima"}
                   </span>
                   <span
                     className="text-2xl font-black"
                     style={{ color: result.worst >= 0 ? "#4ade80" : "#f87171" }}
                   >
-                    {result.worst >= 0 ? "+" : "-"}{fmtE(Math.abs(result.worst))}
+                    {result.worst >= 0 ? "+" : ""}{fmtE(result.worst)}
                   </span>
                 </div>
               </div>
