@@ -87,7 +87,7 @@ BF_SPORT_NAME: dict[str, str] = {
 }
 
 BOOKMAKER = "Betfair Exchange"
-EXPIRES_MINUTES = 90  # match centroquote scraper cycle time
+EXPIRES_MINUTES = 240  # 4 ore: se un run salta i dati rimangono validi
 
 
 # ─── Auth ────────────────────────────────────────────────────────────────────
