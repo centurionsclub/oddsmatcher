@@ -36,9 +36,9 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 BASE_URL = "https://www.centroquote.it"
 CACHE_TTL_MINUTES = 600  # 10 ore: GitHub Actions gira ogni 8h, 10h TTL evita gap
-CONCURRENCY = 12         # parallel match pages
-PAGE_WAIT_MS = 1500      # ms to wait after navigation (Vue.js renders in ~1s)
-GOTO_TIMEOUT_MS = 15000  # page load timeout — fail fast to avoid 45s hangs
+CONCURRENCY = 6          # parallel match pages (ridotto per stabilità su CI)
+PAGE_WAIT_MS = 4000      # ms to wait after navigation (GitHub Actions più lento)
+GOTO_TIMEOUT_MS = 30000  # page load timeout
 
 # ──────────────────────────────────────────────
 # LEAGUES
@@ -267,11 +267,18 @@ async def scrape_match_page(
 
     try:
         await page.goto(BASE_URL + match_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT_MS)
-        # Wait for network idle so all bookmaker rows load (Vue.js async rendering)
+        # Aspetta networkidle + wait esplicito per almeno 8 bookmaker rows
         try:
-            await page.wait_for_load_state("networkidle", timeout=8000)
+            await page.wait_for_load_state("networkidle", timeout=12000)
         except Exception:
-            await page.wait_for_timeout(PAGE_WAIT_MS)
+            pass
+        await page.wait_for_timeout(PAGE_WAIT_MS)
+        # Aspetta fino a 10s che compaiano almeno 8 righe bookmaker
+        for _ in range(10):
+            n = await page.locator("div.flex.h-9").count()
+            if n >= 8:
+                break
+            await page.wait_for_timeout(1000)
 
         # Try to refine the event_time from the match detail page itself
         event_time = await _extract_event_time_from_page(page, event_time)
@@ -289,9 +296,9 @@ async def scrape_match_page(
 
         # --- 1X2 / moneyline (default tab, already loaded) ---
         rows_1x2 = await _extract_bm_rows(page)
-        # If too few rows, wait more and retry (networkidle might have been premature)
+        # Se troppo pochi bookmaker, riprova ancora
         if len(rows_1x2) < 5:
-            await page.wait_for_timeout(2000)
+            await page.wait_for_timeout(3000)
             rows_1x2 = await _extract_bm_rows(page)
         if sport == "calcio":
             outcomes_1x2 = ["1", "X", "2"]
@@ -723,26 +730,32 @@ async def get_match_urls_from_league(context: BrowserContext, league: dict) -> l
     url = BASE_URL + league["url"]
     page = await context.new_page()
     try:
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 await page.goto(url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT_MS)
                 try:
-                    await page.wait_for_load_state("networkidle", timeout=5000)
+                    await page.wait_for_load_state("networkidle", timeout=10000)
                 except Exception:
-                    await page.wait_for_timeout(PAGE_WAIT_MS)
+                    pass
+                await page.wait_for_timeout(PAGE_WAIT_MS)
+                # Aspetta che compaiano le righe evento (Vue.js SPA)
+                for _ in range(8):
+                    n = await page.locator(".eventRow").count()
+                    if n > 0:
+                        break
+                    await page.wait_for_timeout(1000)
                 matches_raw = await page.evaluate(_LEAGUE_JS)
                 events = _parse_matches_raw(matches_raw)
-                if events or attempt == 1:
+                if events or attempt == 2:
                     print(f"  [League] {league['name']}: {len(events)} matches found")
                     return events
-                # 0 matches on first attempt — reload and retry
-                print(f"  [League] {league['name']}: 0 matches, retrying...")
+                print(f"  [League] {league['name']}: 0 matches (attempt {attempt+1}), retrying...")
                 await page.wait_for_timeout(3000)
             except Exception as exc:
-                print(f"  [League] {league['name']} attempt {attempt+1} error: {exc}")
-                if attempt == 1:
+                print(f"  [League] {league['name']} attempt {attempt+1} error: {type(exc).__name__}")
+                if attempt == 2:
                     return []
-                await page.wait_for_timeout(2000)
+                await page.wait_for_timeout(3000)
         return []
     finally:
         await page.close()
