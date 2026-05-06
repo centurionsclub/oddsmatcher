@@ -81,8 +81,11 @@ const Index = () => {
     });
     toast({ title: "Aggiornamento", description: "Caricamento quote in corso..." });
     setTimeout(() => {
-      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
+      if (resultsRef.current) {
+        const top = resultsRef.current.getBoundingClientRect().top + window.scrollY - 8;
+        window.scrollTo({ top, behavior: "smooth" });
+      }
+    }, 150);
   };
 
   const handlePulisci = () => {
