@@ -21,6 +21,10 @@ interface Props {
   opp: ModalOpportunity;
   commission: number;
   onClose: () => void;
+  initialBonus?: number;
+  initialStake?: number;
+  initialFreeBet?: boolean;
+  initialRimborso?: boolean;
 }
 
 const BOOKMAKER_URLS: Record<string, string> = {
@@ -181,21 +185,22 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
 }
 
 // ─── Main modal ──────────────────────────────────────────────────────────────
-export function PuntaBancaModal({ opp, commission, onClose }: Props) {
-  const [stake, setStake] = useState(100);
-  const [bonus, setBonus] = useState(0);
-  const [freeBet, setFreeBet] = useState(false);
-  const [rimborso, setRimborso] = useState(false);
+export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, initialStake = 100, initialFreeBet = false, initialRimborso = false }: Props) {
+  const [stake, setStake] = useState(initialStake > 1 ? initialStake : 100);
+  const [bonus, setBonus] = useState(initialBonus);
+  const [freeBet, setFreeBet] = useState(initialFreeBet);
+  const [rimborso, setRimborso] = useState(initialRimborso);
   const [qPunta, setQPunta] = useState(opp.quotaBook);
   const [qBanca, setQBanca] = useState(opp.quotaExchange);
 
   useEffect(() => {
     setQPunta(opp.quotaBook);
     setQBanca(opp.quotaExchange);
-    setFreeBet(false);
-    setRimborso(false);
-    setBonus(0);
-  }, [opp]);
+    setFreeBet(initialFreeBet);
+    setRimborso(initialRimborso);
+    setBonus(initialBonus);
+    if (initialStake > 1) setStake(initialStake);
+  }, [opp, initialBonus, initialStake, initialFreeBet, initialRimborso]);
 
   useEffect(() => {
     const fn = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -381,7 +386,7 @@ export function PuntaBancaModal({ opp, commission, onClose }: Props) {
                   {isBackLay ? "Bancata Standard" : "Punta-Punta"}
                 </span>
                 <span className="text-2xl font-black" style={{ color: ratingColor }}>
-                  {fmt(result.rating)}%
+                  {isFinite(result.rating) ? fmt(result.rating) : "—"}%
                 </span>
               </div>
 
