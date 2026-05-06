@@ -77,20 +77,74 @@ function isExchange(bookmaker: string): boolean {
   return EXCHANGE_NAMES.some(ex => bookmaker.toLowerCase().includes(ex.toLowerCase()));
 }
 
+// Alias: varianti inglesi/italiane/abbreviate → forma canonica
+// ORDINATI per lunghezza decrescente — le frasi più lunghe hanno precedenza
+const TEAM_ALIASES: [string, string][] = [
+  // frasi multi-parola prima
+  ["fc bayern munich", "bayern"], ["fc bayern", "bayern"], ["bayern munich", "bayern"],
+  ["paris saint-germain", "psg"], ["paris saint germain", "psg"],
+  ["paris st-germain", "psg"], ["paris st germain", "psg"], ["paris st g", "psg"],
+  ["paris sg", "psg"],
+  ["nottingham forest", "nottmforest"], ["nottm forest", "nottmforest"],
+  ["internazionale", "inter"], ["inter milan", "inter"],
+  ["ac milan", "milan"],
+  ["atletico de madrid", "atletico"], ["atletico madrid", "atletico"],
+  ["manchester united", "manutd"], ["man united", "manutd"], ["man utd", "manutd"],
+  ["manchester city", "mancity"], ["man city", "mancity"],
+  ["tottenham hotspur", "tottenham"], ["tottenham h", "tottenham"],
+  ["newcastle united", "newcastle"], ["newcastle utd", "newcastle"],
+  ["west ham united", "westham"], ["west ham", "westham"],
+  ["rayo vallecano", "vallecano"],
+  ["real sociedad", "sociedad"],
+  ["real betis", "betis"],
+  ["deportivo alaves", "alaves"],
+  ["borussia dortmund", "dortmund"], ["bvb dortmund", "dortmund"],
+  ["borussia monchengladbach", "gladbach"], ["b monchengladbach", "gladbach"],
+  ["eintracht francoforte", "eintracht"], ["eintracht frankfurt", "eintracht"],
+  ["bayer leverkusen", "leverkusen"],
+  ["stoccarda vfb", "stuttgart"], ["stoccarda", "stuttgart"],
+  ["rb lipsia", "leipzig"], ["lipsia", "leipzig"],
+  ["siviglia", "sevilla"],
+  ["royal antwerp", "antwerp"], ["anversa", "antwerp"],
+  ["club bruges", "brugge"], ["bruges", "brugge"],
+  ["sporting lisbona", "sporting"], ["sporting cp", "sporting"],
+  ["sl benfica", "benfica"],
+  ["psv eindhoven", "psv"],
+  ["ajax amsterdam", "ajax"],
+  ["feyenoord rotterdam", "feyenoord"],
+  ["girona fc", "girona"],
+  // singole parole (frasi più corte, applicate dopo)
+  ["nottingham", "nottmforest"], ["nottm", "nottmforest"],
+  ["friburgo", "freiburg"],
+  ["strasburgo", "strasbourg"],
+  ["maiorca", "mallorca"],
+  ["villareal", "villarreal"],
+];
+
+function applyTeamAliases(text: string): string {
+  let result = text;
+  for (const [alias, canonical] of TEAM_ALIASES) {
+    if (result.includes(alias)) {
+      result = result.split(alias).join(canonical); // replace all occurrences
+    }
+  }
+  return result;
+}
+
 function normalizeEventName(name: string): string {
   // Base cleanup: lowercase, remove accents, strip punctuation & separators
-  const base = name
+  let base = name
     .toLowerCase()
     .normalize("NFD").replace(/[̀-ͯ]/g, "")   // remove accents
     .replace(/[.\-–—']/g, " ")
-    .replace(/\b(v|vs|versus)\b/g, " ")                  // remove match separators
+    .replace(/\b(v|vs|versus|fc|ac|sc|rc|cf|afc|bfc|vfb|rb|sl|sv)\b/g, " ")  // remove separators & suffixes
     .replace(/\s+/g, " ")
     .trim();
 
-  // Keep only words longer than 2 chars (filters initials: "h.", "r.", "gi", etc.)
-  // Then sort alphabetically so order doesn't matter:
-  //   "Hurkacz H. - Burruchaga"  →  ["burruchaga","hurkacz"]  →  "burruchagahurkacz"
-  //   "H Hurkacz v Burruchaga"   →  ["burruchaga","hurkacz"]  →  "burruchagahurkacz"  ✓
+  // Applica alias team (prima di splittare in parole)
+  base = applyTeamAliases(base);
+
+  // Keep only words longer than 2 chars, sort alphabetically
   const words = base.split(" ").filter(w => w.length > 2);
   return words.sort().join("");
 }
@@ -100,7 +154,7 @@ function eventNamesMatch(a: string, b: string): boolean {
   const nb = normalizeEventName(b);
   if (na === nb) return true;
   // Partial match: one is a subset of the other (handles truncated names)
-  if (na.length >= 8 && nb.length >= 8 && (na.includes(nb) || nb.includes(na))) return true;
+  if (na.length >= 6 && nb.length >= 6 && (na.includes(nb) || nb.includes(na))) return true;
   return false;
 }
 
