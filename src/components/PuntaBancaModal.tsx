@@ -211,25 +211,33 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
   const c = commission / 100;
 
   const result = useCallback(() => {
+    const totalStake = stake + bonus;            // totale puntato al bookmaker (stake + bonus regalato)
     if (qPunta <= 1 || qBanca <= 1) return null;
+    if (totalStake <= 0) return null;
+
+    // layStake copre l'intera posizione back (stake + bonus)
     const layStake = freeBet
-      ? (stake * (qPunta - 1)) / (qBanca - c)
-      : (stake * qPunta) / (qBanca - c);
+      ? (totalStake * (qPunta - 1)) / (qBanca - c)   // freeBet: copri solo il profitto
+      : (totalStake * qPunta) / (qBanca - c);          // normale: copri stake+profitto
+
     const rischio = layStake * (qBanca - 1);
-    // win: in standard mode the bonus is received regardless of outcome → add it
-    const win = freeBet
-      ? stake * (qPunta - 1) - rischio              // freeBet: stake isn't yours, no bonus on win
-      : rimborso
-        ? stake * (qPunta - 1) - rischio             // rimborso: refund only on loss, not win
-        : stake * (qPunta - 1) - rischio + bonus;    // standard: bonus received on win too
+
+    // Se vinci al bookmaker: incassi totalStake*(qPunta-1), paghi la liability exchange
+    const win = totalStake * (qPunta - 1) - rischio;
+
+    // Se perdi al bookmaker:
+    // - rimborso: il BM ti rimborsa totalStake → hai solo i guadagni exchange
+    // - freeBet: lo stake era un voucher, non l'hai mai pagato → solo guadagni exchange
+    // - normale: perdi solo il TUO stake (il bonus era gratis) → exchange - stake reale
     const lose = rimborso
-      ? layStake * (1 - c) - stake + (bonus || stake)
+      ? layStake * (1 - c)                  // rimborso copre la perdita
       : freeBet
-        ? layStake * (1 - c) + bonus
-        : layStake * (1 - c) - stake + bonus;
+        ? layStake * (1 - c)               // freeBet: stake non era tuo
+        : layStake * (1 - c) - stake;      // normale: deduci solo stake reale (bonus era gratis)
+
     const worst = Math.min(win, lose);
-    const base = stake > 0 ? stake : bonus > 0 ? bonus : 1;
-    return { layStake, rischio, win, lose, worst, rating: 100 + (worst / base) * 100 };
+    const base = stake > 0 ? stake : bonus;   // rating su costo reale (stake) o sul bonus se stake=0
+    return { totalStake, layStake, rischio, win, lose, worst, rating: 100 + (worst / base) * 100 };
   }, [stake, bonus, freeBet, rimborso, qPunta, qBanca, c])();
 
   const vs = opp.scommessa.split(" vs ");
@@ -403,7 +411,12 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
                     style={{ background: "#87c4e8", color: "#0d2035" }}
                   >1</div>
                   <div className="flex-1 text-sm text-white">
-                    Punta <span className="font-black text-[#87c4e8]">{fmtE(stake)}</span> su <span className="font-semibold">{opp.bookmaker}</span> a quota <span className="font-black text-[#87c4e8]">{fmt(qPunta)}</span>
+                    Punta{" "}
+                    {bonus > 0
+                      ? <><span className="font-black text-[#87c4e8]">{fmtE(stake + bonus)}</span><span className="text-[#8fa8c8] text-xs"> ({fmtE(stake)} + {fmtE(bonus)} bonus)</span></>
+                      : <span className="font-black text-[#87c4e8]">{fmtE(stake)}</span>
+                    }{" "}
+                    su <span className="font-semibold">{opp.bookmaker}</span> a quota <span className="font-black text-[#87c4e8]">{fmt(qPunta)}</span>
                   </div>
                 </div>
 
