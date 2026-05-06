@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Navbar } from "@/components/Navbar";
 import { useToast } from "@/hooks/use-toast";
 import { useOddsSearch } from "@/hooks/use-odds-search";
@@ -53,6 +53,7 @@ const Index = () => {
   // Filter states
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
   const [selectedBookmakers, setSelectedBookmakers] = useState<string[]>([]);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const [selectedExchanges, setSelectedExchanges] = useState<string[]>(["Betfair Exchange", "BetFlag Exchange"]);
   const [selectedSport, setSelectedSport] = useState("tutti");
   const [filtroLiquidita, setFiltroLiquidita] = useState(true);
@@ -79,6 +80,9 @@ const Index = () => {
       campionato,
     });
     toast({ title: "Aggiornamento", description: "Caricamento quote in corso..." });
+    setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
   };
 
   const handlePulisci = () => {
@@ -468,7 +472,7 @@ const Index = () => {
         )}
 
         {/* Results Table */}
-        <div className="bg-[#152033] rounded-lg border border-[#1e3050] overflow-hidden">
+        <div ref={resultsRef} className="bg-[#152033] rounded-lg border border-[#1e3050] overflow-hidden">
           {oddsError && (
             <div className="text-red-400 text-sm p-4">Errore: {oddsError}</div>
           )}
