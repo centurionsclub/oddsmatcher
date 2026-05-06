@@ -2,8 +2,8 @@ name: Betfair Scraper
 
 on:
   schedule:
-    # Ogni 60 minuti — TTL dati = 4h, budget GitHub Actions ~1488 min/mese (< 2000 free)
-    - cron: '0 * * * *'
+    # Ogni 2 ore — TTL dati = 6h, budget ~744 min/mese
+    - cron: '0 */2 * * *'
   workflow_dispatch: # avvio manuale se serve
 
 jobs:

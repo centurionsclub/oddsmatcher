@@ -35,7 +35,7 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 BASE_URL = "https://www.centroquote.it"
-CACHE_TTL_MINUTES = 600  # 10 ore: GitHub Actions gira ogni 8h, 10h TTL evita gap
+CACHE_TTL_MINUTES = 840  # 14 ore: copre il gap tra i 2 run giornalieri (12h) con margine
 CONCURRENCY = 6          # parallel match pages (ridotto per stabilità su CI)
 PAGE_WAIT_MS = 4000      # ms to wait after navigation (GitHub Actions più lento)
 GOTO_TIMEOUT_MS = 30000  # page load timeout
