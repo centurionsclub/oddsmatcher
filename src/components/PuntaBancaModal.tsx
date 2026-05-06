@@ -185,9 +185,10 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
 }
 
 // ─── Main modal ──────────────────────────────────────────────────────────────
-export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, initialStake = 100, initialFreeBet = false, initialRimborso = false }: Props) {
+export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, initialStake = 0, initialFreeBet = false, initialRimborso = false }: Props) {
   const [stake, setStake] = useState(initialStake);
   const [bonus, setBonus] = useState(initialBonus);
+  const [commissionRate, setCommissionRate] = useState(commission);
   const [freeBet, setFreeBet] = useState(initialFreeBet);
   const [rimborso, setRimborso] = useState(initialRimborso);
   const [qPunta, setQPunta] = useState(opp.quotaBook);
@@ -200,6 +201,7 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
     setRimborso(initialRimborso);
     setBonus(initialBonus);
     setStake(initialStake);
+    setCommissionRate(commission);
   }, [opp, initialBonus, initialStake, initialFreeBet, initialRimborso]);
 
   useEffect(() => {
@@ -208,7 +210,7 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
     return () => window.removeEventListener("keydown", fn);
   }, [onClose]);
 
-  const c = commission / 100;
+  const c = commissionRate / 100;
 
   const result = useCallback(() => {
     const totalStake = stake + bonus;            // totale puntato al bookmaker (stake + bonus regalato)
@@ -248,7 +250,7 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
     const exchangeReturn = layStake * (1 - c);
     const rating = (exchangeReturn / totalStake) * 100;
     return { totalStake, layStake, rischio, win, lose, worst, rating };
-  }, [stake, bonus, freeBet, rimborso, qPunta, qBanca, c])();
+  }, [stake, bonus, freeBet, rimborso, qPunta, qBanca, commissionRate])();
 
   const vs = opp.scommessa.split(" vs ");
   const sc1 = vs[0] ?? opp.scommessa;
@@ -259,6 +261,10 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
 
   const fmt = (n: number) => n.toFixed(2).replace(".", ",");
   const fmtE = (n: number) => fmt(n) + " €";
+  // Rischio: arrotonda per ECCESSO (devi avere almeno questa cifra disponibile)
+  const fmtRischio = (n: number) => (Math.ceil(n * 100) / 100).toFixed(2).replace(".", ",") + " €";
+  // Profitto: arrotonda per DIFETTO (non sovrastimare il guadagno)
+  const fmtGuadagno = (n: number) => (Math.floor(Math.abs(n) * 100) / 100).toFixed(2).replace(".", ",") + " €";
 
   const ratingColor = !result ? "#8fa8c8"
     : result.rating >= 100   ? "#4ade80"   // profitto → verde
@@ -390,10 +396,21 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
             />
           </div>
 
-          {/* Commission display */}
+          {/* Commission input */}
           <div className="flex items-center gap-3">
             <span className="text-[11px] font-bold uppercase tracking-widest text-[#8fa8c8]">Commissioni Exchange</span>
-            <span className="ml-auto text-sm font-bold text-white bg-[#1e3a5c] px-3 py-1 rounded-lg">{commission.toFixed(2).replace(".", ",")}%</span>
+            <div className="ml-auto flex items-stretch rounded-lg overflow-hidden border border-[#1e3a5c] bg-[#0a1628]">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={commissionRate}
+                onChange={e => setCommissionRate(Math.max(0, Math.min(100, Number(e.target.value))))}
+                className="w-20 text-center text-sm font-bold text-white bg-transparent outline-none py-1.5"
+              />
+              <span className="px-2 flex items-center text-[#8fa8c8] text-sm font-bold border-l border-[#1e3a5c]">%</span>
+            </div>
           </div>
 
           {/* ── Result ── */}
@@ -445,7 +462,7 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
                     su <span className="font-semibold">{opp.exchange}</span> a quota{" "}
                     <span className="font-black" style={{ color: isBackLay ? "#f4a9ba" : "#87c4e8" }}>{fmt(qBanca)}</span>
                     {isBackLay && (
-                      <span className="text-[#f87171] text-xs ml-2">(Rischio: {fmtE(result.rischio)})</span>
+                      <span className="text-[#f87171] text-xs ml-2">(Rischio: {fmtRischio(result.rischio)})</span>
                     )}
                   </div>
                 </div>
@@ -462,7 +479,7 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
                     className="text-2xl font-black"
                     style={{ color: result.worst >= 0 ? "#4ade80" : "#f87171" }}
                   >
-                    {result.worst >= 0 ? "+" : ""}{fmtE(result.worst)}
+                    {result.worst >= 0 ? "+" : "-"}{fmtGuadagno(result.worst)}
                   </span>
                 </div>
               </div>
