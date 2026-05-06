@@ -222,18 +222,24 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
 
     const rischio = layStake * (qBanca - 1);
 
-    // Se vinci al bookmaker: incassi totalStake*(qPunta-1), paghi la liability exchange
-    const win = totalStake * (qPunta - 1) - rischio;
+    // WIN: book paga totalStake×qPunta, ma tu hai versato solo "stake" (bonus era gratis)
+    // → profitto netto = totalStake×qPunta − stake − liability exchange
+    // Questo rende win = lose esattamente per qualsiasi coppia stake/bonus.
+    // freeBet: lo stake non torna indietro su win (è un voucher), quindi solo il profitto
+    const win = freeBet
+      ? totalStake * (qPunta - 1) - rischio         // freeBet: solo profitto, no stake restituito
+      : totalStake * qPunta - stake - rischio;       // normale: book restituisce totalStake×qPunta,
+                                                     // tu hai pagato solo stake (bonus era gratis)
 
-    // Se perdi al bookmaker:
-    // - rimborso: il BM ti rimborsa totalStake → hai solo i guadagni exchange
-    // - freeBet: lo stake era un voucher, non l'hai mai pagato → solo guadagni exchange
-    // - normale: perdi solo il TUO stake (il bonus era gratis) → exchange - stake reale
+    // LOSE: perdi totalStake al book ma il bonus era gratis → deduci solo stake reale
+    // rimborso: book rimborsa totalStake → solo guadagni exchange
+    // freeBet: stake era voucher → solo guadagni exchange
+    // normale: deduci solo lo stake tuo (bonus = costo zero)
     const lose = rimborso
       ? layStake * (1 - c)                  // rimborso copre la perdita
       : freeBet
         ? layStake * (1 - c)               // freeBet: stake non era tuo
-        : layStake * (1 - c) - stake;      // normale: deduci solo stake reale (bonus era gratis)
+        : layStake * (1 - c) - stake;      // normale: deduci solo stake reale
 
     const worst = Math.min(win, lose);
     const base = stake > 0 ? stake : bonus;   // rating su costo reale (stake) o sul bonus se stake=0
