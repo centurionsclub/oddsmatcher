@@ -271,6 +271,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     if (!data?.data || data.data.length === 0) return [];
     const opps: Opportunity[] = [];
     const commissionRate = commission / 100;
+    const isFB = filters.freebet;
 
     const bookmakerSide = data.data.filter(odd => !isOnExchangeSide(odd.bookmaker));
     const rawExchangeSide = data.data.filter(odd => isOnExchangeSide(odd.bookmaker));
@@ -457,9 +458,13 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             });
             if (bestLayOdds === Infinity) return;
 
-            const layStake = backOdds / (bestLayOdds - commissionRate);
+            const layStake = isFB
+              ? (backOdds - 1) / (bestLayOdds - commissionRate)   // FreeBet: copri solo profitto
+              : backOdds / (bestLayOdds - commissionRate);
             const profitIfWin = (backOdds - 1) - layStake * (bestLayOdds - 1);
-            const profitIfLose = layStake * (1 - commissionRate) - 1;
+            const profitIfLose = isFB
+              ? layStake * (1 - commissionRate)          // FreeBet: stake gratis, no -1
+              : layStake * (1 - commissionRate) - 1;
             const worstProfit = Math.min(profitIfWin, profitIfLose);
             const rating = 100 + worstProfit * 100;
 
@@ -497,7 +502,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       if (!existing || opp.rating > existing.rating) dedupMap.set(key, opp);
     }
     return Array.from(dedupMap.values()).sort((a, b) => b.rating - a.rating);
-  }, [data, commission, selectedExchanges, isPuntaPuntaMode]);
+  }, [data, commission, selectedExchanges, isPuntaPuntaMode, filters.freebet]);
 
   // ═══ TRE VIE: Book vs Book 3-way dutching ═══
   const trevieOpps = useMemo(() => {
