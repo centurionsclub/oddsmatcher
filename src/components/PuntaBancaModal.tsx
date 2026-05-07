@@ -422,7 +422,7 @@ export function PuntaBancaModal({
                 {result ? (
                   <>
                     {/* Punta row */}
-                    <div className="px-4 py-3 text-sm text-gray-800">
+                    <div className="px-4 py-3 text-sm text-gray-800 text-center">
                       <span className="font-bold">Punta</span> sul bookmaker{" "}
                       <a
                         href={getUrl(opp.bookmaker)}
@@ -436,7 +436,7 @@ export function PuntaBancaModal({
                     </div>
 
                     {/* Banca row */}
-                    <div className="px-4 py-3">
+                    <div className="px-4 py-3 text-center">
                       <div className="px-3 py-2 text-sm font-medium text-gray-800">
                         <span className="font-bold">Banca</span> su {opp.exchange}{" "}
                         {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
