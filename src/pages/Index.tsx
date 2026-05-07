@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Navbar } from "@/components/Navbar";
 import { useToast } from "@/hooks/use-toast";
 import { useOddsSearch } from "@/hooks/use-odds-search";
@@ -73,20 +73,21 @@ const Index = () => {
   const [exchangeOpen, setExchangeOpen] = useState(false);
 
   const handleAggiorna = () => {
+    setFiltersOpen(false); // nascondi i filtri subito
     searchOdds({
       sport: selectedSport,
       mercato: "tutti",
       partita,
       campionato,
     });
-    toast({ title: "Aggiornamento", description: "Caricamento quote in corso..." });
-    setTimeout(() => {
-      if (resultsRef.current) {
-        const top = resultsRef.current.getBoundingClientRect().top + window.scrollY - 8;
-        window.scrollTo({ top, behavior: "smooth" });
-      }
-    }, 150);
   };
+
+  // Quando le quote arrivano, porta la tabella in cima alla viewport
+  useEffect(() => {
+    if (!oddsLoading && oddsData && oddsData.length > 0) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [oddsLoading]);
 
   const handlePulisci = () => {
     setSelectedMarkets([]);
