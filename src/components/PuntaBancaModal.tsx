@@ -409,52 +409,58 @@ export function PuntaBancaModal({
             </div>
 
             {/* ── Results ── */}
-            {result && (
-              <div className="rounded overflow-hidden border border-gray-200 mt-1">
+            <div className="rounded overflow-hidden border border-gray-200 mt-1">
 
-                {/* Header */}
-                <div className="bg-gray-600 text-white px-4 py-2.5 text-sm font-bold tracking-wide">
-                  {headerLabel} • RATING {fmt2(result.rating)}%
-                </div>
-
-                {/* Body */}
-                <div className="bg-white divide-y divide-gray-100">
-
-                  {/* Punta row */}
-                  <div className="px-4 py-3 text-sm text-gray-800">
-                    <span className="font-bold">Punta</span> sul bookmaker{" "}
-                    <a
-                      href={getUrl(opp.bookmaker)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 underline font-medium"
-                    >
-                      {fmtIt(stake > 0 ? stake : result.totalStake)}€
-                    </a>{" "}
-                    a quota {fmt2(qPunta)}
-                  </div>
-
-                  {/* Banca row */}
-                  <div className="px-4 py-3">
-                    <div className="bg-teal-600 text-white rounded px-3 py-2 text-sm">
-                      <span className="font-bold">Banca</span> su {opp.exchange}{" "}
-                      {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
-                      (<span className="font-bold">Rischio</span>{" "}
-                      {fmtIt(Math.ceil(result.rischio * 100) / 100)}€)
-                    </div>
-                  </div>
-
-                  {/* Outcome */}
-                  <div className={`px-4 py-3 text-center font-bold text-sm ${result.worst >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    {result.worst >= 0
-                      ? `Guadagnerai ${fmtIt(Math.floor(result.worst * 100) / 100)}€`
-                      : `Perderai ${fmtIt(Math.floor(Math.abs(result.worst) * 100) / 100)}€`
-                    }
-                  </div>
-
-                </div>
+              {/* Header */}
+              <div className="bg-gray-600 text-white px-4 py-2.5 text-sm font-bold tracking-wide">
+                {result ? `${headerLabel} • RATING ${fmt2(result.rating)}%` : `${headerLabel} • RATING —`}
               </div>
-            )}
+
+              {/* Body */}
+              <div className="bg-white divide-y divide-gray-100">
+
+                {result ? (
+                  <>
+                    {/* Punta row */}
+                    <div className="px-4 py-3 text-sm text-gray-800">
+                      <span className="font-bold">Punta</span> sul bookmaker{" "}
+                      <a
+                        href={getUrl(opp.bookmaker)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline font-medium"
+                      >
+                        {fmtIt(result.totalStake)}€
+                      </a>{" "}
+                      a quota {fmt2(qPunta)}
+                    </div>
+
+                    {/* Banca row */}
+                    <div className="px-4 py-3">
+                      <div className="bg-teal-600 text-white rounded px-3 py-2 text-sm">
+                        <span className="font-bold">Banca</span> su {opp.exchange}{" "}
+                        {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
+                        (<span className="font-bold">Rischio</span>{" "}
+                        {fmtIt(Math.ceil(result.rischio * 100) / 100)}€)
+                      </div>
+                    </div>
+
+                    {/* Outcome */}
+                    <div className={`px-4 py-3 text-center font-bold text-sm ${result.worst >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      {result.worst >= 0
+                        ? `Guadagnerai ${fmtIt(Math.floor(result.worst * 100) / 100)}€`
+                        : `Perderai ${fmtIt(Math.floor(Math.abs(result.worst) * 100) / 100)}€`
+                      }
+                    </div>
+                  </>
+                ) : (
+                  <div className="px-4 py-5 text-center text-sm text-gray-400">
+                    Inserisci lo stake per vedere i conteggi
+                  </div>
+                )}
+
+              </div>
+            </div>
           </div>
         </div>
       </div>
