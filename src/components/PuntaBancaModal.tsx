@@ -13,8 +13,8 @@ interface ModalOpportunity {
   quotaExchange: number;
   isBookVsBook: boolean;
   volumeExchange?: number;
-  marketId?: string;  // Betfair market ID
-  eventId?: string;   // Betfair event ID per link diretto
+  marketId?: string;
+  eventId?: string;
 }
 
 interface Props {
@@ -57,8 +57,13 @@ function getUrl(name: string) {
   return "#";
 }
 
-// Betfair Exchange deep link
-// Format: /exchange/plus/it/{sport}/{leagueSlug}/{teamsSlug}-scommesse-{eventId}
+function getDisplayDomain(name: string): string {
+  const url = getUrl(name);
+  if (url === "#") return name;
+  const domain = url.replace("https://www.", "").replace("https://", "").replace("http://", "");
+  return domain.charAt(0).toUpperCase() + domain.slice(1);
+}
+
 function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -67,16 +72,15 @@ function slugify(s: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
+
 const BF_SPORT_IT: Record<string, string> = {
   calcio: "calcio",
   tennis: "tennis",
   basket: "basket",
 };
+
 function getBetfairUrl(sport: string, _market: string, marketId?: string, eventId?: string, eventName?: string, league?: string): string {
-  if (!eventId) {
-    // Fallback: link generico exchange
-    return "https://www.betfair.it/exchange/plus/";
-  }
+  if (!eventId) return "https://www.betfair.it/exchange/plus/";
   const sportSlug = BF_SPORT_IT[sport] ?? "calcio";
   const leagueSlug = slugify(league ?? "");
   const teamsSlug = slugify(eventName ?? "");
@@ -86,7 +90,12 @@ function getBetfairUrl(sport: string, _market: string, marketId?: string, eventI
 function formatDt(iso: string) {
   try {
     const d = new Date(iso);
-    return `${d.getDate().toString().padStart(2,"0")}/${(d.getMonth()+1).toString().padStart(2,"0")}/${d.getFullYear()}  •  ${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}`;
+    const dd = d.getDate().toString().padStart(2, "0");
+    const mm = (d.getMonth() + 1).toString().padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const hh = d.getHours().toString().padStart(2, "0");
+    const min = d.getMinutes().toString().padStart(2, "0");
+    return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
   } catch { return iso; }
 }
 
@@ -97,95 +106,14 @@ function sportEmoji(s: string) {
   return "🏅";
 }
 
-// ─── Styled number input ────────────────────────────────────────────────────
-function OddsInput({ label, value, onChange, accent, inputId }: {
-  label: string; value: number; onChange: (v: number) => void; accent: string; inputId: string;
-}) {
-  const [raw, setRaw] = useState(value.toFixed(2));
-
-  useEffect(() => { setRaw(value.toFixed(2)); }, [value]);
-
-  const commit = (s: string) => {
-    const v = parseFloat(s.replace(",", "."));
-    if (!isNaN(v) && v > 1) { onChange(Math.round(v * 100) / 100); }
-    setRaw(value.toFixed(2));
-  };
-
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: accent }}>{label}</span>
-      <div className="flex items-stretch rounded-lg overflow-hidden border" style={{ borderColor: accent + "55" }}>
-        <input
-          id={inputId}
-          name={inputId}
-          autoComplete="off"
-          className="flex-1 text-center text-lg font-bold bg-[#0a1628] text-white outline-none py-2.5 w-0"
-          value={raw}
-          onChange={e => setRaw(e.target.value)}
-          onBlur={e => commit(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && commit(raw)}
-        />
-        <div className="flex flex-col" style={{ backgroundColor: accent + "22" }}>
-          <button
-            className="px-2.5 flex-1 text-xs font-bold hover:opacity-80 transition-opacity"
-            style={{ color: accent }}
-            onClick={() => onChange(Math.round((value + 0.01) * 100) / 100)}
-          >▲</button>
-          <div className="h-px" style={{ backgroundColor: accent + "33" }} />
-          <button
-            className="px-2.5 flex-1 text-xs font-bold hover:opacity-80 transition-opacity"
-            style={{ color: accent }}
-            onClick={() => onChange(Math.max(1.01, Math.round((value - 0.01) * 100) / 100))}
-          >▼</button>
-        </div>
-      </div>
-    </div>
-  );
+function fmtIt(n: number, decimals = 2): string {
+  return n.toLocaleString("it-IT", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-// ─── Currency input ─────────────────────────────────────────────────────────
-function EuroInput({ label, value, onChange, sub, inputId }: {
-  label: string; value: number; onChange: (v: number) => void; sub?: React.ReactNode; inputId: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-bold uppercase tracking-widest text-[#8fa8c8]">{label}</span>
-      <div className="flex items-stretch rounded-lg overflow-hidden border border-[#1e3a5c] bg-[#0a1628]">
-        <span className="px-3 flex items-center text-[#8fa8c8] text-sm font-bold border-r border-[#1e3a5c]">€</span>
-        <input
-          id={inputId}
-          name={inputId}
-          type="number"
-          min={0}
-          autoComplete="off"
-          className="flex-1 text-center text-lg font-bold text-white bg-transparent outline-none py-2.5"
-          value={value}
-          onChange={e => onChange(Math.max(0, Number(e.target.value)))}
-        />
-      </div>
-      {sub && <div className="text-[10px] text-[#8fa8c8]">{sub}</div>}
-    </div>
-  );
-}
-
-// ─── Toggle chip ────────────────────────────────────────────────────────────
-function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-3 py-1 rounded-full text-[11px] font-bold transition-all border"
-      style={active
-        ? { backgroundColor: "#c8922d", borderColor: "#c8922d", color: "#fff" }
-        : { backgroundColor: "transparent", borderColor: "#1e3a5c", color: "#8fa8c8" }
-      }
-    >
-      {label}
-    </button>
-  );
-}
-
-// ─── Main modal ──────────────────────────────────────────────────────────────
-export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, initialStake = 0, initialFreeBet = false, initialRimborso = false }: Props) {
+export function PuntaBancaModal({
+  opp, commission, onClose,
+  initialBonus = 0, initialStake = 0, initialFreeBet = false, initialRimborso = false,
+}: Props) {
   const [stake, setStake] = useState(initialStake);
   const [bonus, setBonus] = useState(initialBonus);
   const [commissionRate, setCommissionRate] = useState(commission);
@@ -193,16 +121,23 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
   const [rimborso, setRimborso] = useState(initialRimborso);
   const [qPunta, setQPunta] = useState(opp.quotaBook);
   const [qBanca, setQBanca] = useState(opp.quotaExchange);
+  const [rawQPunta, setRawQPunta] = useState(opp.quotaBook.toFixed(2));
+  const [rawQBanca, setRawQBanca] = useState(opp.quotaExchange.toFixed(2));
 
   useEffect(() => {
     setQPunta(opp.quotaBook);
     setQBanca(opp.quotaExchange);
+    setRawQPunta(opp.quotaBook.toFixed(2));
+    setRawQBanca(opp.quotaExchange.toFixed(2));
     setFreeBet(initialFreeBet);
     setRimborso(initialRimborso);
     setBonus(initialBonus);
     setStake(initialStake);
     setCommissionRate(commission);
-  }, [opp, initialBonus, initialStake, initialFreeBet, initialRimborso]);
+  }, [opp, initialBonus, initialStake, initialFreeBet, initialRimborso, commission]);
+
+  useEffect(() => { setRawQPunta(qPunta.toFixed(2)); }, [qPunta]);
+  useEffect(() => { setRawQBanca(qBanca.toFixed(2)); }, [qBanca]);
 
   useEffect(() => {
     const fn = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -213,297 +148,302 @@ export function PuntaBancaModal({ opp, commission, onClose, initialBonus = 0, in
   const c = commissionRate / 100;
 
   const result = useCallback(() => {
-    const totalStake = stake + bonus;            // totale puntato al bookmaker (stake + bonus regalato)
-    if (qPunta <= 1 || qBanca <= 1) return null;
-    if (totalStake <= 0) return null;
+    const totalStake = stake + bonus;
+    if (qPunta <= 1 || qBanca <= 1 || totalStake <= 0) return null;
 
-    // layStake copre l'intera posizione back (stake + bonus)
     const layStake = freeBet
-      ? (totalStake * (qPunta - 1)) / (qBanca - c)   // freeBet: copri solo il profitto
-      : (totalStake * qPunta) / (qBanca - c);          // normale: copri stake+profitto
+      ? (totalStake * (qPunta - 1)) / (qBanca - c)
+      : (totalStake * qPunta) / (qBanca - c);
 
     const rischio = layStake * (qBanca - 1);
 
-    // WIN: book paga totalStake×qPunta, ma tu hai versato solo "stake" (bonus era gratis)
-    // → profitto netto = totalStake×qPunta − stake − liability exchange
-    // Questo rende win = lose esattamente per qualsiasi coppia stake/bonus.
-    // freeBet: lo stake non torna indietro su win (è un voucher), quindi solo il profitto
     const win = freeBet
-      ? totalStake * (qPunta - 1) - rischio         // freeBet: solo profitto, no stake restituito
-      : totalStake * qPunta - stake - rischio;       // normale: book restituisce totalStake×qPunta,
-                                                     // tu hai pagato solo stake (bonus era gratis)
+      ? totalStake * (qPunta - 1) - rischio
+      : totalStake * qPunta - stake - rischio;
 
-    // LOSE: perdi totalStake al book ma il bonus era gratis → deduci solo stake reale
-    // rimborso: book rimborsa totalStake → solo guadagni exchange
-    // freeBet: stake era voucher → solo guadagni exchange
-    // normale: deduci solo lo stake tuo (bonus = costo zero)
     const lose = rimborso
-      ? layStake * (1 - c)                  // rimborso copre la perdita
+      ? layStake * (1 - c)
       : freeBet
-        ? layStake * (1 - c)               // freeBet: stake non era tuo
-        : layStake * (1 - c) - stake;      // normale: deduci solo stake reale
+        ? layStake * (1 - c)
+        : layStake * (1 - c) - stake;
 
     const worst = Math.min(win, lose);
-    // Rating = quanto recuperi dall'exchange sul totale puntato al book
-    // (= layStake×(1−c) / totalStake × 100, come i tool standard di matched betting)
-    // >100% = guadagno, <100% = perdita
     const exchangeReturn = layStake * (1 - c);
     const rating = (exchangeReturn / totalStake) * 100;
     return { totalStake, layStake, rischio, win, lose, worst, rating };
-  }, [stake, bonus, freeBet, rimborso, qPunta, qBanca, commissionRate])();
+  }, [stake, bonus, freeBet, rimborso, qPunta, qBanca, c])();
 
   const vs = opp.scommessa.split(" vs ");
   const sc1 = vs[0] ?? opp.scommessa;
   const sc2 = vs[1] ?? sc1;
   const isBackLay = !opp.isBookVsBook;
 
-  // DEBUG temporaneo
+  const exchangeUrl = isBackLay
+    ? getBetfairUrl(opp.sport, opp.market, opp.marketId, opp.eventId, opp.eventName, opp.league)
+    : getUrl(opp.exchange);
 
-  const fmt = (n: number) => n.toFixed(2).replace(".", ",");
-  const fmtE = (n: number) => fmt(n) + " €";
-  // Rischio: arrotonda per ECCESSO (devi avere almeno questa cifra disponibile)
-  const fmtRischio = (n: number) => (Math.ceil(n * 100) / 100).toFixed(2).replace(".", ",") + " €";
-  // Profitto: arrotonda per DIFETTO (non sovrastimare il guadagno)
-  const fmtGuadagno = (n: number) => (Math.floor(Math.abs(n) * 100) / 100).toFixed(2).replace(".", ",") + " €";
+  const minutesUntilMatch = (new Date(opp.eventTime).getTime() - Date.now()) / 60000;
+  const isNearMatch = minutesUntilMatch > 0 && minutesUntilMatch < 60;
 
-  const ratingColor = !result ? "#8fa8c8"
-    : result.rating >= 100   ? "#4ade80"   // profitto → verde
-    : result.rating >= 99    ? "#facc15"   // quasi pari → giallo
-    : result.rating >= 97    ? "#c8922d"   // piccola perdita → arancione
-    : "#f87171";                           // perdita → rosso
+  const betTypeLabel = isBackLay ? "BANCATA" : "PUNTA-PUNTA";
+  const flagLabels = [bonus > 0 && "BONUS", rimborso && "RIMBORSO", freeBet && "FREE BET"].filter(Boolean).join(" ");
+  const headerLabel = betTypeLabel + (flagLabels ? ` ${flagLabels}` : "");
+
+  const commitQPunta = () => {
+    const v = parseFloat(rawQPunta.replace(",", "."));
+    if (!isNaN(v) && v > 1) setQPunta(Math.round(v * 100) / 100);
+    else setRawQPunta(qPunta.toFixed(2));
+  };
+  const commitQBanca = () => {
+    const v = parseFloat(rawQBanca.replace(",", "."));
+    if (!isNaN(v) && v > 1) setQBanca(Math.round(v * 100) / 100);
+    else setRawQBanca(qBanca.toFixed(2));
+  };
+
+  const fmt2 = (n: number) => n.toFixed(2).replace(".", ",");
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(4,9,18,0.85)", backdropFilter: "blur(6px)" }}
+      style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div
-        className="w-full max-w-[780px] rounded-2xl overflow-hidden shadow-2xl"
-        style={{
-          background: "linear-gradient(160deg, #0d1e35 0%, #081222 100%)",
-          border: "1px solid #1e3a5c",
-          maxHeight: "92vh",
-          overflowY: "auto",
-        }}
-      >
-        {/* ── Header ── */}
-        <div
-          className="flex items-center justify-between px-6 py-4"
-          style={{ background: "linear-gradient(90deg, #0d4a4a 0%, #0d2035 100%)", borderBottom: "1px solid #1e3a5c" }}
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{sportEmoji(opp.sport)}</span>
-            <div>
-              <div className="text-white font-black text-lg leading-tight">{opp.eventName}</div>
-              <div className="text-[#87c4e8] text-xs mt-0.5">{opp.league} · {formatDt(opp.eventTime)}</div>
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-[900px] max-h-[92vh] overflow-y-auto relative">
+
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 text-base z-10"
+        >✕</button>
+
+        <div className="flex flex-col md:flex-row">
+
+          {/* ── LEFT: Event Info ── */}
+          <div className="md:w-[360px] shrink-0 p-6">
+            <div className="border border-gray-300 rounded-lg overflow-hidden text-center text-gray-800">
+
+              <div className="border-b border-gray-200 px-4 py-3 text-sm text-gray-500">
+                Sport - {opp.sport.charAt(0).toUpperCase() + opp.sport.slice(1)} {sportEmoji(opp.sport)}
+              </div>
+
+              <div className="border-b border-gray-200 px-4 py-3 font-bold">
+                {formatDt(opp.eventTime)}
+              </div>
+
+              <div className="border-b border-gray-200 px-4 py-4 font-bold text-base leading-snug">
+                {opp.eventName}
+              </div>
+
+              <div className="border-b border-gray-200 px-4 py-3 text-sm text-gray-500">
+                {opp.league}
+              </div>
+
+              <div className="border-b border-gray-200 px-4 py-3 text-sm">
+                Bookmaker -{" "}
+                <a href={getUrl(opp.bookmaker)} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                  {getDisplayDomain(opp.bookmaker)}
+                </a>{" "}→ {sc1}
+              </div>
+
+              <div className="px-4 py-3 text-sm">
+                Exchange -{" "}
+                <a href={exchangeUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                  {getDisplayDomain(opp.exchange)}
+                </a>{" "}→ {sc2}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span
-              className="text-xs font-bold px-3 py-1 rounded-full"
-              style={isBackLay
-                ? { background: "#f4a9ba22", color: "#f4a9ba", border: "1px solid #f4a9ba44" }
-                : { background: "#87c4e822", color: "#87c4e8", border: "1px solid #87c4e844" }
-              }
-            >
-              {isBackLay ? "📘 BACK-LAY" : "📗 PUNTA-PUNTA"}
-            </span>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-full text-[#8fa8c8] hover:text-white hover:bg-white/10 transition-all text-lg"
-            >✕</button>
-          </div>
-        </div>
 
-        {/* ── Bookmaker vs Exchange cards ── */}
-        <div className="flex items-stretch gap-0 px-6 py-5">
-          {/* Bookmaker card */}
-          <div className="flex-1 rounded-xl p-4" style={{ background: "#87c4e811", border: "1px solid #87c4e833" }}>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-[#87c4e8] mb-2">Punta su</div>
-            <a
-              href={getUrl(opp.bookmaker)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white font-bold text-base hover:text-[#87c4e8] transition-colors"
-            >
-              {opp.bookmaker} ↗
-            </a>
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-[#8fa8c8] text-sm">Esito</span>
-              <span className="px-2.5 py-0.5 rounded-full text-sm font-black text-[#0d2035] bg-[#87c4e8]">{sc1}</span>
-            </div>
-            <div className="mt-2 text-3xl font-black text-[#87c4e8]">{fmt(qPunta)}</div>
+            {isNearMatch && (
+              <div className="mt-4 bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm font-bold text-amber-800 text-center leading-relaxed">
+                La partita inizia tra meno di 60 minuti, le quote potrebbero non essere allineate.
+              </div>
+            )}
           </div>
 
-          {/* Arrow */}
-          <div className="flex items-center justify-center px-4 text-[#1e3a5c] text-2xl font-black select-none">→</div>
+          {/* ── RIGHT: Calculator ── */}
+          <div className="flex-1 px-6 py-6 border-t md:border-t-0 md:border-l border-gray-200 space-y-3">
 
-          {/* Exchange card */}
-          <div className="flex-1 rounded-xl p-4" style={{ background: isBackLay ? "#f4a9ba11" : "#87c4e811", border: isBackLay ? "1px solid #f4a9ba33" : "1px solid #87c4e833" }}>
-            <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: isBackLay ? "#f4a9ba" : "#87c4e8" }}>
-              {isBackLay ? "Banca su" : "Punta su"}
-            </div>
-            <a
-              href={isBackLay ? getBetfairUrl(opp.sport, opp.market, opp.marketId, opp.eventId, opp.eventName, opp.league) : getUrl(opp.exchange)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white font-bold text-base hover:opacity-80 transition-opacity"
-            >
-              {opp.exchange} ↗
-            </a>
-
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-[#8fa8c8] text-sm">Esito</span>
-              <span className="px-2.5 py-0.5 rounded-full text-sm font-black text-[#0d2035]" style={{ backgroundColor: isBackLay ? "#f4a9ba" : "#87c4e8" }}>{sc2}</span>
-            </div>
-            <div className="mt-2 text-3xl font-black" style={{ color: isBackLay ? "#f4a9ba" : "#87c4e8" }}>{fmt(qBanca)}</div>
-          </div>
-        </div>
-
-        {/* ── Calculator ── */}
-        <div className="px-6 pb-6 space-y-5" style={{ borderTop: "1px solid #1e3a5c", paddingTop: "20px" }}>
-
-          {/* Odds row */}
-          <div className="grid grid-cols-2 gap-4">
-            <OddsInput inputId="modal-quota-punta" label="Quota Punta" value={qPunta} onChange={setQPunta} accent="#87c4e8" />
-            <OddsInput inputId="modal-quota-banca" label={isBackLay ? "Quota Banca" : "Quota Contro"} value={qBanca} onChange={setQBanca} accent={isBackLay ? "#f4a9ba" : "#87c4e8"} />
-          </div>
-
-          {/* Stake + bonus row */}
-          <div className="grid grid-cols-2 gap-4">
-            <EuroInput
-              inputId="modal-stake"
-              label="Stake Bookmaker"
-              value={stake}
-              onChange={setStake}
-              sub={
-                <div className="flex gap-2 mt-1">
-                  <Chip label="Free Bet" active={freeBet} onClick={() => setFreeBet(v => !v)} />
-                </div>
-              }
-            />
-            <EuroInput
-              inputId="modal-bonus"
-              label="Bonus / Rimborso"
-              value={bonus}
-              onChange={setBonus}
-              sub={
-                <div className="flex gap-2 mt-1">
-                  <Chip label="Rimborso" active={rimborso} onClick={() => setRimborso(v => !v)} />
-                </div>
-              }
-            />
-          </div>
-
-          {/* Commission input */}
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-[#8fa8c8]">Commissioni Exchange</span>
-            <div className="ml-auto flex items-stretch rounded-lg overflow-hidden border border-[#1e3a5c] bg-[#0a1628]">
+            {/* Stake Book */}
+            <div className="flex items-center gap-2">
+              <span className="bg-gray-200 text-gray-700 px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+                Stake Book
+              </span>
               <input
                 type="number"
                 min={0}
-                max={100}
-                step={0.5}
-                value={commissionRate}
-                onChange={e => setCommissionRate(Math.max(0, Math.min(100, Number(e.target.value))))}
-                className="w-20 text-center text-sm font-bold text-white bg-transparent outline-none py-1.5"
+                value={stake}
+                onChange={e => setStake(Math.max(0, Number(e.target.value)))}
+                className="flex-1 border border-blue-300 rounded px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-200 min-w-0"
               />
-              <span className="px-2 flex items-center text-[#8fa8c8] text-sm font-bold border-l border-[#1e3a5c]">%</span>
+              <label className="flex items-center gap-1.5 text-sm text-gray-700 shrink-0 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={freeBet}
+                  onChange={e => setFreeBet(e.target.checked)}
+                  className="w-4 h-4"
+                />
+                Free Bet
+              </label>
             </div>
-          </div>
 
-          {/* ── Result ── */}
-          {result && (
-            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #1e3a5c" }}>
-              {/* Rating bar */}
-              <div
-                className="px-5 py-3 flex items-center justify-between"
-                style={{ background: "linear-gradient(90deg, #0a1628 0%, #0d2035 100%)" }}
+            {/* Bonus Book */}
+            <div className="flex items-center gap-2">
+              <span className="bg-amber-500 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+                Bonus Book
+              </span>
+              <input
+                type="number"
+                min={0}
+                value={bonus}
+                onChange={e => setBonus(Math.max(0, Number(e.target.value)))}
+                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-200 min-w-0"
+              />
+              <label className="flex items-center gap-1.5 text-sm text-gray-700 shrink-0 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rimborso}
+                  onChange={e => setRimborso(e.target.checked)}
+                  className="w-4 h-4 accent-amber-500"
+                />
+                Rimborso
+              </label>
+            </div>
+
+            {/* Quota Punta */}
+            <div className="flex items-center gap-2">
+              <span className="bg-slate-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+                Quota Punta
+              </span>
+              <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
+                <input
+                  type="text"
+                  value={rawQPunta}
+                  onChange={e => setRawQPunta(e.target.value)}
+                  onBlur={commitQPunta}
+                  onKeyDown={e => { if (e.key === "Enter") commitQPunta(); }}
+                  className="flex-1 px-3 py-2 text-sm text-center text-gray-800 focus:outline-none min-w-0"
+                />
+                <div className="flex flex-col border-l border-gray-300 shrink-0">
+                  <button
+                    onClick={() => setQPunta(v => Math.round((v + 0.01) * 100) / 100)}
+                    className="px-2 text-[10px] hover:bg-gray-100 flex-1 leading-none py-1"
+                  >▲</button>
+                  <div className="h-px bg-gray-300" />
+                  <button
+                    onClick={() => setQPunta(v => Math.max(1.01, Math.round((v - 0.01) * 100) / 100))}
+                    className="px-2 text-[10px] hover:bg-gray-100 flex-1 leading-none py-1"
+                  >▼</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Quota Banca */}
+            <div className="flex items-center gap-2">
+              <span className="bg-rose-300 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+                Quota Banca
+              </span>
+              <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
+                <input
+                  type="text"
+                  value={rawQBanca}
+                  onChange={e => setRawQBanca(e.target.value)}
+                  onBlur={commitQBanca}
+                  onKeyDown={e => { if (e.key === "Enter") commitQBanca(); }}
+                  className="flex-1 px-3 py-2 text-sm text-center text-gray-800 focus:outline-none min-w-0"
+                />
+                <div className="flex flex-col border-l border-gray-300 shrink-0">
+                  <button
+                    onClick={() => setQBanca(v => Math.round((v + 0.01) * 100) / 100)}
+                    className="px-2 text-[10px] hover:bg-gray-100 flex-1 leading-none py-1"
+                  >▲</button>
+                  <div className="h-px bg-gray-300" />
+                  <button
+                    onClick={() => setQBanca(v => Math.max(1.01, Math.round((v - 0.01) * 100) / 100))}
+                    className="px-2 text-[10px] hover:bg-gray-100 flex-1 leading-none py-1"
+                  >▼</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Commissioni */}
+            <div className="flex items-center gap-2">
+              <span className="bg-gray-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+                Commissioni
+              </span>
+              <div className="flex items-stretch border border-gray-300 rounded overflow-hidden">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  value={commissionRate}
+                  onChange={e => setCommissionRate(Math.max(0, Math.min(100, Number(e.target.value))))}
+                  className="w-20 text-center px-2 py-2 text-sm text-gray-800 focus:outline-none"
+                />
+                <span className="px-2 flex items-center text-gray-500 text-sm border-l border-gray-300">%</span>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-2 pt-1">
+              <button className="border border-teal-600 text-teal-700 px-5 py-2 text-sm font-bold rounded hover:bg-teal-50 transition-colors">
+                CALCOLA →
+              </button>
+              <button
+                className="bg-teal-700 text-white px-5 py-2 text-sm font-bold rounded hover:bg-teal-800 transition-colors flex items-center gap-1"
+                onClick={() => alert("Funzione in arrivo!")}
               >
-                <span className="text-xs font-bold uppercase tracking-widest text-[#8fa8c8]">
-                  {isBackLay ? "Bancata Standard" : "Punta-Punta"}
-                  {bonus > 0 ? " + Bonus" : ""}
-                  {rimborso ? " + Rimborso" : ""}
-                  {freeBet ? " (Free Bet)" : ""}
-                </span>
-                <span className="text-2xl font-black" style={{ color: ratingColor }}>
-                  Rating {isFinite(result.rating) ? fmt(result.rating) : "—"}%
-                </span>
-              </div>
-
-              {/* Steps */}
-              <div className="divide-y" style={{ divideColor: "#1e3a5c" }}>
-                {/* Step 1: Punta */}
-                <div className="flex items-center gap-4 px-5 py-3.5" style={{ background: "#87c4e808" }}>
-                  <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0"
-                    style={{ background: "#87c4e8", color: "#0d2035" }}
-                  >1</div>
-                  <div className="flex-1 text-sm text-white">
-                    Punta{" "}
-                    {bonus > 0
-                      ? <><span className="font-black text-[#87c4e8]">{fmtE(stake + bonus)}</span><span className="text-[#8fa8c8] text-xs"> ({fmtE(stake)} + {fmtE(bonus)} bonus)</span></>
-                      : <span className="font-black text-[#87c4e8]">{fmtE(stake)}</span>
-                    }{" "}
-                    su <span className="font-semibold">{opp.bookmaker}</span> a quota <span className="font-black text-[#87c4e8]">{fmt(qPunta)}</span>
-                  </div>
-                </div>
-
-                {/* Step 2: Banca */}
-                <div className="flex items-center gap-4 px-5 py-3.5" style={{ background: isBackLay ? "#f4a9ba08" : "#87c4e808" }}>
-                  <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0"
-                    style={{ background: isBackLay ? "#f4a9ba" : "#87c4e8", color: "#0d2035" }}
-                  >2</div>
-                  <div className="flex-1 text-sm text-white">
-                    {isBackLay ? "Banca" : "Punta"}{" "}
-                    <span className="font-black" style={{ color: isBackLay ? "#f4a9ba" : "#87c4e8" }}>{fmtE(result.layStake)}</span>{" "}
-                    su <span className="font-semibold">{opp.exchange}</span> a quota{" "}
-                    <span className="font-black" style={{ color: isBackLay ? "#f4a9ba" : "#87c4e8" }}>{fmt(qBanca)}</span>
-                    {isBackLay && (
-                      <span className="text-[#f87171] text-xs ml-2">(Rischio: {fmtRischio(result.rischio)})</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Outcome */}
-                <div
-                  className="px-5 py-4 flex items-center justify-between"
-                  style={{ background: result.worst >= 0 ? "#4ade8010" : "#f8717110" }}
-                >
-                  <span className="text-sm font-semibold" style={{ color: result.worst >= 0 ? "#4ade80" : "#f87171" }}>
-                    {result.worst >= 0 ? "✓ Guadagnerai" : "⚠ Perdita massima"}
-                  </span>
-                  <span
-                    className="text-2xl font-black"
-                    style={{ color: result.worst >= 0 ? "#4ade80" : "#f87171" }}
-                  >
-                    {result.worst >= 0 ? "+" : "-"}{fmtGuadagno(result.worst)}
-                  </span>
-                </div>
-              </div>
+                INVIA AL PT ↗
+              </button>
             </div>
-          )}
 
-          {/* Action buttons */}
-          <div className="flex gap-3 pt-1">
-            <button
-              className="flex-1 py-3 rounded-xl text-sm font-bold transition-all"
-              style={{ border: "1px solid #1e3a5c", color: "#8fa8c8", background: "transparent" }}
-              onMouseEnter={e => { (e.target as HTMLElement).style.background = "#1e3a5c"; }}
-              onMouseLeave={e => { (e.target as HTMLElement).style.background = "transparent"; }}
-              onClick={onClose}
-            >
-              Chiudi
-            </button>
-            <button
-              className="flex-1 py-3 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
-              style={{ background: "linear-gradient(90deg, #0d6e6e, #0d8080)" }}
-              onClick={() => alert("Funzione in arrivo!")}
-            >
-              INVIA AL PT ↗
-            </button>
+            {/* ── Results ── */}
+            {result && (
+              <div className="rounded overflow-hidden border border-gray-200 mt-1">
+
+                {/* Header */}
+                <div className="bg-gray-600 text-white px-4 py-2.5 text-sm font-bold tracking-wide">
+                  {headerLabel} • RATING {fmt2(result.rating)}%
+                </div>
+
+                {/* Body */}
+                <div className="bg-white divide-y divide-gray-100">
+
+                  {/* Punta row */}
+                  <div className="px-4 py-3 text-sm text-gray-800">
+                    <span className="font-bold">Punta</span> sul bookmaker{" "}
+                    <a
+                      href={getUrl(opp.bookmaker)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline font-medium"
+                    >
+                      {fmtIt(stake > 0 ? stake : result.totalStake)}€
+                    </a>{" "}
+                    a quota {fmt2(qPunta)}
+                  </div>
+
+                  {/* Banca row */}
+                  <div className="px-4 py-3">
+                    <div className="bg-teal-600 text-white rounded px-3 py-2 text-sm">
+                      <span className="font-bold">Banca</span> su {opp.exchange}{" "}
+                      {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
+                      (<span className="font-bold">Rischio</span>{" "}
+                      {fmtIt(Math.ceil(result.rischio * 100) / 100)}€)
+                    </div>
+                  </div>
+
+                  {/* Outcome */}
+                  <div className={`px-4 py-3 text-center font-bold text-sm ${result.worst >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    {result.worst >= 0
+                      ? `Guadagnerai ${fmtIt(Math.floor(result.worst * 100) / 100)}€`
+                      : `Perderai ${fmtIt(Math.floor(Math.abs(result.worst) * 100) / 100)}€`
+                    }
+                  </div>
+
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
