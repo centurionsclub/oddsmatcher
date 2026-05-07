@@ -215,7 +215,7 @@ export function PuntaBancaModal({
           className="flex items-center justify-between px-5 py-3 rounded-t-lg"
           style={{ background: "linear-gradient(90deg, #0d1e35 0%, #152033 100%)", borderBottom: "2px solid #c8922d" }}
         >
-          <span className="font-black text-base tracking-widest uppercase" style={{ color: "#c8922d" }}>
+          <span className="font-black text-base tracking-widest uppercase text-white">
             {isBackLay ? "Punta Banca" : "Punta Punta"}
           </span>
           <button
