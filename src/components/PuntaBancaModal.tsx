@@ -273,15 +273,18 @@ export function PuntaBancaModal({
               <span className="px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0 text-white" style={{ backgroundColor: "#1e2d42" }}>
                 Stake Book
               </span>
-              <input
-                type="number"
-                min={0}
-                value={stake}
-                onChange={e => setStake(Math.max(0, Number(e.target.value)))}
-                onFocus={e => e.target.select()}
-                onClick={e => (e.target as HTMLInputElement).select()}
-                className="flex-1 border border-blue-300 rounded px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-200 min-w-0"
-              />
+              <div className="flex-1 flex items-stretch border border-blue-300 rounded overflow-hidden min-w-0 focus-within:ring-2 focus-within:ring-blue-200">
+                <input
+                  type="number"
+                  min={0}
+                  value={stake}
+                  onChange={e => setStake(Math.max(0, Number(e.target.value)))}
+                  onFocus={e => e.target.select()}
+                  onClick={e => (e.target as HTMLInputElement).select()}
+                  className="flex-1 px-3 py-2 text-sm text-gray-800 focus:outline-none min-w-0"
+                />
+                <span className="px-2 flex items-center text-gray-500 text-sm border-l border-blue-300">€</span>
+              </div>
               <label className="flex items-center gap-1.5 text-sm font-medium shrink-0 cursor-pointer select-none px-3 py-2 rounded text-white" style={{ backgroundColor: "#1e2d42" }}>
                 <input
                   type="checkbox"
@@ -298,15 +301,18 @@ export function PuntaBancaModal({
               <span className="px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0 text-white" style={{ backgroundColor: "#c8922d" }}>
                 Bonus Book
               </span>
-              <input
-                type="number"
-                min={0}
-                value={bonus}
-                onChange={e => setBonus(Math.max(0, Number(e.target.value)))}
-                onFocus={e => e.target.select()}
-                onClick={e => (e.target as HTMLInputElement).select()}
-                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-200 min-w-0"
-              />
+              <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0 focus-within:ring-2 focus-within:ring-amber-200">
+                <input
+                  type="number"
+                  min={0}
+                  value={bonus}
+                  onChange={e => setBonus(Math.max(0, Number(e.target.value)))}
+                  onFocus={e => e.target.select()}
+                  onClick={e => (e.target as HTMLInputElement).select()}
+                  className="flex-1 px-3 py-2 text-sm text-gray-800 focus:outline-none min-w-0"
+                />
+                <span className="px-2 flex items-center text-gray-500 text-sm border-l border-gray-300">€</span>
+              </div>
               <label className="flex items-center gap-1.5 text-sm font-medium shrink-0 cursor-pointer select-none px-3 py-2 rounded text-white" style={{ backgroundColor: "#c8922d" }}>
                 <input
                   type="checkbox"
