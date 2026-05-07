@@ -412,7 +412,7 @@ export function PuntaBancaModal({
             <div className="rounded overflow-hidden border border-gray-200 mt-1">
 
               {/* Header */}
-              <div className="bg-gray-600 text-white px-4 py-2.5 text-sm font-bold tracking-wide">
+              <div className="px-4 py-2.5 text-sm font-bold tracking-wide text-white" style={{ backgroundColor: "#1e2d42" }}>
                 {result ? `${headerLabel} • RATING ${fmt2(result.rating)}%` : `${headerLabel} • RATING —`}
               </div>
 
@@ -437,7 +437,7 @@ export function PuntaBancaModal({
 
                     {/* Banca row */}
                     <div className="px-4 py-3">
-                      <div className="bg-teal-600 text-white rounded px-3 py-2 text-sm">
+                      <div className="rounded px-3 py-2 text-sm font-medium" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
                         <span className="font-bold">Banca</span> su {opp.exchange}{" "}
                         {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
                         (<span className="font-bold">Rischio</span>{" "}
