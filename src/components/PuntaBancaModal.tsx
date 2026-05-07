@@ -437,12 +437,22 @@ export function PuntaBancaModal({
 
                     {/* Banca row */}
                     <div className="px-4 py-3 text-center">
-                      <div className="px-3 py-2 text-sm font-medium text-gray-800">
+                      <a
+                        href={exchangeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                          const amount = (Math.round(result.layStake * 100) / 100).toFixed(2);
+                          navigator.clipboard.writeText(amount).catch(() => {});
+                        }}
+                        className="inline-block px-3 py-2 text-sm font-medium text-gray-800 underline decoration-dotted hover:text-blue-600 cursor-pointer transition-colors"
+                        title="Clicca per aprire Betfair e copiare l'importo"
+                      >
                         <span className="font-bold">Banca</span> su {opp.exchange}{" "}
                         {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
                         (<span className="font-bold">Rischio</span>{" "}
                         {fmtIt(Math.ceil(result.rischio * 100) / 100)}€)
-                      </div>
+                      </a>
                     </div>
 
                     {/* Outcome */}
