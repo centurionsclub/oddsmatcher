@@ -210,11 +210,16 @@ export function PuntaBancaModal({
     >
       <div className="bg-white rounded-lg shadow-2xl w-full max-w-[1520px] max-h-[92vh] overflow-y-auto relative">
 
-        {/* Close */}
-        <button
-          onClick={onClose}
-          className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 text-base z-10"
-        >✕</button>
+        {/* Title bar */}
+        <div className="flex items-center justify-between px-5 py-3 rounded-t-lg" style={{ backgroundColor: "#87c4e8" }}>
+          <span className="font-black text-base tracking-widest uppercase text-white">
+            {isBackLay ? "Punta Banca" : "Punta Punta"}
+          </span>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-full text-white hover:bg-white/20 text-base transition-all"
+          >✕</button>
+        </div>
 
         <div className="flex flex-col md:flex-row">
 
