@@ -1,73 +1,59 @@
-# Welcome to your Lovable project
+# Oddsmatcher
 
-## Project info
+Strumento di matched betting che confronta le quote dei bookmaker italiani con le quote dell'exchange (Betfair) per individuare le opportunità di copertura ottimali.
 
-**URL**: https://lovable.dev/projects/ce232770-4fb7-4035-8a15-a77bcc9e34fd
+## Funzionalità
 
-## How can I edit this code?
+- **Confronto quote in tempo reale** tra oltre 20 bookmaker italiani e Betfair Exchange
+- **Calcolo automatico** di stake lay, rischio, profitto e rating
+- **Supporto bonus e free bet** con formula corretta (bonus trattato come stake aggiuntivo)
+- **Filtri avanzati** per sport, mercato, bookmaker, quota minima/massima, partita e campionato
+- **Modalità Best Odds, Singola, Multipla, Tre Vie, Best Opposite**
+- **Modal Punta/Banca** con commissione modificabile e riepilogo completo della scommessa
 
-There are several ways of editing your application.
+## Stack tecnologico
 
-**Use Lovable**
+- **Frontend**: React + TypeScript + Vite
+- **UI**: Tailwind CSS + shadcn-ui
+- **Database**: Supabase (PostgreSQL)
+- **Scraper**: Python + Playwright (CentroQuote) + Betfair API
+- **CI/CD**: GitHub Actions (scraper automatici 2×/giorno + ogni 2 ore)
+- **Deploy**: Vercel
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/ce232770-4fb7-4035-8a15-a77bcc9e34fd) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Sviluppo locale
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Clona il repository
+git clone https://github.com/fabianodebei/oddsmatcher.git
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Installa le dipendenze
+cd oddsmatcher
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Avvia il server di sviluppo
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Variabili d'ambiente
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Crea un file `.env` nella root con:
 
-**Use GitHub Codespaces**
+```
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Scraper
 
-## What technologies are used for this project?
+Gli scraper si trovano nella cartella `scraper/` e vengono eseguiti automaticamente tramite GitHub Actions:
 
-This project is built with:
+- `scrape_centroquote.py` — quote bookmaker (2×/giorno)
+- `betfair_scraper.py` — quote exchange Betfair (ogni 2 ore)
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Per eseguirli localmente:
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/ce232770-4fb7-4035-8a15-a77bcc9e34fd) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```sh
+cd scraper
+pip install -r requirements.txt
+python scrape_centroquote.py
+```
