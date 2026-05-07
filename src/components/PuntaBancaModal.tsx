@@ -398,7 +398,8 @@ export function PuntaBancaModal({
                 CALCOLA →
               </button>
               <button
-                className="bg-teal-700 text-white px-5 py-2 text-sm font-bold rounded hover:bg-teal-800 transition-colors flex items-center gap-1"
+                className="text-white px-5 py-2 text-sm font-bold rounded transition-colors flex items-center gap-1 hover:opacity-90"
+                style={{ background: "linear-gradient(90deg, #0d1e35 0%, #152033 100%)", border: "1px solid #c8922d" }}
                 onClick={() => alert("Funzione in arrivo!")}
               >
                 INVIA AL PT ↗
