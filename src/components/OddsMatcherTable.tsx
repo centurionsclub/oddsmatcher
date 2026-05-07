@@ -461,10 +461,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             const layStake = isFB
               ? (backOdds - 1) / (bestLayOdds - commissionRate)   // FreeBet: copri solo profitto
               : backOdds / (bestLayOdds - commissionRate);
-            const profitIfWin = (backOdds - 1) - layStake * (bestLayOdds - 1);
-            const profitIfLose = isFB
-              ? layStake * (1 - commissionRate)          // FreeBet: stake gratis, no -1
-              : layStake * (1 - commissionRate) - 1;
+            // FreeBet: stake non torna indietro se vinci → sottraiamo 1 (face value) dal profitIfWin
+            const profitIfWin = isFB
+              ? (backOdds - 1) - layStake * (bestLayOdds - 1) - 1
+              : (backOdds - 1) - layStake * (bestLayOdds - 1);
+            const profitIfLose = layStake * (1 - commissionRate) - 1;
             const worstProfit = Math.min(profitIfWin, profitIfLose);
             const rating = 100 + worstProfit * 100;
 
