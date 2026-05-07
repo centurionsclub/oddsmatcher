@@ -48,7 +48,7 @@ const Index = () => {
   const { data: oddsData, loading: oddsLoading, error: oddsError, search: searchOdds, reset: resetOdds } = useOddsSearch();
 
   const [filtersOpen, setFiltersOpen] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState("bestodds");
+  const [activeSubTab, setActiveSubTab] = useState("singola");
 
   // Filter states
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
