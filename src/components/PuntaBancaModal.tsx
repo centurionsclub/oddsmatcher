@@ -437,7 +437,7 @@ export function PuntaBancaModal({
 
                     {/* Banca row */}
                     <div className="px-4 py-3">
-                      <div className="rounded px-3 py-2 text-sm font-medium" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
+                      <div className="px-3 py-2 text-sm font-medium text-gray-800">
                         <span className="font-bold">Banca</span> su {opp.exchange}{" "}
                         {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
                         (<span className="font-bold">Rischio</span>{" "}
