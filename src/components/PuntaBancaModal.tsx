@@ -469,7 +469,7 @@ export function PuntaBancaModal({
 
                     {/* Outcome */}
                     <div className={`px-4 py-3 text-center font-bold text-sm ${result.worst >= 0 ? "text-green-400" : "text-red-600"}`}>
-                      <span style={{ border: "2px solid #1e2d42", borderRadius: "6px", padding: "4px 12px" }}>
+                      <span style={{ border: "2px solid #1e2d42", borderRadius: "3px", padding: "1px 3px" }}>
                         {result.worst >= 0
                           ? `Guadagnerai ${fmtIt(Math.floor(result.worst * 100) / 100)}€`
                           : `Perderai ${fmtIt(Math.floor(Math.abs(result.worst) * 100) / 100)}€`
