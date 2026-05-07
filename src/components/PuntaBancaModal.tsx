@@ -319,7 +319,7 @@ export function PuntaBancaModal({
 
             {/* Quota Punta */}
             <div className="flex items-center gap-2">
-              <span className="bg-slate-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+              <span className="bg-sky-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
                 Quota Punta
               </span>
               <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
@@ -347,7 +347,7 @@ export function PuntaBancaModal({
 
             {/* Quota Banca */}
             <div className="flex items-center gap-2">
-              <span className="bg-rose-300 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+              <span className="bg-rose-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
                 Quota Banca
               </span>
               <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
@@ -375,7 +375,7 @@ export function PuntaBancaModal({
 
             {/* Commissioni */}
             <div className="flex items-center gap-2">
-              <span className="bg-gray-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+              <span className="bg-rose-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
                 Commissioni
               </span>
               <div className="flex items-stretch border border-gray-300 rounded overflow-hidden">
