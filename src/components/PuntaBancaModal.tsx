@@ -412,7 +412,7 @@ export function PuntaBancaModal({
             <div className="rounded overflow-hidden border border-gray-200 mt-1">
 
               {/* Header */}
-              <div className="px-4 py-2.5 text-sm font-bold tracking-wide text-white" style={{ backgroundColor: "#1e2d42" }}>
+              <div className="px-4 py-2.5 text-sm font-bold tracking-wide text-white text-center" style={{ backgroundColor: "#1e2d42" }}>
                 {result ? `${headerLabel} • RATING ${fmt2(result.rating)}%` : `${headerLabel} • RATING —`}
               </div>
 
