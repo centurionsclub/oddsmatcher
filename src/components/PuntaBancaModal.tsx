@@ -210,19 +210,11 @@ export function PuntaBancaModal({
     >
       <div className="bg-white rounded-lg shadow-2xl w-full max-w-[900px] max-h-[92vh] overflow-y-auto relative">
 
-        {/* Title bar */}
-        <div
-          className="flex items-center justify-between px-5 py-3 rounded-t-lg"
-          style={{ background: "linear-gradient(90deg, #0d1e35 0%, #152033 100%)", borderBottom: "2px solid #ffffff" }}
-        >
-          <span className="font-black text-base tracking-widest uppercase text-white">
-            {isBackLay ? "Punta Banca" : "Punta Punta"}
-          </span>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-full text-[#8fa8c8] hover:text-white hover:bg-white/10 text-base transition-all"
-          >✕</button>
-        </div>
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 text-base z-10"
+        >✕</button>
 
         <div className="flex flex-col md:flex-row">
 
@@ -283,12 +275,12 @@ export function PuntaBancaModal({
                 onChange={e => setStake(Math.max(0, Number(e.target.value)))}
                 className="flex-1 border border-blue-300 rounded px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-200 min-w-0"
               />
-              <label className="flex items-center gap-1.5 text-sm font-medium shrink-0 cursor-pointer select-none bg-gray-200 text-gray-700 px-3 py-2 rounded">
+              <label className="flex items-center gap-1.5 text-sm text-gray-700 shrink-0 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={freeBet}
                   onChange={e => setFreeBet(e.target.checked)}
-                  className="w-4 h-4 accent-white"
+                  className="w-4 h-4"
                 />
                 Free Bet
               </label>
@@ -296,7 +288,7 @@ export function PuntaBancaModal({
 
             {/* Bonus Book */}
             <div className="flex items-center gap-2">
-              <span className="bg-yellow-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+              <span className="bg-amber-500 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
                 Bonus Book
               </span>
               <input
@@ -306,12 +298,12 @@ export function PuntaBancaModal({
                 onChange={e => setBonus(Math.max(0, Number(e.target.value)))}
                 className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-200 min-w-0"
               />
-              <label className="flex items-center gap-1.5 text-sm font-medium shrink-0 cursor-pointer select-none bg-yellow-400 text-white px-3 py-2 rounded">
+              <label className="flex items-center gap-1.5 text-sm text-gray-700 shrink-0 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={rimborso}
                   onChange={e => setRimborso(e.target.checked)}
-                  className="w-4 h-4 accent-white"
+                  className="w-4 h-4 accent-amber-500"
                 />
                 Rimborso
               </label>
@@ -319,7 +311,7 @@ export function PuntaBancaModal({
 
             {/* Quota Punta */}
             <div className="flex items-center gap-2">
-              <span className="bg-sky-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+              <span className="bg-slate-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
                 Quota Punta
               </span>
               <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
@@ -375,7 +367,7 @@ export function PuntaBancaModal({
 
             {/* Commissioni */}
             <div className="flex items-center gap-2">
-              <span className="bg-rose-300 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+              <span className="bg-gray-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
                 Commissioni
               </span>
               <div className="flex items-stretch border border-gray-300 rounded overflow-hidden">
@@ -394,17 +386,11 @@ export function PuntaBancaModal({
 
             {/* Buttons */}
             <div className="flex gap-2 pt-1">
-              <button
-                className="px-10 py-4 text-lg font-bold rounded transition-all"
-                style={{ background: "#ffffff", border: "1px solid #0d1e35", color: "#0d1e35" }}
-                onMouseEnter={e => { const b = e.currentTarget; b.style.background = "linear-gradient(90deg, #0d1e35 0%, #152033 100%)"; b.style.color = "#ffffff"; }}
-                onMouseLeave={e => { const b = e.currentTarget; b.style.background = "#ffffff"; b.style.color = "#0d1e35"; }}
-              >
+              <button className="border border-teal-600 text-teal-700 px-5 py-2 text-sm font-bold rounded hover:bg-teal-50 transition-colors">
                 CALCOLA →
               </button>
               <button
-                className="text-white px-5 py-2 text-sm font-bold rounded transition-colors flex items-center gap-1 hover:opacity-90"
-                style={{ background: "linear-gradient(90deg, #0d1e35 0%, #152033 100%)", border: "1px solid #ffffff" }}
+                className="bg-teal-700 text-white px-5 py-2 text-sm font-bold rounded hover:bg-teal-800 transition-colors flex items-center gap-1"
                 onClick={() => alert("Funzione in arrivo!")}
               >
                 INVIA AL PT ↗
