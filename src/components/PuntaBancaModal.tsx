@@ -394,8 +394,8 @@ export function PuntaBancaModal({
 
             {/* Buttons */}
             <div className="flex gap-2 pt-1">
-              <button className="px-5 py-2 text-sm font-bold rounded transition-colors hover:opacity-90 text-white"
-                style={{ background: "linear-gradient(90deg, #0d1e35 0%, #152033 100%)", border: "1px solid #ffffff" }}>
+              <button className="px-5 py-2 text-sm font-bold rounded transition-colors hover:opacity-90"
+                style={{ background: "#ffffff", border: "1px solid #0d1e35", color: "#0d1e35" }}>
                 CALCOLA →
               </button>
               <button
