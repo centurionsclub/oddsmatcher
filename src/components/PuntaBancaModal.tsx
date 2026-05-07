@@ -157,15 +157,14 @@ export function PuntaBancaModal({
 
     const rischio = layStake * (qBanca - 1);
 
-    // FreeBet: lo stake non torna indietro se vinci → sottraiamo anche lo stake dal win
     const win = freeBet
-      ? totalStake * (qPunta - 1) - rischio - stake
+      ? totalStake * (qPunta - 1) - rischio   // FreeBet: stake gratis, no sottrazione
       : totalStake * qPunta - stake - rischio;
 
     const lose = rimborso
       ? layStake * (1 - c)
       : freeBet
-        ? layStake * (1 - c) - stake
+        ? layStake * (1 - c)                  // FreeBet: stake gratis, no sottrazione
         : layStake * (1 - c) - stake;
 
     const worst = Math.min(win, lose);
