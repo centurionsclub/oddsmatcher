@@ -400,7 +400,15 @@ const Index = () => {
                 className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
               <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#1e2d42] px-3 py-1 rounded">
-                <input type="checkbox" checked={freeBet} onChange={(e) => setFreeBet(e.target.checked)} className="accent-[#c8922d]" />
+                <input
+                  type="checkbox"
+                  checked={freeBet}
+                  onChange={(e) => {
+                    setFreeBet(e.target.checked);
+                    if (e.target.checked) setBonus(""); // FreeBet esclude il bonus
+                  }}
+                  className="accent-[#c8922d]"
+                />
                 Free Bet
               </label>
             </div>
@@ -413,7 +421,8 @@ const Index = () => {
                 value={bonus}
                 onChange={(e) => setBonus(e.target.value)}
                 placeholder="0 €"
-                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                disabled={freeBet}
+                className={`border border-[#253347] rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30 ${freeBet ? "bg-[#0d1320] text-slate-600 cursor-not-allowed opacity-50" : "bg-[#1a2535] text-white placeholder-slate-500"}`}
               />
               <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#c8922d] px-3 py-1 rounded">
                 <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-white" />
