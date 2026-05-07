@@ -208,16 +208,16 @@ export function PuntaBancaModal({
       style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-lg shadow-2xl w-[95vw] max-w-[1400px] max-h-[92vh] overflow-y-auto relative">
+      <div className="bg-white rounded-lg shadow-2xl w-[90vw] max-w-[950px] max-h-[90vh] overflow-y-auto relative">
 
         {/* Title bar */}
         <div className="flex items-center justify-between px-5 py-3 rounded-t-lg" style={{ backgroundColor: "#87c4e8" }}>
-          <span className="font-black text-3xl tracking-widest uppercase text-white">
+          <span className="font-black text-base tracking-widest uppercase text-white">
             {isBackLay ? "Punta Banca" : "Punta Punta"}
           </span>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-full text-white hover:bg-white/20 text-3xl transition-all"
+            className="w-7 h-7 flex items-center justify-center rounded-full text-white hover:bg-white/20 text-base transition-all"
           >✕</button>
         </div>
 
@@ -227,7 +227,7 @@ export function PuntaBancaModal({
           <div className="md:w-[360px] shrink-0 p-6">
             <div className="border border-gray-300 rounded-lg overflow-hidden text-center text-gray-800">
 
-              <div className="border-b border-gray-200 px-4 py-3 text-2xl text-gray-500">
+              <div className="border-b border-gray-200 px-4 py-3 text-sm text-gray-500">
                 Sport - {opp.sport.charAt(0).toUpperCase() + opp.sport.slice(1)} {sportEmoji(opp.sport)}
               </div>
 
@@ -235,22 +235,22 @@ export function PuntaBancaModal({
                 {formatDt(opp.eventTime)}
               </div>
 
-              <div className="border-b border-gray-200 px-4 py-4 font-bold text-3xl leading-snug">
+              <div className="border-b border-gray-200 px-4 py-4 font-bold text-base leading-snug">
                 {opp.eventName}
               </div>
 
-              <div className="border-b border-gray-200 px-4 py-3 text-2xl text-gray-500">
+              <div className="border-b border-gray-200 px-4 py-3 text-sm text-gray-500">
                 {opp.league}
               </div>
 
-              <div className="border-b border-gray-200 px-4 py-3 text-2xl">
+              <div className="border-b border-gray-200 px-4 py-3 text-sm">
                 Bookmaker -{" "}
                 <a href={getUrl(opp.bookmaker)} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
                   {getDisplayDomain(opp.bookmaker)}
                 </a>{" "}→ {sc1}
               </div>
 
-              <div className="px-4 py-3 text-2xl">
+              <div className="px-4 py-3 text-sm">
                 Exchange -{" "}
                 <a href={exchangeUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
                   {getDisplayDomain(opp.exchange)}
@@ -259,7 +259,7 @@ export function PuntaBancaModal({
             </div>
 
             {isNearMatch && (
-              <div className="mt-4 bg-amber-50 border border-amber-300 rounded-lg p-4 text-2xl font-bold text-amber-800 text-center leading-relaxed">
+              <div className="mt-4 bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm font-bold text-amber-800 text-center leading-relaxed">
                 La partita inizia tra meno di 60 minuti, le quote potrebbero non essere allineate.
               </div>
             )}
@@ -270,7 +270,7 @@ export function PuntaBancaModal({
 
             {/* Stake Book */}
             <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-2xl font-medium rounded w-28 text-center shrink-0 text-white" style={{ backgroundColor: "#1e2d42" }}>
+              <span className="px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0 text-white" style={{ backgroundColor: "#1e2d42" }}>
                 Stake Book
               </span>
               <input
@@ -278,9 +278,9 @@ export function PuntaBancaModal({
                 min={0}
                 value={stake}
                 onChange={e => setStake(Math.max(0, Number(e.target.value)))}
-                className="flex-1 border border-blue-300 rounded px-3 py-2 text-2xl text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-200 min-w-0"
+                className="flex-1 border border-blue-300 rounded px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-200 min-w-0"
               />
-              <label className="flex items-center gap-1.5 text-2xl text-gray-700 shrink-0 cursor-pointer select-none">
+              <label className="flex items-center gap-1.5 text-sm text-gray-700 shrink-0 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={freeBet}
@@ -293,7 +293,7 @@ export function PuntaBancaModal({
 
             {/* Bonus Book */}
             <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-2xl font-medium rounded w-28 text-center shrink-0 text-white" style={{ backgroundColor: "#c8922d" }}>
+              <span className="px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0 text-white" style={{ backgroundColor: "#c8922d" }}>
                 Bonus Book
               </span>
               <input
@@ -301,9 +301,9 @@ export function PuntaBancaModal({
                 min={0}
                 value={bonus}
                 onChange={e => setBonus(Math.max(0, Number(e.target.value)))}
-                className="flex-1 border border-gray-300 rounded px-3 py-2 text-2xl text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-200 min-w-0"
+                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-200 min-w-0"
               />
-              <label className="flex items-center gap-1.5 text-2xl text-gray-700 shrink-0 cursor-pointer select-none">
+              <label className="flex items-center gap-1.5 text-sm text-gray-700 shrink-0 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={rimborso}
@@ -316,7 +316,7 @@ export function PuntaBancaModal({
 
             {/* Quota Punta */}
             <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-2xl font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#87c4e8", color: "#0d2035" }}>
+              <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#87c4e8", color: "#0d2035" }}>
                 Quota Punta
               </span>
               <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
@@ -326,17 +326,17 @@ export function PuntaBancaModal({
                   onChange={e => setRawQPunta(e.target.value)}
                   onBlur={commitQPunta}
                   onKeyDown={e => { if (e.key === "Enter") commitQPunta(); }}
-                  className="flex-1 px-3 py-2 text-2xl text-center text-gray-800 focus:outline-none min-w-0"
+                  className="flex-1 px-3 py-2 text-sm text-center text-gray-800 focus:outline-none min-w-0"
                 />
                 <div className="flex flex-col border-l border-gray-300 shrink-0">
                   <button
                     onClick={() => setQPunta(v => Math.round((v + 0.01) * 100) / 100)}
-                    className="px-2 text-xl hover:bg-gray-100 flex-1 leading-none py-1"
+                    className="px-2 text-[10px] hover:bg-gray-100 flex-1 leading-none py-1"
                   >▲</button>
                   <div className="h-px bg-gray-300" />
                   <button
                     onClick={() => setQPunta(v => Math.max(1.01, Math.round((v - 0.01) * 100) / 100))}
-                    className="px-2 text-xl hover:bg-gray-100 flex-1 leading-none py-1"
+                    className="px-2 text-[10px] hover:bg-gray-100 flex-1 leading-none py-1"
                   >▼</button>
                 </div>
               </div>
@@ -344,7 +344,7 @@ export function PuntaBancaModal({
 
             {/* Quota Banca */}
             <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-2xl font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
+              <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
                 Quota Banca
               </span>
               <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
@@ -354,17 +354,17 @@ export function PuntaBancaModal({
                   onChange={e => setRawQBanca(e.target.value)}
                   onBlur={commitQBanca}
                   onKeyDown={e => { if (e.key === "Enter") commitQBanca(); }}
-                  className="flex-1 px-3 py-2 text-2xl text-center text-gray-800 focus:outline-none min-w-0"
+                  className="flex-1 px-3 py-2 text-sm text-center text-gray-800 focus:outline-none min-w-0"
                 />
                 <div className="flex flex-col border-l border-gray-300 shrink-0">
                   <button
                     onClick={() => setQBanca(v => Math.round((v + 0.01) * 100) / 100)}
-                    className="px-2 text-xl hover:bg-gray-100 flex-1 leading-none py-1"
+                    className="px-2 text-[10px] hover:bg-gray-100 flex-1 leading-none py-1"
                   >▲</button>
                   <div className="h-px bg-gray-300" />
                   <button
                     onClick={() => setQBanca(v => Math.max(1.01, Math.round((v - 0.01) * 100) / 100))}
-                    className="px-2 text-xl hover:bg-gray-100 flex-1 leading-none py-1"
+                    className="px-2 text-[10px] hover:bg-gray-100 flex-1 leading-none py-1"
                   >▼</button>
                 </div>
               </div>
@@ -372,7 +372,7 @@ export function PuntaBancaModal({
 
             {/* Commissioni */}
             <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-2xl font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
+              <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
                 Commissioni
               </span>
               <div className="flex items-stretch border border-gray-300 rounded overflow-hidden">
@@ -383,16 +383,16 @@ export function PuntaBancaModal({
                   step={0.5}
                   value={commissionRate}
                   onChange={e => setCommissionRate(Math.max(0, Math.min(100, Number(e.target.value))))}
-                  className="w-20 text-center px-2 py-2 text-2xl text-gray-800 focus:outline-none"
+                  className="w-20 text-center px-2 py-2 text-sm text-gray-800 focus:outline-none"
                 />
-                <span className="px-2 flex items-center text-gray-500 text-2xl border-l border-gray-300">%</span>
+                <span className="px-2 flex items-center text-gray-500 text-sm border-l border-gray-300">%</span>
               </div>
             </div>
 
             {/* Buttons */}
             <div className="flex gap-2 pt-1">
               <button
-                className="px-5 py-2 text-2xl font-bold rounded transition-all"
+                className="px-5 py-2 text-sm font-bold rounded transition-all"
                 style={{ backgroundColor: "#ffffff", border: "1px solid #1e2d42", color: "#1e2d42" }}
                 onMouseEnter={e => { const b = e.currentTarget; b.style.backgroundColor = "#1e2d42"; b.style.color = "#ffffff"; }}
                 onMouseLeave={e => { const b = e.currentTarget; b.style.backgroundColor = "#ffffff"; b.style.color = "#1e2d42"; }}
@@ -400,7 +400,7 @@ export function PuntaBancaModal({
                 CALCOLA →
               </button>
               <button
-                className="px-5 py-2 text-2xl font-bold rounded transition-colors text-white hover:opacity-90 flex items-center gap-1"
+                className="px-5 py-2 text-sm font-bold rounded transition-colors text-white hover:opacity-90 flex items-center gap-1"
                 style={{ backgroundColor: "#1e2d42" }}
                 onClick={() => alert("Funzione in arrivo!")}
               >
@@ -413,7 +413,7 @@ export function PuntaBancaModal({
               <div className="rounded overflow-hidden border border-gray-200 mt-1">
 
                 {/* Header */}
-                <div className="bg-gray-600 text-white px-4 py-2.5 text-2xl font-bold tracking-wide">
+                <div className="bg-gray-600 text-white px-4 py-2.5 text-sm font-bold tracking-wide">
                   {headerLabel} • RATING {fmt2(result.rating)}%
                 </div>
 
@@ -421,7 +421,7 @@ export function PuntaBancaModal({
                 <div className="bg-white divide-y divide-gray-100">
 
                   {/* Punta row */}
-                  <div className="px-4 py-3 text-2xl text-gray-800">
+                  <div className="px-4 py-3 text-sm text-gray-800">
                     <span className="font-bold">Punta</span> sul bookmaker{" "}
                     <a
                       href={getUrl(opp.bookmaker)}
@@ -436,7 +436,7 @@ export function PuntaBancaModal({
 
                   {/* Banca row */}
                   <div className="px-4 py-3">
-                    <div className="bg-teal-600 text-white rounded px-3 py-2 text-2xl">
+                    <div className="bg-teal-600 text-white rounded px-3 py-2 text-sm">
                       <span className="font-bold">Banca</span> su {opp.exchange}{" "}
                       {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
                       (<span className="font-bold">Rischio</span>{" "}
@@ -445,7 +445,7 @@ export function PuntaBancaModal({
                   </div>
 
                   {/* Outcome */}
-                  <div className={`px-4 py-3 text-center font-bold text-2xl ${result.worst >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  <div className={`px-4 py-3 text-center font-bold text-sm ${result.worst >= 0 ? "text-green-600" : "text-red-600"}`}>
                     {result.worst >= 0
                       ? `Guadagnerai ${fmtIt(Math.floor(result.worst * 100) / 100)}€`
                       : `Perderai ${fmtIt(Math.floor(Math.abs(result.worst) * 100) / 100)}€`
