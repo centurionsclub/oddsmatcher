@@ -296,7 +296,7 @@ export function PuntaBancaModal({
 
             {/* Bonus Book */}
             <div className="flex items-center gap-2">
-              <span className="bg-amber-500 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
+              <span className="bg-yellow-400 text-white px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0">
                 Bonus Book
               </span>
               <input
