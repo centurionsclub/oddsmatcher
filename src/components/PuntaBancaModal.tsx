@@ -213,7 +213,7 @@ export function PuntaBancaModal({
         {/* Title bar */}
         <div
           className="flex items-center justify-between px-5 py-3 rounded-t-lg"
-          style={{ background: "linear-gradient(90deg, #0d1e35 0%, #152033 100%)", borderBottom: "2px solid #c8922d" }}
+          style={{ background: "linear-gradient(90deg, #0d1e35 0%, #152033 100%)", borderBottom: "2px solid #ffffff" }}
         >
           <span className="font-black text-base tracking-widest uppercase text-white">
             {isBackLay ? "Punta Banca" : "Punta Punta"}
@@ -399,7 +399,7 @@ export function PuntaBancaModal({
               </button>
               <button
                 className="text-white px-5 py-2 text-sm font-bold rounded transition-colors flex items-center gap-1 hover:opacity-90"
-                style={{ background: "linear-gradient(90deg, #0d1e35 0%, #152033 100%)", border: "1px solid #c8922d" }}
+                style={{ background: "linear-gradient(90deg, #0d1e35 0%, #152033 100%)", border: "1px solid #ffffff" }}
                 onClick={() => alert("Funzione in arrivo!")}
               >
                 INVIA AL PT ↗
