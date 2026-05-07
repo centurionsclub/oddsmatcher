@@ -270,7 +270,7 @@ export function PuntaBancaModal({
 
             {/* Stake Book */}
             <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#87c4e8", color: "#0d2035" }}>
+              <span className="px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0 text-white" style={{ backgroundColor: "#1e2d42" }}>
                 Stake Book
               </span>
               <input
