@@ -208,7 +208,7 @@ export function PuntaBancaModal({
       style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-[1170px] max-h-[92vh] overflow-y-auto relative">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-[1520px] max-h-[92vh] overflow-y-auto relative">
 
         {/* Close */}
         <button
