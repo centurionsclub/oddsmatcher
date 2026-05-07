@@ -841,8 +841,8 @@ async def scrape_sport(sport_filter: str = "tutti", fast_only: bool = False):
     print(f"{'='*60}")
 
     if not fast_only:
-        print("\n[DB] Cleaning expired rows...")
-        clean_expired()
+        print("\n[DB] Cleaning old rows (>48h)...")
+        clean_expired()  # solo dati vecchi di 48h, non la roba appena scaduta
 
     total_rows = 0
 
