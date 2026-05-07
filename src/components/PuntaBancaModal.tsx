@@ -283,12 +283,12 @@ export function PuntaBancaModal({
                 onChange={e => setStake(Math.max(0, Number(e.target.value)))}
                 className="flex-1 border border-blue-300 rounded px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-200 min-w-0"
               />
-              <label className="flex items-center gap-1.5 text-sm text-gray-700 shrink-0 cursor-pointer select-none">
+              <label className="flex items-center gap-1.5 text-sm font-medium shrink-0 cursor-pointer select-none bg-yellow-400 text-white px-3 py-2 rounded">
                 <input
                   type="checkbox"
                   checked={freeBet}
                   onChange={e => setFreeBet(e.target.checked)}
-                  className="w-4 h-4"
+                  className="w-4 h-4 accent-white"
                 />
                 Free Bet
               </label>
@@ -306,12 +306,12 @@ export function PuntaBancaModal({
                 onChange={e => setBonus(Math.max(0, Number(e.target.value)))}
                 className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-200 min-w-0"
               />
-              <label className="flex items-center gap-1.5 text-sm text-gray-700 shrink-0 cursor-pointer select-none">
+              <label className="flex items-center gap-1.5 text-sm font-medium shrink-0 cursor-pointer select-none bg-yellow-400 text-white px-3 py-2 rounded">
                 <input
                   type="checkbox"
                   checked={rimborso}
                   onChange={e => setRimborso(e.target.checked)}
-                  className="w-4 h-4 accent-amber-500"
+                  className="w-4 h-4 accent-white"
                 />
                 Rimborso
               </label>
