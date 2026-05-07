@@ -372,7 +372,7 @@ export function PuntaBancaModal({
 
             {/* Commissioni */}
             <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0 text-white" style={{ backgroundColor: "#1e2d42" }}>
+              <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
                 Commissioni
               </span>
               <div className="flex items-stretch border border-gray-300 rounded overflow-hidden">
