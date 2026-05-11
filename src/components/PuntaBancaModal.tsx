@@ -447,7 +447,7 @@ export function PuntaBancaModal({
                   <>
                     {/* Punta row */}
                     <div className="px-4 py-3 text-sm text-gray-800 text-center">
-                      <span className="font-bold">Punta</span> sul bookmaker{" "}
+                      <span className="font-bold">Punta</span> su {getDisplayDomain(opp.bookmaker)}{" "}
                       <a
                         href={getUrl(opp.bookmaker)}
                         target="_blank"
