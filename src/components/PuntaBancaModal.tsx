@@ -458,11 +458,11 @@ export function PuntaBancaModal({
                           navigator.clipboard.writeText(amount).catch(() => {});
                         }}
                         className="inline-block px-3 py-2 text-sm font-medium text-gray-800 underline decoration-dotted hover:text-blue-600 cursor-pointer transition-colors"
-                        title="Clicca per aprire Betfair e copiare l'importo"
+                        title={isBackLay ? "Clicca per aprire Betfair e copiare l'importo" : "Clicca per aprire il bookmaker e copiare l'importo"}
                       >
-                        <span className="font-bold">Banca</span> su {opp.exchange}{" "}
+                        <span className="font-bold">{isBackLay ? "Banca" : "Punta"}</span> su {opp.exchange}{" "}
                         {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
-                        (<span className="font-bold">Rischio</span>{" "}
+                        (<span className="font-bold">{isBackLay ? "Rischio" : "Costo"}</span>{" "}
                         {fmtIt(Math.ceil(result.rischio * 100) / 100)}€)
                       </a>
                     </div>
