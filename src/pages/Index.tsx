@@ -349,17 +349,6 @@ const Index = () => {
                   </div>
                 )}
               </div>
-              {activeSubTab === "multipla" && (
-                <label className="flex items-center gap-2 text-sm text-[#0d2035] font-medium bg-[#87c4e8] px-3 py-1 rounded ml-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={multiplaOpposta}
-                    onChange={(e) => setMultiplaOpposta(e.target.checked)}
-                    className="accent-[#0d2035]"
-                  />
-                  Multipla Opposta
-                </label>
-              )}
             </div>
 
             {/* Exchange / Bookmaker */}
