@@ -71,6 +71,7 @@ const Index = () => {
   const [marketsOpen, setMarketsOpen] = useState(false);
   const [bookmakerOpen, setBookmakerOpen] = useState(false);
   const [exchangeOpen, setExchangeOpen] = useState(false);
+  const [bookmakerSearch, setBookmakerSearch] = useState("");
 
   const handleAggiorna = () => {
     setFiltersOpen(false); // nascondi i filtri subito
@@ -256,31 +257,44 @@ const Index = () => {
               <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Bookmaker</span>
               <div className="relative">
                 <button
-                  onClick={() => { setBookmakerOpen(!bookmakerOpen); setMarketsOpen(false); setExchangeOpen(false); }}
+                  onClick={() => { setBookmakerOpen(!bookmakerOpen); setMarketsOpen(false); setExchangeOpen(false); setBookmakerSearch(""); }}
                   className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                 >
                   <span className="text-white">{selectedBookmakers.length === 0 ? "Tutti" : `${selectedBookmakers.length} selezionati`}</span>
                   <span className="text-slate-500">▾</span>
                 </button>
                 {bookmakerOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[250px] max-h-[300px] overflow-y-auto">
-                    <button
-                      onClick={() => setSelectedBookmakers([])}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#c8922d]"
-                    >
-                      Tutti (deseleziona)
-                    </button>
-                    {BOOKMAKERS.map(b => (
+                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[250px] flex flex-col max-h-[320px]">
+                    {/* Search input sticky */}
+                    <div className="p-2 border-b border-[#253347] shrink-0">
+                      <input
+                        type="text"
+                        value={bookmakerSearch}
+                        onChange={e => setBookmakerSearch(e.target.value)}
+                        placeholder="Cerca bookmaker..."
+                        autoFocus
+                        className="w-full bg-[#0d1320] text-white text-sm px-2 py-1.5 rounded border border-[#253347] placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#87c4e8]"
+                      />
+                    </div>
+                    <div className="overflow-y-auto">
                       <button
-                        key={b}
-                        onClick={() => toggleBookmaker(b)}
-                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[#1e2d42] ${
-                          selectedBookmakers.includes(b) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
-                        }`}
+                        onClick={() => setSelectedBookmakers([])}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#c8922d]"
                       >
-                        {b}
+                        Tutti (deseleziona)
                       </button>
-                    ))}
+                      {BOOKMAKERS.filter(b => b.toLowerCase().includes(bookmakerSearch.toLowerCase())).map(b => (
+                        <button
+                          key={b}
+                          onClick={() => toggleBookmaker(b)}
+                          className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[#1e2d42] ${
+                            selectedBookmakers.includes(b) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
+                          }`}
+                        >
+                          {b}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
