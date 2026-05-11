@@ -327,7 +327,7 @@ export function PuntaBancaModal({
             {/* Quota Punta */}
             <div className="flex items-center gap-2">
               <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#87c4e8", color: "#0d2035" }}>
-                Quota Punta
+                {isBackLay ? "Quota Punta" : "Quota Punta 1"}
               </span>
               <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
                 <input
@@ -355,7 +355,7 @@ export function PuntaBancaModal({
             {/* Quota Banca / Quota 2 */}
             <div className="flex items-center gap-2">
               <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={isBackLay ? { backgroundColor: "#f4a9ba", color: "#2d0d1a" } : { backgroundColor: "#87c4e8", color: "#0d2035" }}>
-                {isBackLay ? "Quota Banca" : "Quota 2"}
+                {isBackLay ? "Quota Banca" : "Quota Punta 2"}
               </span>
               <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
                 <input
