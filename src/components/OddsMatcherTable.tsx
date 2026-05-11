@@ -321,7 +321,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
               const profitIf1 = (backOdds - 1) - stake2;
               const profitIf2 = stake2 * (counterOdds - 1) - 1;
               const rating = 100 + Math.min(profitIf1, profitIf2) * 100;
-              if (rating > 75 && rating < 105) {
+              if (rating > 75 && rating < 120) {
                 opps.push({
                   eventTime: bmEvent.eventTime, sport: bmEvent.sport || "calcio",
                   eventName: cleanEventName(bmEvent.eventName), league: bmEvent.league,
@@ -348,7 +348,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 const profitIf1 = (backOdds - 1) - stake2;
                 const profitIf2 = stake2 * (effectiveCounterOdds - 1) - 1;
                 const rating = 100 + Math.min(profitIf1, profitIf2) * 100;
-                if (rating > 75 && rating < 105) {
+                if (rating > 75 && rating < 120) {
                   const compLabel = compOutcomes.map(o => o.label).join("+");
                   opps.push({
                     eventTime: bmEvent.eventTime, sport: bmEvent.sport || "calcio",
@@ -470,7 +470,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             const worstProfit = Math.min(profitIfWin, profitIfLose);
             const rating = 100 + worstProfit * 100;
 
-            if (rating > 70 && rating < 105) {
+            if (rating > 70 && rating < 120) {
               opps.push({
                 eventTime: bmEvent.eventTime,
                 sport: bmEvent.sport || "calcio",
@@ -538,7 +538,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         const margin = 1 / bestA.odds + 1 / bestB.odds;
         const rating = (1 / margin) * 100;
 
-        if (rating > 85 && rating < 105) {
+        if (rating > 85 && rating < 120) {
           opps.push({
             eventTime: group[0].eventTime,
             sport: group[0].sport || "calcio",
@@ -572,7 +572,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         const margin = outcomes.reduce((sum, o) => sum + 1 / bestForOutcome[o.key].odds, 0);
         const rating = (1 / margin) * 100;
 
-        if (rating > 85 && rating < 105) {
+        if (rating > 85 && rating < 120) {
           for (const mainOutcome of outcomes) {
             const mainOdds = bestForOutcome[mainOutcome.key].odds;
             const mainBook = bestForOutcome[mainOutcome.key].bookmaker;
