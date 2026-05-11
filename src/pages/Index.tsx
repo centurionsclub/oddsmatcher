@@ -68,6 +68,16 @@ const Index = () => {
   const [campionato, setCampionato] = useState("");
   const [commission, setCommission] = useState(4.5);
 
+  // Multipla-specific states
+  const [multiplaOpposta, setMultiplaOpposta] = useState(false);
+  const [stakeMultipla, setStakeMultipla] = useState("");
+  const [quotaMinimaMultipla, setQuotaMinimaMultipla] = useState("");
+  const [numEventi, setNumEventi] = useState("0");
+  const [quotaPartitaMinima, setQuotaPartitaMinima] = useState("");
+  const [quotaPartitaMassima, setQuotaPartitaMassima] = useState("");
+  const [daData, setDaData] = useState("");
+  const [aData, setAData] = useState("");
+
   // Dropdown states
   const [marketsOpen, setMarketsOpen] = useState(false);
   const [bookmakerOpen, setBookmakerOpen] = useState(false);
@@ -136,6 +146,14 @@ const Index = () => {
     setFreeBet(false);
     setRimborso(false);
     setSelectedSport("tutti");
+    setMultiplaOpposta(false);
+    setStakeMultipla("");
+    setQuotaMinimaMultipla("");
+    setNumEventi("0");
+    setQuotaPartitaMinima("");
+    setQuotaPartitaMassima("");
+    setDaData("");
+    setAData("");
     resetOdds();
   };
 
@@ -226,7 +244,7 @@ const Index = () => {
             </div>
 
             {/* Sport */}
-            <div className="flex items-center gap-3 mb-3">
+            {activeSubTab !== "multipla" && <div className="flex items-center gap-3 mb-3">
               <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Sport</span>
               <div className="flex gap-1">
                 {[
@@ -248,7 +266,7 @@ const Index = () => {
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
 
             {/* Mercati */}
             <div className="flex items-center gap-3 mb-3">
@@ -331,6 +349,17 @@ const Index = () => {
                   </div>
                 )}
               </div>
+              {activeSubTab === "multipla" && (
+                <label className="flex items-center gap-2 text-sm text-[#0d2035] font-medium bg-[#87c4e8] px-3 py-1 rounded ml-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={multiplaOpposta}
+                    onChange={(e) => setMultiplaOpposta(e.target.checked)}
+                    className="accent-[#0d2035]"
+                  />
+                  Multipla Opposta
+                </label>
+              )}
             </div>
 
             {/* Exchange / Bookmaker */}
@@ -458,24 +487,23 @@ const Index = () => {
               );
             })()}
 
-            {/* Stake Punta */}
+            {/* Stake */}
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Stake Punta</span>
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">
+                {activeSubTab === "multipla" ? "Stake Multipla" : "Stake Punta"}
+              </span>
               <input
                 type="text"
-                value={stakePunta}
-                onChange={(e) => setStakePunta(e.target.value)}
+                value={activeSubTab === "multipla" ? stakeMultipla : stakePunta}
+                onChange={(e) => activeSubTab === "multipla" ? setStakeMultipla(e.target.value) : setStakePunta(e.target.value)}
                 placeholder="0 €"
                 className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
               />
-              <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#1e2d42] px-3 py-1 rounded">
+              <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#1e2d42] px-3 py-1 rounded cursor-pointer">
                 <input
                   type="checkbox"
                   checked={freeBet}
-                  onChange={(e) => {
-                    setFreeBet(e.target.checked);
-                    if (e.target.checked) setBonus(""); // FreeBet esclude il bonus
-                  }}
+                  onChange={(e) => { setFreeBet(e.target.checked); if (e.target.checked) setBonus(""); }}
                   className="accent-[#c8922d]"
                 />
                 Free Bet
@@ -493,31 +521,84 @@ const Index = () => {
                 disabled={freeBet}
                 className={`border border-[#253347] rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30 ${freeBet ? "bg-[#0d1320] text-slate-600 cursor-not-allowed opacity-50" : "bg-[#1a2535] text-white placeholder-slate-500"}`}
               />
-              <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#c8922d] px-3 py-1 rounded">
+              <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#c8922d] px-3 py-1 rounded cursor-pointer">
                 <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-white" />
                 Rimborso
               </label>
             </div>
 
-            {/* Quota Minima / Massima */}
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Quota Minima</span>
-              <input
-                type="text"
-                value={quotaMinima}
-                onChange={(e) => setQuotaMinima(e.target.value)}
-                placeholder="0,00"
-                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
-              />
-              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded">Quota Massima</span>
-              <input
-                type="text"
-                value={quotaMassima}
-                onChange={(e) => setQuotaMassima(e.target.value)}
-                placeholder="0,00"
-                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
-              />
-            </div>
+            {/* Quota rows - condizionali per tab */}
+            {activeSubTab === "multipla" ? (
+              <>
+                {/* Quota Minima Multipla + N° Eventi */}
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded whitespace-nowrap text-center">Quota Minima Multipla</span>
+                  <input
+                    type="number"
+                    value={quotaMinimaMultipla}
+                    onChange={(e) => setQuotaMinimaMultipla(e.target.value)}
+                    step="0.01"
+                    min="0"
+                    placeholder="0,00"
+                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                  />
+                  <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded text-center">N° Eventi</span>
+                  <input
+                    type="number"
+                    value={numEventi}
+                    onChange={(e) => setNumEventi(e.target.value)}
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[80px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                  />
+                </div>
+
+                {/* Quota Partita Minima / Massima */}
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Quota Partita</span>
+                  <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded">Minima</span>
+                  <input
+                    type="number"
+                    value={quotaPartitaMinima}
+                    onChange={(e) => setQuotaPartitaMinima(e.target.value)}
+                    step="0.01"
+                    min="0"
+                    placeholder="0,00"
+                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                  />
+                  <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded">Massima</span>
+                  <input
+                    type="number"
+                    value={quotaPartitaMassima}
+                    onChange={(e) => setQuotaPartitaMassima(e.target.value)}
+                    step="0.01"
+                    min="0"
+                    placeholder="0,00"
+                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Quota Minima</span>
+                <input
+                  type="text"
+                  value={quotaMinima}
+                  onChange={(e) => setQuotaMinima(e.target.value)}
+                  placeholder="0,00"
+                  className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                />
+                <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded">Quota Massima</span>
+                <input
+                  type="text"
+                  value={quotaMassima}
+                  onChange={(e) => setQuotaMassima(e.target.value)}
+                  placeholder="0,00"
+                  className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                />
+              </div>
+            )}
 
             {/* Partita */}
             <div className="flex items-center gap-3 mb-3">
@@ -546,7 +627,7 @@ const Index = () => {
             </div>
 
             {/* Campionato */}
-            <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-3 ${activeSubTab === "multipla" ? "mb-3" : ""}`}>
               <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Campionato</span>
               <div className="relative flex-1 max-w-[300px]">
                 <input
@@ -570,6 +651,26 @@ const Index = () => {
                 )}
               </div>
             </div>
+
+            {/* Da data / A data - solo multipla */}
+            {activeSubTab === "multipla" && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Da data</span>
+                <input
+                  type="date"
+                  value={daData}
+                  onChange={(e) => setDaData(e.target.value)}
+                  className="border border-[#253347] bg-[#1a2535] text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                />
+                <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded text-center">A data</span>
+                <input
+                  type="date"
+                  value={aData}
+                  onChange={(e) => setAData(e.target.value)}
+                  className="border border-[#253347] bg-[#1a2535] text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                />
+              </div>
+            )}
           </div>
         )}
 
