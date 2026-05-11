@@ -981,9 +981,6 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         />
       )}
       <div>
-        <div className="flex items-center justify-end px-4 py-2">
-          <span className="text-xs text-white">{opps.length} opportunit&agrave;</span>
-        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
