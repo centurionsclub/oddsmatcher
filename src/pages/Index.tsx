@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Navbar } from "@/components/Navbar";
 import { useToast } from "@/hooks/use-toast";
 import { useOddsSearch } from "@/hooks/use-odds-search";
@@ -73,6 +73,28 @@ const Index = () => {
   const [exchangeOpen, setExchangeOpen] = useState(false);
   const [bookmakerSearch, setBookmakerSearch] = useState("");
   const [exchangeSearch, setExchangeSearch] = useState("");
+  const [partitaOpen, setPartitaOpen] = useState(false);
+  const [campionatoOpen, setCampionatoOpen] = useState(false);
+
+  const allEvents = useMemo(() => {
+    if (!oddsData?.data) return [];
+    return [...new Set(oddsData.data.map(d => d.eventName))].sort();
+  }, [oddsData]);
+
+  const allLeagues = useMemo(() => {
+    if (!oddsData?.data) return [];
+    return [...new Set(oddsData.data.map(d => d.league))].sort();
+  }, [oddsData]);
+
+  const partitaSuggestions = useMemo(() =>
+    partita.trim().length === 0 ? allEvents.slice(0, 8) :
+    allEvents.filter(e => e.toLowerCase().includes(partita.toLowerCase())).slice(0, 8),
+  [partita, allEvents]);
+
+  const campionatoSuggestions = useMemo(() =>
+    campionato.trim().length === 0 ? allLeagues.slice(0, 8) :
+    allLeagues.filter(l => l.toLowerCase().includes(campionato.toLowerCase())).slice(0, 8),
+  [campionato, allLeagues]);
 
   const handleAggiorna = () => {
     setFiltersOpen(false); // nascondi i filtri subito
@@ -490,25 +512,55 @@ const Index = () => {
             {/* Partita */}
             <div className="flex items-center gap-3 mb-3">
               <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Partita</span>
-              <input
-                type="text"
-                value={partita}
-                onChange={(e) => setPartita(e.target.value)}
-                placeholder="Cerca per nome..."
-                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm flex-1 max-w-[300px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
-              />
+              <div className="relative flex-1 max-w-[300px]">
+                <input
+                  type="text"
+                  value={partita}
+                  onChange={(e) => { setPartita(e.target.value); setPartitaOpen(true); }}
+                  onFocus={() => setPartitaOpen(true)}
+                  onBlur={() => setTimeout(() => setPartitaOpen(false), 150)}
+                  placeholder="Cerca per nome..."
+                  className="w-full border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                />
+                {partitaOpen && partitaSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 mt-1 w-full bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 max-h-[200px] overflow-y-auto">
+                    {partitaSuggestions.map(s => (
+                      <button
+                        key={s}
+                        onMouseDown={() => { setPartita(s); setPartitaOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-sm text-white hover:bg-[#1e2d42] truncate"
+                      >{s}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Campionato */}
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Campionato</span>
-              <input
-                type="text"
-                value={campionato}
-                onChange={(e) => setCampionato(e.target.value)}
-                placeholder="Cerca Campionato..."
-                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm flex-1 max-w-[300px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
-              />
+              <div className="relative flex-1 max-w-[300px]">
+                <input
+                  type="text"
+                  value={campionato}
+                  onChange={(e) => { setCampionato(e.target.value); setCampionatoOpen(true); }}
+                  onFocus={() => setCampionatoOpen(true)}
+                  onBlur={() => setTimeout(() => setCampionatoOpen(false), 150)}
+                  placeholder="Cerca Campionato..."
+                  className="w-full border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                />
+                {campionatoOpen && campionatoSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 mt-1 w-full bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 max-h-[200px] overflow-y-auto">
+                    {campionatoSuggestions.map(s => (
+                      <button
+                        key={s}
+                        onMouseDown={() => { setCampionato(s); setCampionatoOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-sm text-white hover:bg-[#1e2d42] truncate"
+                      >{s}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
