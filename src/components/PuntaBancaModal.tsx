@@ -145,7 +145,7 @@ export function PuntaBancaModal({
     return () => window.removeEventListener("keydown", fn);
   }, [onClose]);
 
-  const c = commissionRate / 100;
+  const c = opp.isBookVsBook ? 0 : commissionRate / 100;
 
   const result = useCallback(() => {
     const totalStake = stake + bonus;
@@ -352,10 +352,10 @@ export function PuntaBancaModal({
               </div>
             </div>
 
-            {/* Quota Banca */}
+            {/* Quota Banca / Quota 2 */}
             <div className="flex items-center gap-2">
               <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
-                Quota Banca
+                {isBackLay ? "Quota Banca" : "Quota 2"}
               </span>
               <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
                 <input
@@ -380,8 +380,8 @@ export function PuntaBancaModal({
               </div>
             </div>
 
-            {/* Commissioni */}
-            <div className="flex items-center gap-2">
+            {/* Commissioni — solo in back-lay */}
+            {isBackLay && <div className="flex items-center gap-2">
               <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
                 Commissioni
               </span>
@@ -399,7 +399,7 @@ export function PuntaBancaModal({
                 />
                 <span className="px-2 flex items-center text-gray-500 text-sm border-l border-gray-300">%</span>
               </div>
-            </div>
+            </div>}
 
             {/* Buttons */}
             <div className="flex gap-2 pt-1">
