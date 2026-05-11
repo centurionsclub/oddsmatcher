@@ -693,6 +693,13 @@ const Index = () => {
               rimborso,
               bonus,
               filtroLiquidita,
+              stakeMultipla,
+              quotaMinimaMultipla,
+              numEventi,
+              quotaPartitaMinima,
+              quotaPartitaMassima,
+              daData,
+              aData,
             }}
             commission={commission}
           />

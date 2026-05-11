@@ -65,6 +65,14 @@ interface Props {
     rimborso: boolean;
     bonus: string;
     filtroLiquidita: boolean;
+    // Multipla-specific
+    stakeMultipla?: string;
+    quotaMinimaMultipla?: string;
+    numEventi?: string;
+    quotaPartitaMinima?: string;
+    quotaPartitaMassima?: string;
+    daData?: string;
+    aData?: string;
   };
   commission: number;
 }
@@ -945,13 +953,47 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   }
 
   // ═══ RENDER: MULTIPLA (placeholder) ═══
+  // ═══ RENDER: MULTIPLA ═══
   if (activeTab === "multipla") {
-    return (
-      <div className="text-center py-12 text-white">
-        <div>La sezione MULTIPLA &egrave; in fase di sviluppo.</div>
-        <div className="text-sm mt-1 text-white">Usa le altre tab per trovare opportunit&agrave;.</div>
-      </div>
-    );
+    let multiplaOpps = [...singolaOpps];
+
+    // Filtro quota per evento (quotaPartitaMinima / quotaPartitaMassima)
+    const qpMin = parseFloat((filters.quotaPartitaMinima || "0").replace(",", "."));
+    const qpMax = parseFloat((filters.quotaPartitaMassima || "0").replace(",", "."));
+    if (qpMin > 0) multiplaOpps = multiplaOpps.filter(o => o.quotaBook >= qpMin);
+    if (qpMax > 0) multiplaOpps = multiplaOpps.filter(o => o.quotaBook <= qpMax);
+
+    // Filtro data
+    if (filters.daData) {
+      const from = new Date(filters.daData).getTime();
+      multiplaOpps = multiplaOpps.filter(o => new Date(o.eventTime).getTime() >= from);
+    }
+    if (filters.aData) {
+      const to = new Date(filters.aData + "T23:59:59").getTime();
+      multiplaOpps = multiplaOpps.filter(o => new Date(o.eventTime).getTime() <= to);
+    }
+
+    // Applica i filtri comuni (bookmaker, partita, liquidità ecc.) usando quotaPartita come override
+    const savedQMin = filters.quotaMinima;
+    const savedQMax = filters.quotaMassima;
+    (filters as any).quotaMinima = "";
+    (filters as any).quotaMassima = "";
+    const filtered = applyFilters(multiplaOpps);
+    (filters as any).quotaMinima = savedQMin;
+    (filters as any).quotaMassima = savedQMax;
+
+    // Limite per N° eventi (0 = nessun limite → 200)
+    const limit = parseInt(filters.numEventi || "0") || 200;
+    const sliced = filtered.slice(0, limit > 0 ? limit : 200);
+
+    if (sliced.length === 0) {
+      return (
+        <div className="text-center py-12 text-white">
+          Nessuna opportunità trovata con i filtri multipla impostati.
+        </div>
+      );
+    }
+    return renderOpportunityTable(sliced, isPuntaPuntaMode);
   }
 
   return null;
