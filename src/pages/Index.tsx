@@ -97,12 +97,12 @@ const Index = () => {
   }, []);
 
   const partitaSuggestions = useMemo(() =>
-    partita.trim().length === 0 ? allEvents.slice(0, 8) :
+    partita.trim().length < 3 ? [] :
     allEvents.filter(e => e.toLowerCase().includes(partita.toLowerCase())).slice(0, 8),
   [partita, allEvents]);
 
   const campionatoSuggestions = useMemo(() =>
-    campionato.trim().length === 0 ? allLeagues.slice(0, 8) :
+    campionato.trim().length < 3 ? [] :
     allLeagues.filter(l => l.toLowerCase().includes(campionato.toLowerCase())).slice(0, 8),
   [campionato, allLeagues]);
 
@@ -527,7 +527,6 @@ const Index = () => {
                   type="text"
                   value={partita}
                   onChange={(e) => { setPartita(e.target.value); setPartitaOpen(true); }}
-                  onFocus={() => setPartitaOpen(true)}
                   onBlur={() => setTimeout(() => setPartitaOpen(false), 150)}
                   placeholder="Cerca per nome..."
                   className="w-full border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
@@ -554,7 +553,6 @@ const Index = () => {
                   type="text"
                   value={campionato}
                   onChange={(e) => { setCampionato(e.target.value); setCampionatoOpen(true); }}
-                  onFocus={() => setCampionatoOpen(true)}
                   onBlur={() => setTimeout(() => setCampionatoOpen(false), 150)}
                   placeholder="Cerca Campionato..."
                   className="w-full border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
