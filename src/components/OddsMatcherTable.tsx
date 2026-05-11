@@ -1123,7 +1123,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                     </td>
                     <td className="py-2.5 px-3 text-center">
                       <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: bookColor.bg, color: bookColor.text }}>
-                        {getDisplayDomain(opp.bookmaker)}
+                        {opp.bookmaker}
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-center">
@@ -1131,7 +1131,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                     </td>
                     <td className="py-2.5 px-3 text-center">
                       <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
-                        {getDisplayDomain(opp.exchange)}
+                        {opp.exchange}
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-center">
