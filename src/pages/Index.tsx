@@ -3,6 +3,7 @@ import { Navbar } from "@/components/Navbar";
 import { useToast } from "@/hooks/use-toast";
 import { useOddsSearch } from "@/hooks/use-odds-search";
 import { OddsMatcherTable } from "@/components/OddsMatcherTable";
+import { supabase } from "@/integrations/supabase/client";
 
 const BOOKMAKERS = [
   "888sport", "AdmiralBet", "Bet365", "Betfair Bookmaker", "BetFlag Bookmaker",
@@ -76,15 +77,24 @@ const Index = () => {
   const [partitaOpen, setPartitaOpen] = useState(false);
   const [campionatoOpen, setCampionatoOpen] = useState(false);
 
-  const allEvents = useMemo(() => {
-    if (!oddsData?.data) return [];
-    return [...new Set(oddsData.data.map(d => d.eventName))].sort();
-  }, [oddsData]);
+  const [allEvents, setAllEvents] = useState<string[]>([]);
+  const [allLeagues, setAllLeagues] = useState<string[]>([]);
 
-  const allLeagues = useMemo(() => {
-    if (!oddsData?.data) return [];
-    return [...new Set(oddsData.data.map(d => d.league))].sort();
-  }, [oddsData]);
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      const now = new Date().toISOString();
+      const { data } = await supabase
+        .from("live_odds")
+        .select("event_name, league")
+        .gt("expires_at", now)
+        .gt("event_time", now);
+      if (data) {
+        setAllEvents([...new Set(data.map((r: any) => r.event_name as string).filter(Boolean))].sort());
+        setAllLeagues([...new Set(data.map((r: any) => r.league as string).filter(Boolean))].sort());
+      }
+    };
+    loadSuggestions();
+  }, []);
 
   const partitaSuggestions = useMemo(() =>
     partita.trim().length === 0 ? allEvents.slice(0, 8) :
