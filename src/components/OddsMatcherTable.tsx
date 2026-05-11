@@ -982,9 +982,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     (filters as any).quotaMinima = savedQMin;
     (filters as any).quotaMassima = savedQMax;
 
-    // Limite per N° eventi (0 = nessun limite → 200)
-    const limit = parseInt(filters.numEventi || "0") || 200;
-    const sliced = filtered.slice(0, limit > 0 ? limit : 200);
+    const sliced = filtered.slice(0, 200);
 
     if (sliced.length === 0) {
       return (
