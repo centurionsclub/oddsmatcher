@@ -151,27 +151,39 @@ export function PuntaBancaModal({
     const totalStake = stake + bonus;
     if (qPunta <= 1 || qBanca <= 1 || totalStake <= 0) return null;
 
-    const layStake = freeBet
-      ? (totalStake * (qPunta - 1)) / (qBanca - c)
-      : (totalStake * qPunta) / (qBanca - c);
+    const isPP = opp.isBookVsBook; // punta-punta mode
 
-    const rischio = layStake * (qBanca - 1);
-
-    const win = freeBet
-      ? totalStake * (qPunta - 1) - rischio   // FreeBet: stake gratis, no sottrazione
-      : totalStake * qPunta - stake - rischio;
-
-    const lose = rimborso
-      ? layStake * (1 - c)
+    const layStake = isPP
+      ? (totalStake * qPunta) / qBanca                          // punta-punta: copri con seconda puntata
       : freeBet
-        ? layStake * (1 - c)                  // FreeBet: stake gratis, no sottrazione
-        : layStake * (1 - c) - stake;
+        ? (totalStake * (qPunta - 1)) / (qBanca - c)
+        : (totalStake * qPunta) / (qBanca - c);
+
+    const rischio = isPP
+      ? layStake                                                // punta-punta: perdi l'intera seconda puntata
+      : layStake * (qBanca - 1);                               // back-lay: perdi solo il rischio lay
+
+    const win = isPP
+      ? totalStake * (qPunta - 1) - layStake                   // bet1 vince: profitto bet1 - costo bet2
+      : freeBet
+        ? totalStake * (qPunta - 1) - rischio
+        : totalStake * qPunta - stake - rischio;
+
+    const lose = isPP
+      ? layStake * (qBanca - 1) - stake                        // bet2 vince: profitto bet2 - costo bet1
+      : rimborso
+        ? layStake * (1 - c)
+        : freeBet
+          ? layStake * (1 - c)
+          : layStake * (1 - c) - stake;
 
     const worst = Math.min(win, lose);
-    const exchangeReturn = layStake * (1 - c);
-    const rating = (exchangeReturn / totalStake) * 100;
+    const rating = isPP
+      ? 100 + (worst / totalStake) * 100                       // punta-punta: % sul primo stake
+      : (layStake * (1 - c) / totalStake) * 100;              // back-lay: recovery %
+
     return { totalStake, layStake, rischio, win, lose, worst, rating };
-  }, [stake, bonus, freeBet, rimborso, qPunta, qBanca, c])();
+  }, [stake, bonus, freeBet, rimborso, qPunta, qBanca, c, opp.isBookVsBook])();
 
   const vs = opp.scommessa.split(" vs ");
   const sc1 = vs[0] ?? opp.scommessa;
