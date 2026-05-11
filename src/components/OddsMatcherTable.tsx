@@ -254,6 +254,7 @@ function findMatchingEvents(sourceEvent: OddsData, pool: OddsData[]): OddsData[]
 
 export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, filters, commission }: Props) {
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
+  const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
 
   const REAL_EXCHANGE_NAMES = ["betfair exchange", "betflag exchange", "smarkets", "betdaq", "matchbook"];
 
@@ -952,12 +953,12 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     );
   }
 
-  // ═══ RENDER: MULTIPLA (placeholder) ═══
   // ═══ RENDER: MULTIPLA ═══
   if (activeTab === "multipla") {
     let multiplaOpps = [...singolaOpps];
+    const numEventiTarget = parseInt(filters.numEventi || "0") || 0;
 
-    // Filtro quota per evento (quotaPartitaMinima / quotaPartitaMassima)
+    // Filtro quota per evento
     const qpMin = parseFloat((filters.quotaPartitaMinima || "0").replace(",", "."));
     const qpMax = parseFloat((filters.quotaPartitaMassima || "0").replace(",", "."));
     if (qpMin > 0) multiplaOpps = multiplaOpps.filter(o => o.quotaBook >= qpMin);
@@ -973,25 +974,177 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       multiplaOpps = multiplaOpps.filter(o => new Date(o.eventTime).getTime() <= to);
     }
 
-    // Applica i filtri comuni (bookmaker, partita, liquidità ecc.) usando quotaPartita come override
+    // Filtri comuni (bypassa quotaMinima/Massima singola)
     const savedQMin = filters.quotaMinima;
     const savedQMax = filters.quotaMassima;
     (filters as any).quotaMinima = "";
     (filters as any).quotaMassima = "";
-    const filtered = applyFilters(multiplaOpps);
+    const filtered = applyFilters(multiplaOpps).slice(0, 200);
     (filters as any).quotaMinima = savedQMin;
     (filters as any).quotaMassima = savedQMax;
 
-    const sliced = filtered.slice(0, 200);
-
-    if (sliced.length === 0) {
+    if (filtered.length === 0) {
       return (
         <div className="text-center py-12 text-white">
           Nessuna opportunità trovata con i filtri multipla impostati.
         </div>
       );
     }
-    return renderOpportunityTable(sliced, isPuntaPuntaMode);
+
+    const oppKey = (o: Opportunity) => `${o.eventName}|${o.scommessa}|${o.bookmaker}`;
+    const toggleMultipla = (opp: Opportunity) => {
+      setMultiplaSelected(prev => {
+        const key = oppKey(opp);
+        const exists = prev.some(o => oppKey(o) === key);
+        if (exists) return prev.filter(o => oppKey(o) !== key);
+        // Non aggiungere oltre il target (se impostato)
+        if (numEventiTarget > 0 && prev.length >= numEventiTarget) return prev;
+        const next = [...prev, opp];
+        // Apri il modal solo quando si raggiunge il target
+        if (numEventiTarget > 0 && next.length === numEventiTarget) {
+          setSelectedOpp(opp);
+        }
+        return next;
+      });
+    };
+
+    const combinedOdds = multiplaSelected.reduce((acc, o) => acc * o.quotaBook, 1);
+    const ready = numEventiTarget > 0 && multiplaSelected.length === numEventiTarget;
+
+    return (
+      <>
+        {selectedOpp && (
+          <PuntaBancaModal
+            opp={selectedOpp}
+            commission={commission}
+            onClose={() => { setSelectedOpp(null); setMultiplaSelected([]); }}
+            initialBonus={parseFloat(filters.bonus) || 0}
+            initialStake={filters.stakeMultipla ? (parseFloat(filters.stakeMultipla) || 0) : (parseFloat(filters.stakePunta) || 0)}
+            initialFreeBet={filters.freebet}
+            initialRimborso={filters.rimborso}
+          />
+        )}
+
+        {/* Banner selezione */}
+        {numEventiTarget > 0 && (
+          <div className="sticky top-0 z-30 bg-[#0a0e1a] border-b border-[#1e3050] px-4 py-2 flex items-center gap-4 flex-wrap">
+            <span className="text-sm text-white">
+              Selezionati:{" "}
+              <span className={`font-bold ${ready ? "text-green-400" : "text-[#c8922d]"}`}>
+                {multiplaSelected.length}/{numEventiTarget}
+              </span>
+            </span>
+            {multiplaSelected.length > 0 && (
+              <span className="text-sm text-white">
+                Quota multipla: <span className="font-bold text-[#c8922d]">{combinedOdds.toFixed(2)}</span>
+              </span>
+            )}
+            {multiplaSelected.length > 0 && (
+              <button
+                onClick={() => setMultiplaSelected([])}
+                className="ml-auto text-xs text-slate-400 hover:text-white border border-[#253347] px-2 py-1 rounded"
+              >
+                Azzera selezione ✕
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Tabella con selezione */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+                {numEventiTarget > 0 && <th className="py-2.5 px-2 w-8"></th>}
+                <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
+                <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
+                <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
+                <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 1</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 2</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 1</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota 1</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 2</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota 2</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1e3050]">
+              {filtered.map((opp, i) => {
+                const key = oppKey(opp);
+                const isSelected = multiplaSelected.some(o => oppKey(o) === key);
+                const isFull = numEventiTarget > 0 && multiplaSelected.length >= numEventiTarget && !isSelected;
+                const bookColor = getBookColor(opp.bookmaker);
+                const exchColor = getBookColor(opp.exchange);
+                const vsSplit = opp.scommessa.split(" vs ");
+                const sc1 = vsSplit[0] ?? opp.scommessa;
+                const sc2 = vsSplit[1] ?? "";
+                const ratingColor = opp.rating >= 100
+                  ? "bg-green-700 text-white"
+                  : opp.rating >= 95
+                    ? "bg-yellow-600 text-white"
+                    : "bg-[#1e2d42] text-slate-300";
+
+                return (
+                  <tr
+                    key={i}
+                    onClick={() => !isFull && toggleMultipla(opp)}
+                    className={`transition-colors ${
+                      isSelected
+                        ? "bg-[#1a3a1a] border-l-4 border-green-500"
+                        : isFull
+                          ? "opacity-40 cursor-not-allowed"
+                          : "hover:bg-[#1a2535] cursor-pointer"
+                    }`}
+                  >
+                    {numEventiTarget > 0 && (
+                      <td className="py-2.5 px-2 text-center">
+                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded border text-xs font-bold ${
+                          isSelected ? "bg-green-500 border-green-500 text-white" : "border-[#253347] text-slate-500"
+                        }`}>
+                          {isSelected ? "✓" : ""}
+                        </span>
+                      </td>
+                    )}
+                    <td className="py-2.5 px-3 text-white text-xs whitespace-nowrap">{formatDate(opp.eventTime)}</td>
+                    <td className="py-2.5 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
+                    <td className="py-2.5 px-3 text-white font-medium max-w-[200px] truncate">{opp.eventName}</td>
+                    <td className="py-2.5 px-2 text-center text-base">{getLeagueFlag(opp.league)}</td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className="inline-block bg-[#87c4e8] text-[#0d2035] text-xs font-bold px-2 py-0.5 rounded">{sc1}</span>
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      {sc2 && <span className="inline-block bg-[#f4a9ba] text-[#2d0d1a] text-xs font-bold px-2 py-0.5 rounded">{sc2}</span>}
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded ${ratingColor}`}>
+                        {opp.rating.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: bookColor.bg, color: bookColor.text }}>
+                        {getDisplayDomain(opp.bookmaker)}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className="text-[#87c4e8] font-bold">{opp.quotaBook.toFixed(2)}</span>
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
+                        {getDisplayDomain(opp.exchange)}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className="text-[#f4a9ba] font-bold">{opp.quotaExchange.toFixed(2)}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
   }
 
   return null;
