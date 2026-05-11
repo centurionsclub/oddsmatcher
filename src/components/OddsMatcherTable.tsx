@@ -981,10 +981,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         />
       )}
       <div>
-        <div className="flex items-center justify-between px-4 py-2">
-          <span className="text-xs font-medium px-2 py-0.5 rounded" style={{ backgroundColor: isBookVsBook ? "#87c4e820" : "#f4a9ba20", color: isBookVsBook ? "#87c4e8" : "#f4a9ba" }}>
-            {isBookVsBook ? "📗 Modalità Punta-Punta" : "📘 Modalità Back-Lay"}
-          </span>
+        <div className="flex items-center justify-end px-4 py-2">
           <span className="text-xs text-white">{opps.length} opportunit&agrave;</span>
         </div>
         <div className="overflow-x-auto">
