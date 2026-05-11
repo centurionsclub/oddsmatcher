@@ -542,6 +542,7 @@ const Index = () => {
               freebet: freeBet,
               rimborso,
               bonus,
+              filtroLiquidita,
             }}
             commission={commission}
           />

@@ -64,6 +64,7 @@ interface Props {
     freebet: boolean;
     rimborso: boolean;
     bonus: string;
+    filtroLiquidita: boolean;
   };
   commission: number;
 }
@@ -721,6 +722,28 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     if (filters.partita) {
       const search = filters.partita.toLowerCase();
       result = result.filter(o => o.eventName.toLowerCase().includes(search));
+    }
+    // Filtro liquidità: mostra solo opportunità con volume exchange >= lay stake calcolato
+    if (filters.filtroLiquidita) {
+      const stake = parseFloat((filters.stakePunta || "0").replace(",", ".")) || 0;
+      const bonus = parseFloat((filters.bonus || "0").replace(",", ".")) || 0;
+      const totalStake = stake + bonus;
+      const c = commission / 100;
+      result = result.filter(o => {
+        const opp = o as any;
+        // Applica solo in modalità back-lay (non punta-punta) e se c'è il volume
+        if (opp.isBookVsBook || opp.volumeExchange == null) return true;
+        const backOdds: number = opp.quotaBook;
+        const layOdds: number = opp.quotaExchange;
+        if (!backOdds || !layOdds || layOdds <= c) return true;
+        // Se lo stake è 0, filtra almeno per volume minimo di 10€
+        const effectiveStake = totalStake > 0 ? totalStake : 10;
+        const isFB = filters.freebet;
+        const layStake = isFB
+          ? (effectiveStake * (backOdds - 1)) / (layOdds - c)
+          : (effectiveStake * backOdds) / (layOdds - c);
+        return opp.volumeExchange >= layStake;
+      });
     }
     return result;
   };
