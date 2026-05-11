@@ -474,8 +474,8 @@ export function PuntaBancaModal({
                       >
                         <span className="font-bold">{isBackLay ? "Banca" : "Punta"}</span> su {getDisplayDomain(opp.exchange)}{" "}
                         {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
-                        (<span className="font-bold">{isBackLay ? "Rischio" : "Costo"}</span>{" "}
-                        {fmtIt(Math.ceil(result.rischio * 100) / 100)}€)
+                        {isBackLay && <>(<span className="font-bold">Rischio</span>{" "}
+                        {fmtIt(Math.ceil(result.rischio * 100) / 100)}€)</>}
                       </a>
                     </div>
 
