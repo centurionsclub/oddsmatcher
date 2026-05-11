@@ -251,7 +251,7 @@ export function PuntaBancaModal({
               </div>
 
               <div className="px-4 py-3 text-sm">
-                Exchange -{" "}
+                {isBackLay ? "Exchange" : "Bookmaker 2"} -{" "}
                 <a href={exchangeUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
                   {getDisplayDomain(opp.exchange)}
                 </a>{" "}→ {sc2}
@@ -354,7 +354,7 @@ export function PuntaBancaModal({
 
             {/* Quota Banca / Quota 2 */}
             <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
+              <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={isBackLay ? { backgroundColor: "#f4a9ba", color: "#2d0d1a" } : { backgroundColor: "#87c4e8", color: "#0d2035" }}>
                 {isBackLay ? "Quota Banca" : "Quota 2"}
               </span>
               <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0">
@@ -460,7 +460,7 @@ export function PuntaBancaModal({
                         className="inline-block px-3 py-2 text-sm font-medium text-gray-800 underline decoration-dotted hover:text-blue-600 cursor-pointer transition-colors"
                         title={isBackLay ? "Clicca per aprire Betfair e copiare l'importo" : "Clicca per aprire il bookmaker e copiare l'importo"}
                       >
-                        <span className="font-bold">{isBackLay ? "Banca" : "Punta"}</span> su {opp.exchange}{" "}
+                        <span className="font-bold">{isBackLay ? "Banca" : "Punta"}</span> su {getDisplayDomain(opp.exchange)}{" "}
                         {fmtIt(result.layStake)}€ a quota {fmt2(qBanca)}{" "}
                         (<span className="font-bold">{isBackLay ? "Rischio" : "Costo"}</span>{" "}
                         {fmtIt(Math.ceil(result.rischio * 100) / 100)}€)
