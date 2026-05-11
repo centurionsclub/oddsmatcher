@@ -114,7 +114,16 @@ const Index = () => {
   };
 
   const toggleExchange = (e: string) => {
-    setSelectedExchanges(prev => prev.includes(e) ? prev.filter(x => x !== e) : [...prev, e]);
+    const isExchange = EXCHANGES.includes(e);
+    setSelectedExchanges(prev => {
+      if (prev.includes(e)) return prev.filter(x => x !== e);
+      // Selezionando un exchange → rimuovi tutti i bookmaker
+      // Selezionando un bookmaker → rimuovi tutti gli exchange
+      const filtered = isExchange
+        ? prev.filter(x => !BOOKMAKERS.includes(x))
+        : prev.filter(x => !EXCHANGES.includes(x));
+      return [...filtered, e];
+    });
   };
 
   const subTabs = [
@@ -286,14 +295,16 @@ const Index = () => {
                 if (allExchangesSelected) {
                   setSelectedExchanges(prev => prev.filter(e => !EXCHANGES.includes(e)));
                 } else {
-                  setSelectedExchanges(prev => [...new Set([...prev, ...EXCHANGES])]);
+                  // Seleziona tutti gli exchange → rimuovi tutti i bookmaker
+                  setSelectedExchanges(prev => [...new Set([...prev.filter(x => !BOOKMAKERS.includes(x)), ...EXCHANGES])]);
                 }
               };
               const toggleAllBookmakers = () => {
                 if (allBookmakersSelected) {
                   setSelectedExchanges(prev => prev.filter(e => !BOOKMAKERS.includes(e)));
                 } else {
-                  setSelectedExchanges(prev => [...new Set([...prev, ...BOOKMAKERS])]);
+                  // Seleziona tutti i bookmaker → rimuovi tutti gli exchange
+                  setSelectedExchanges(prev => [...new Set([...prev.filter(x => !EXCHANGES.includes(x)), ...BOOKMAKERS])]);
                 }
               };
               return (
