@@ -958,13 +958,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     let multiplaOpps = [...singolaOpps];
     const numEventiTarget = parseInt(filters.numEventi || "0") || 0;
 
-    // Filtro quota per evento
     const qpMin = parseFloat((filters.quotaPartitaMinima || "0").replace(",", "."));
     const qpMax = parseFloat((filters.quotaPartitaMassima || "0").replace(",", "."));
     if (qpMin > 0) multiplaOpps = multiplaOpps.filter(o => o.quotaBook >= qpMin);
     if (qpMax > 0) multiplaOpps = multiplaOpps.filter(o => o.quotaBook <= qpMax);
 
-    // Filtro data
     if (filters.daData) {
       const from = new Date(filters.daData).getTime();
       multiplaOpps = multiplaOpps.filter(o => new Date(o.eventTime).getTime() >= from);
@@ -974,7 +972,6 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       multiplaOpps = multiplaOpps.filter(o => new Date(o.eventTime).getTime() <= to);
     }
 
-    // Filtri comuni (bypassa quotaMinima/Massima singola)
     const savedQMin = filters.quotaMinima;
     const savedQMax = filters.quotaMassima;
     (filters as any).quotaMinima = "";
@@ -992,98 +989,109 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     }
 
     const oppKey = (o: Opportunity) => `${o.eventName}|${o.scommessa}|${o.bookmaker}`;
+
     const toggleMultipla = (opp: Opportunity) => {
       setMultiplaSelected(prev => {
         const key = oppKey(opp);
         const exists = prev.some(o => oppKey(o) === key);
         if (exists) return prev.filter(o => oppKey(o) !== key);
-        // Non aggiungere oltre il target (se impostato)
         if (numEventiTarget > 0 && prev.length >= numEventiTarget) return prev;
-        const next = [...prev, opp];
-        // Apri il modal solo quando si raggiunge il target
-        if (numEventiTarget > 0 && next.length === numEventiTarget) {
-          setSelectedOpp(opp);
-        }
-        return next;
+        return [...prev, opp];
       });
     };
 
-    const combinedOdds = multiplaSelected.reduce((acc, o) => acc * o.quotaBook, 1);
-    const ready = numEventiTarget > 0 && multiplaSelected.length === numEventiTarget;
+    // ── Calcoli sommario ──
+    const stake = parseFloat(filters.stakeMultipla || filters.stakePunta || "10") || 10;
+    const c = commission / 100;
+    const n = multiplaSelected.length;
+    const quotaTotale = multiplaSelected.reduce((acc, o) => acc * o.quotaBook, 1);
+    const ratingMultipla = n > 0 ? multiplaSelected.reduce((acc, o) => acc + o.rating, 0) / n : 0;
+    const perLeg = multiplaSelected.map(o => {
+      const layStake = (stake * o.quotaBook) / (o.quotaExchange - c);
+      const liability = layStake * (o.quotaExchange - 1);
+      return { layStake, liability };
+    });
+    const responsabilitaTotale = perLeg.reduce((acc, l) => acc + l.liability, 0);
+    // Perdita finale = scenario in cui l'accumulator vince:
+    // guadagno bookmaker - lay persi = perdita netta
+    const perditaFinale = responsabilitaTotale - stake * (quotaTotale - 1);
+    const ready = numEventiTarget > 0 && n === numEventiTarget;
+
+    const fmtEur = (v: number) => `${Math.abs(v).toFixed(2).replace(".", ",")}€`;
 
     return (
       <>
-        {selectedOpp && (
-          <PuntaBancaModal
-            opp={selectedOpp}
-            commission={commission}
-            onClose={() => { setSelectedOpp(null); setMultiplaSelected([]); }}
-            initialBonus={parseFloat(filters.bonus) || 0}
-            initialStake={filters.stakeMultipla ? (parseFloat(filters.stakeMultipla) || 0) : (parseFloat(filters.stakePunta) || 0)}
-            initialFreeBet={filters.freebet}
-            initialRimborso={filters.rimborso}
-          />
-        )}
-
-        {/* Banner selezione */}
-        {numEventiTarget > 0 && (
-          <div className="sticky top-0 z-30 bg-[#0a0e1a] border-b border-[#1e3050] px-4 py-2 flex items-center gap-4 flex-wrap">
-            <span className="text-sm text-white">
-              Selezionati:{" "}
-              <span className={`font-bold ${ready ? "text-green-400" : "text-[#c8922d]"}`}>
-                {multiplaSelected.length}/{numEventiTarget}
+        {/* ── Barra riepilogo (visibile solo con almeno 1 evento selezionato) ── */}
+        {n > 0 && (
+          <div className="bg-[#0a0e1a] border-b border-[#1e3050] px-6 py-3 flex flex-wrap items-center gap-6 text-sm">
+            <span className="text-white">
+              Rating Multipla →{" "}
+              <span className={`font-bold ${ratingMultipla >= 100 ? "text-green-400" : ratingMultipla >= 95 ? "text-[#c8922d]" : "text-white"}`}>
+                {ratingMultipla.toFixed(2).replace(".", ",")}%
               </span>
             </span>
-            {multiplaSelected.length > 0 && (
-              <span className="text-sm text-white">
-                Quota multipla: <span className="font-bold text-[#c8922d]">{combinedOdds.toFixed(2)}</span>
-              </span>
-            )}
-            {multiplaSelected.length > 0 && (
-              <button
-                onClick={() => setMultiplaSelected([])}
-                className="ml-auto text-xs text-slate-400 hover:text-white border border-[#253347] px-2 py-1 rounded"
-              >
-                Azzera selezione ✕
-              </button>
-            )}
+            <span className="text-white">
+              Quota Totale →{" "}
+              <span className="font-bold text-white">{quotaTotale.toFixed(2).replace(".", ",")}</span>
+            </span>
+            <span className="text-white">
+              Responsabilità Totale →{" "}
+              <span className="font-bold text-white">{fmtEur(responsabilitaTotale)}</span>
+            </span>
+            <span className={`font-bold ${perditaFinale > 0 ? "text-red-400" : "text-green-400"}`}>
+              {perditaFinale > 0 ? "Perdita Finale" : "Guadagno Finale"} → {fmtEur(perditaFinale)}
+            </span>
+            <button
+              onClick={() => setMultiplaSelected([])}
+              className="ml-auto text-xs text-slate-400 hover:text-white border border-[#253347] px-2 py-1 rounded"
+            >
+              Azzera ✕
+            </button>
           </div>
         )}
 
-        {/* Tabella con selezione */}
+        {/* ── Contatore selezione ── */}
+        {numEventiTarget > 0 && (
+          <div className={`px-4 py-1.5 text-xs border-b border-[#1e3050] ${ready ? "bg-green-900/30" : "bg-[#0d1320]"}`}>
+            <span className="text-white">
+              Selezionati:{" "}
+              <span className={`font-bold ${ready ? "text-green-400" : "text-[#c8922d]"}`}>
+                {n}/{numEventiTarget}
+              </span>
+              {!ready && <span className="text-slate-400 ml-2">— clicca le righe per selezionare gli eventi della multipla</span>}
+            </span>
+          </div>
+        )}
+
+        {/* ── Tabella ── */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
-                {numEventiTarget > 0 && <th className="py-2.5 px-2 w-8"></th>}
                 <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
                 <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 2</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Competizione</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Scommessa</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 2</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota 2</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Exchange</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Liquidità</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
               {filtered.map((opp, i) => {
                 const key = oppKey(opp);
                 const isSelected = multiplaSelected.some(o => oppKey(o) === key);
-                const isFull = numEventiTarget > 0 && multiplaSelected.length >= numEventiTarget && !isSelected;
+                const isFull = numEventiTarget > 0 && n >= numEventiTarget && !isSelected;
                 const bookColor = getBookColor(opp.bookmaker);
                 const exchColor = getBookColor(opp.exchange);
-                const vsSplit = opp.scommessa.split(" vs ");
-                const sc1 = vsSplit[0] ?? opp.scommessa;
-                const sc2 = vsSplit[1] ?? "";
+                const sc = opp.scommessa.split(" vs ")[0] ?? opp.scommessa;
                 const ratingColor = opp.rating >= 100
-                  ? "bg-green-700 text-white"
-                  : opp.rating >= 95
-                    ? "bg-yellow-600 text-white"
-                    : "bg-[#1e2d42] text-slate-300";
+                  ? "text-green-400" : opp.rating >= 95 ? "text-[#c8922d]" : "text-slate-300";
 
                 return (
                   <tr
@@ -1091,51 +1099,41 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                     onClick={() => !isFull && toggleMultipla(opp)}
                     className={`transition-colors ${
                       isSelected
-                        ? "bg-[#1a3a1a] border-l-4 border-green-500"
+                        ? "bg-[#193d1c] cursor-pointer"
                         : isFull
                           ? "opacity-40 cursor-not-allowed"
                           : "hover:bg-[#1a2535] cursor-pointer"
                     }`}
                   >
-                    {numEventiTarget > 0 && (
-                      <td className="py-2.5 px-2 text-center">
-                        <span className={`inline-flex items-center justify-center w-5 h-5 rounded border text-xs font-bold ${
-                          isSelected ? "bg-green-500 border-green-500 text-white" : "border-[#253347] text-slate-500"
-                        }`}>
-                          {isSelected ? "✓" : ""}
-                        </span>
-                      </td>
-                    )}
-                    <td className="py-2.5 px-3 text-white text-xs whitespace-nowrap">{formatDate(opp.eventTime)}</td>
-                    <td className="py-2.5 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
-                    <td className="py-2.5 px-3 text-white font-medium max-w-[200px] truncate">{opp.eventName}</td>
-                    <td className="py-2.5 px-2 text-center text-base">{getLeagueFlag(opp.league)}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className="inline-block bg-[#87c4e8] text-[#0d2035] text-xs font-bold px-2 py-0.5 rounded">{sc1}</span>
+                    <td className="py-2 px-3 text-white text-xs whitespace-nowrap">{formatDate(opp.eventTime)}</td>
+                    <td className="py-2 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
+                    <td className="py-2 px-3 text-white font-medium max-w-[180px] truncate">{opp.eventName}</td>
+                    <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(opp.league)}</td>
+                    <td className="py-2 px-3 text-center text-xs text-slate-300">{opp.league}</td>
+                    <td className="py-2 px-3 text-center">
+                      <span className="inline-block bg-[#87c4e8] text-[#0d2035] text-xs font-bold px-2 py-0.5 rounded">{sc}</span>
                     </td>
-                    <td className="py-2.5 px-3 text-center">
-                      {sc2 && <span className="inline-block bg-[#f4a9ba] text-[#2d0d1a] text-xs font-bold px-2 py-0.5 rounded">{sc2}</span>}
+                    <td className="py-2 px-3 text-center">
+                      <span className={`text-sm font-bold ${ratingColor}`}>{opp.rating.toFixed(2)}%</span>
                     </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded ${ratingColor}`}>
-                        {opp.rating.toFixed(1)}%
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: bookColor.bg, color: bookColor.text }}>
+                    <td className="py-2 px-3 text-center">
+                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: bookColor.bg, color: bookColor.text }}>
                         {opp.bookmaker}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className="text-[#87c4e8] font-bold">{opp.quotaBook.toFixed(2)}</span>
+                    <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">
+                      {opp.quotaBook.toFixed(2).replace(".", ",")}
                     </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
+                    <td className="py-2 px-3 text-center">
+                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
                         {opp.exchange}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className="text-[#f4a9ba] font-bold">{opp.quotaExchange.toFixed(2)}</span>
+                    <td className="py-2 px-3 text-center font-mono text-sm text-[#2d0d1a] bg-[#f4a9ba]">
+                      {opp.quotaExchange.toFixed(2).replace(".", ",")}
+                    </td>
+                    <td className="py-2 px-3 text-center text-xs font-mono text-[#f4a9ba]">
+                      {opp.volumeExchange != null ? formatVolume(opp.volumeExchange) : <span className="opacity-30">—</span>}
                     </td>
                   </tr>
                 );
