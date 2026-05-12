@@ -1001,9 +1001,10 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     };
 
     // ── Calcoli sommario ──
-    const stakeBase = parseFloat(filters.stakeMultipla || filters.stakePunta || "10") || 10;
+    const stakeBase = parseFloat(filters.stakeMultipla || filters.stakePunta || "0") || 0;
     const bonusVal  = parseFloat(filters.bonus || "0") || 0;
     const stake     = stakeBase + bonusVal;   // stake totale = puntata + eventuale bonus
+    const hasStake  = stake > 0;              // mostra calcoli solo se c'è uno stake
     const isFB      = filters.freebet;        // free bet: non si recupera lo stake
     const c = commission / 100;
     const n = multiplaSelected.length;
@@ -1036,8 +1037,8 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
     return (
       <>
-        {/* ── Barra riepilogo (visibile solo con almeno 1 evento selezionato) ── */}
-        {n > 0 && (
+        {/* ── Barra riepilogo (visibile solo con almeno 1 evento selezionato E stake inserito) ── */}
+        {n > 0 && hasStake && (
           <div className="bg-[#0a0e1a] border-b border-[#1e3050] px-6 py-3 flex flex-wrap items-center gap-6 text-sm">
             <span className="text-white">
               Rating Multipla →{" "}
