@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { PuntaBancaModal } from "./PuntaBancaModal";
 
 interface OddsData {
@@ -75,6 +75,7 @@ interface Props {
     aData?: string;
   };
   commission: number;
+  multiplaResetKey?: number;
 }
 
 const EXCHANGE_NAMES = [
@@ -109,10 +110,23 @@ const TEAM_ALIASES: [string, string][] = [
   ["deportivo alaves", "alaves"],
   ["borussia dortmund", "dortmund"], ["bvb dortmund", "dortmund"],
   ["borussia monchengladbach", "gladbach"], ["b monchengladbach", "gladbach"],
+  ["monchengladbach", "gladbach"], ["mgladbach", "gladbach"],
   ["eintracht francoforte", "eintracht"], ["eintracht frankfurt", "eintracht"],
   ["bayer leverkusen", "leverkusen"],
   ["stoccarda vfb", "stuttgart"], ["stoccarda", "stuttgart"],
   ["rb lipsia", "leipzig"], ["lipsia", "leipzig"],
+  ["union berlino", "union berlin"], ["berlino", "berlin"],
+  ["fc colonia", "koln"], ["colonia", "koln"],
+  ["hamburger sv", "hamburg"], ["amburgo", "hamburg"], ["hamburger", "hamburg"],
+  ["fc augsburg", "augsburg"], ["augusta", "augsburg"],
+  ["werder bremen", "bremen"], ["werder brema", "bremen"], ["brema", "bremen"],
+  ["rb salisburgo", "salzburg"], ["salisburgo", "salzburg"],
+  // Francoforte (centroquote) = Eintracht Frankfurt (betfair)
+  ["francoforte", "eintracht"],
+  // Mainz italian name
+  ["magonza", "mainz"],
+  // St Pauli variants
+  ["san paolo", "stpauli"], ["st pauli", "stpauli"], ["st. pauli", "stpauli"],
   ["siviglia", "sevilla"],
   ["royal antwerp", "antwerp"], ["anversa", "antwerp"],
   ["club bruges", "brugge"], ["bruges", "brugge"],
@@ -122,6 +136,15 @@ const TEAM_ALIASES: [string, string][] = [
   ["ajax amsterdam", "ajax"],
   ["feyenoord rotterdam", "feyenoord"],
   ["girona fc", "girona"],
+  // Ligue 1 names
+  ["paris fc", "parisfc"],
+  ["olympique lione", "lyon"], ["olympique lyon", "lyon"],
+  ["olympique marsiglia", "marseille"], ["olympique de marseille", "marseille"],
+  ["st etienne", "saintetienne"], ["saint etienne", "saintetienne"],
+  ["nizza", "nice"],
+  ["angers sco", "angers"],
+  ["le havre", "havre"],
+  ["stade rennais", "rennes"],
   // singole parole (frasi più corte, applicate dopo)
   ["nottingham", "nottmforest"], ["nottm", "nottmforest"],
   ["friburgo", "freiburg"],
@@ -252,9 +275,14 @@ function findMatchingEvents(sourceEvent: OddsData, pool: OddsData[]): OddsData[]
   return pool.filter(ev => eventNamesMatch(sourceEvent.eventName, ev.eventName));
 }
 
-export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, filters, commission }: Props) {
+export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, filters, commission, multiplaResetKey }: Props) {
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
+
+  // Reset selezione multipla quando l'utente clicca Aggiorna o Pulisci
+  useEffect(() => {
+    setMultiplaSelected([]);
+  }, [multiplaResetKey]);
 
   const REAL_EXCHANGE_NAMES = ["betfair exchange", "betflag exchange", "smarkets", "betdaq", "matchbook"];
 
@@ -990,12 +1018,21 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
     const oppKey = (o: Opportunity) => `${o.eventName}|${o.scommessa}|${o.bookmaker}`;
 
+    // Solo gli eventi selezionati che sono ancora visibili nella lista filtrata corrente.
+    // Se l'utente cambia filtri o aggiorna, gli eventi spariti dalla tabella non vengono
+    // contati anche se erano in stato "selezionato".
+    const effectiveSelected = multiplaSelected.filter(o =>
+      filtered.some(f => oppKey(f) === oppKey(o))
+    );
+
     const toggleMultipla = (opp: Opportunity) => {
       setMultiplaSelected(prev => {
         const key = oppKey(opp);
         const exists = prev.some(o => oppKey(o) === key);
         if (exists) return prev.filter(o => oppKey(o) !== key);
-        if (numEventiTarget > 0 && prev.length >= numEventiTarget) return prev;
+        // Conta solo le selezioni visibili nella lista corrente (ignora i "fantasma")
+        const visibleCount = prev.filter(o => filtered.some(f => oppKey(f) === oppKey(o))).length;
+        if (numEventiTarget > 0 && visibleCount >= numEventiTarget) return prev;
         return [...prev, opp];
       });
     };
@@ -1007,13 +1044,13 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     const hasStake  = stake > 0;              // mostra calcoli solo se c'è uno stake
     const isFB      = filters.freebet;        // free bet: non si recupera lo stake
     const c = commission / 100;
-    const n = multiplaSelected.length;
-    const quotaTotale = multiplaSelected.reduce((acc, o) => acc * o.quotaBook, 1);
-    const ratingMultipla = n > 0 ? multiplaSelected.reduce((acc, o) => acc + o.rating, 0) / n : 0;
+    const n = effectiveSelected.length;
+    const quotaTotale = effectiveSelected.reduce((acc, o) => acc * o.quotaBook, 1);
+    const ratingMultipla = n > 0 ? effectiveSelected.reduce((acc, o) => acc + o.rating, 0) / n : 0;
 
     // Per ogni gamba: lay stake, liability, ritorno lay garantito
     // stake = stakeBase + bonusVal (totale da coprire)
-    const perLeg = multiplaSelected.map(o => {
+    const perLeg = effectiveSelected.map(o => {
       const layStake  = isFB
         ? (stake * (o.quotaBook - 1)) / (o.quotaExchange - c)
         : (stake * o.quotaBook)       / (o.quotaExchange - c);
@@ -1023,16 +1060,16 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     });
     const responsabilitaTotale = perLeg.reduce((acc, l) => acc + l.liability, 0);
 
-    // ── Risultato GARANTITO (stesso in qualunque scenario) ──
-    // Per ogni gamba: layReturn - stakeBase (stessa formula della singola)
-    // Con free bet: non si perde lo stake → solo layReturn
-    // Somma di tutte le gambe → con rating < 100% + soldi propri: sempre negativo
-    // Risultato per gamba: layReturn - stake (stessa logica della singola)
-    // Con free bet: lo stake non si paga → solo layReturn
-    const risultatoGarantito = perLeg.reduce((acc, l) => {
-      return acc + (isFB ? l.layReturn : l.layReturn - stake);
-    }, 0);
-    const risultatoFinale = risultatoGarantito;
+    // ── Risultato GARANTITO per gamba ──
+    // In una multipla hai UNA sola scommessa da <stake>.
+    // Quando una gamba fallisce (la multipla muore), incassi il layReturn di QUELLA gamba
+    // e perdi la posta. Le altre gambe si cancellano a vicenda (una copre l'altra).
+    // Risultato garantito ≈ layReturn_medio_per_gamba − stakeBase
+    //   • soldi propri:  layReturn − stake   → piccola perdita (commissione+margine)
+    //   • solo bonus:    layReturn − 0       → vincita garantita (non hai speso niente)
+    //   • free bet:      layReturn_FB − 0    → vincita ridotta (~40-60% del bonus)
+    const avgLayReturn = n > 0 ? perLeg.reduce((acc, l) => acc + l.layReturn, 0) / n : 0;
+    const risultatoFinale = avgLayReturn - stakeBase;
 
     const ready = numEventiTarget > 0 && n === numEventiTarget;
 
@@ -1115,7 +1152,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             <tbody className="divide-y divide-[#1e3050]">
               {filtered.map((opp, i) => {
                 const key = oppKey(opp);
-                const isSelected = multiplaSelected.some(o => oppKey(o) === key);
+                const isSelected = effectiveSelected.some(o => oppKey(o) === key);
                 const isFull = numEventiTarget > 0 && n >= numEventiTarget && !isSelected;
                 const bookColor = getBookColor(opp.bookmaker);
                 const exchColor = getBookColor(opp.exchange);
