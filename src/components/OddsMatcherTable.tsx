@@ -1012,10 +1012,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     const ratingMultipla = n > 0 ? multiplaSelected.reduce((acc, o) => acc + o.rating, 0) / n : 0;
 
     // Per ogni gamba: lay stake, liability, ritorno lay garantito
+    // stake = stakeBase + bonusVal (totale da coprire)
     const perLeg = multiplaSelected.map(o => {
       const layStake  = isFB
-        ? (stakeBase * (o.quotaBook - 1)) / (o.quotaExchange - c)
-        : (stakeBase * o.quotaBook)       / (o.quotaExchange - c);
+        ? (stake * (o.quotaBook - 1)) / (o.quotaExchange - c)
+        : (stake * o.quotaBook)       / (o.quotaExchange - c);
       const liability = layStake * (o.quotaExchange - 1);
       const layReturn = layStake * (1 - c);
       return { layStake, liability, layReturn };
@@ -1026,11 +1027,12 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     // Per ogni gamba: layReturn - stakeBase (stessa formula della singola)
     // Con free bet: non si perde lo stake → solo layReturn
     // Somma di tutte le gambe → con rating < 100% + soldi propri: sempre negativo
+    // Risultato per gamba: layReturn - stake (stessa logica della singola)
+    // Con free bet: lo stake non si paga → solo layReturn
     const risultatoGarantito = perLeg.reduce((acc, l) => {
-      return acc + (isFB ? l.layReturn : l.layReturn - stakeBase);
+      return acc + (isFB ? l.layReturn : l.layReturn - stake);
     }, 0);
-    // Aggiungi il bonus come "già recuperato" (non è una posta, non si perde)
-    const risultatoFinale = risultatoGarantito + bonusVal;
+    const risultatoFinale = risultatoGarantito;
 
     const ready = numEventiTarget > 0 && n === numEventiTarget;
 
