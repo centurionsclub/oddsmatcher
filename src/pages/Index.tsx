@@ -92,12 +92,11 @@ const Index = () => {
 
   useEffect(() => {
     const loadSuggestions = async () => {
-      const now = new Date().toISOString();
+      const cutoff = new Date(Date.now() + 20 * 60 * 1000).toISOString();
       const { data } = await supabase
         .from("live_odds")
         .select("event_name, league")
-        .gt("expires_at", now)
-        .gt("event_time", now);
+        .gt("event_time", cutoff);
       if (data) {
         setAllEvents([...new Set(data.map((r: any) => r.event_name as string).filter(Boolean))].sort());
         setAllLeagues([...new Set(data.map((r: any) => r.league as string).filter(Boolean))].sort());

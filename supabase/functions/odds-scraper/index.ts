@@ -40,13 +40,13 @@ serve(async (req) => {
       campionato = "",
     } = body as Record<string, string>;
 
-    // Query live_odds — rows inserted by the Python scraper every 5 min.
-    // Only return events starting at least 20 minutes from now (prematch only).
+    // Query live_odds — rows inserted by the Python scraper.
+    // Only filter by event_time: show prematch events starting at least 20 min from now.
+    // expires_at is NOT used as a gate — stale rows are still shown if the event hasn't started.
     const cutoff = new Date(Date.now() + 20 * 60 * 1000).toISOString();
     let query = supabase
       .from("live_odds")
       .select("bookmaker, sport, league, event_name, event_time, market, outcome, odds, volume, market_id, event_id")
-      .gt("expires_at", new Date().toISOString())
       .gt("event_time", cutoff)
       .order("event_time", { ascending: true })
       .limit(8000);

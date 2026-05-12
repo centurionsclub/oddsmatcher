@@ -87,7 +87,7 @@ BF_SPORT_NAME: dict[str, str] = {
 }
 
 BOOKMAKER = "Betfair Exchange"
-EXPIRES_MINUTES = 360  # 6 ore: copre 3 run consecutivi mancati
+EXPIRES_MINUTES = 1440  # 24 ore: dati visibili anche se il scraper salta molti run
 
 
 # ─── Auth ────────────────────────────────────────────────────────────────────
