@@ -1011,31 +1011,26 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     const quotaTotale = multiplaSelected.reduce((acc, o) => acc * o.quotaBook, 1);
     const ratingMultipla = n > 0 ? multiplaSelected.reduce((acc, o) => acc + o.rating, 0) / n : 0;
 
-    // Per ogni gamba: lay stake e liability
+    // Per ogni gamba: lay stake, liability, ritorno lay garantito
     const perLeg = multiplaSelected.map(o => {
-      const layStake = isFB
-        ? (stake * (o.quotaBook - 1)) / (o.quotaExchange - c)
-        : (stake * o.quotaBook) / (o.quotaExchange - c);
-      const liability   = layStake * (o.quotaExchange - 1);
-      const layReturn   = layStake * (1 - c);   // incasso se la gamba perde al bookie
+      const layStake  = isFB
+        ? (stakeBase * (o.quotaBook - 1)) / (o.quotaExchange - c)
+        : (stakeBase * o.quotaBook)       / (o.quotaExchange - c);
+      const liability = layStake * (o.quotaExchange - 1);
+      const layReturn = layStake * (1 - c);
       return { layStake, liability, layReturn };
     });
     const responsabilitaTotale = perLeg.reduce((acc, l) => acc + l.liability, 0);
 
-    // ── Scenario A: MULTIPLA VINCE (tutti i back vincono, tutte le lay perdono) ──
-    // Con free bet: guadagno = stake*quotaTotale - responsabilità (non si paga lo stake)
-    // Con soldi propri: guadagno = stake*(quotaTotale-1) - responsabilità
-    const scenarioVince = isFB
-      ? stake * quotaTotale - responsabilitaTotale
-      : stake * (quotaTotale - 1) - responsabilitaTotale;
-
-    // ── Scenario B: MULTIPLA PERDE (una gamba fallisce, accumulator finisce) ──
-    // Perdi lo stake, incassi la lay della gamba fallita (media tra le gambe)
-    // Con free bet: non perdi lo stake, incassi solo la lay
-    const avgLayReturn = n > 0 ? perLeg.reduce((acc, l) => acc + l.layReturn, 0) / n : 0;
-    const scenarioPerde = isFB
-      ? avgLayReturn                 // free bet: non c'è stake da perdere
-      : avgLayReturn - stakeBase;    // soldi propri: perdi lo stake, incassi la lay media
+    // ── Risultato GARANTITO (stesso in qualunque scenario) ──
+    // Per ogni gamba: layReturn - stakeBase (stessa formula della singola)
+    // Con free bet: non si perde lo stake → solo layReturn
+    // Somma di tutte le gambe → con rating < 100% + soldi propri: sempre negativo
+    const risultatoGarantito = perLeg.reduce((acc, l) => {
+      return acc + (isFB ? l.layReturn : l.layReturn - stakeBase);
+    }, 0);
+    // Aggiungi il bonus come "già recuperato" (non è una posta, non si perde)
+    const risultatoFinale = risultatoGarantito + bonusVal;
 
     const ready = numEventiTarget > 0 && n === numEventiTarget;
 
@@ -1061,25 +1056,17 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             </span>
             <span className="text-white">
               Responsabilità →{" "}
-              <span className="font-bold text-white">{Math.abs(responsabilitaTotale).toFixed(2).replace(".", ",")}€</span>
+              <span className="font-bold text-white">{responsabilitaTotale.toFixed(2).replace(".", ",")}€</span>
             </span>
-            {/* Scenario A: multipla vince */}
-            <span className="text-white text-xs">
-              Se vince:{" "}
-              <span className={`font-bold text-sm ${scenarioVince >= 0 ? "text-green-400" : "text-red-400"}`}>
-                {fmtEur(scenarioVince)}
-              </span>
-            </span>
-            {/* Scenario B: multipla perde — solo con soldi propri */}
-            <span className="text-white text-xs">
-              Se perde:{" "}
-              <span className={`font-bold text-sm ${scenarioPerde >= 0 ? "text-green-400" : "text-red-400"}`}>
-                {fmtEur(scenarioPerde)}
+            <span className="text-white">
+              Risultato garantito →{" "}
+              <span className={`font-bold text-base ${risultatoFinale >= 0 ? "text-green-400" : "text-red-400"}`}>
+                {fmtEur(risultatoFinale)}
               </span>
             </span>
             {bonusVal > 0 && (
               <span className="text-xs text-[#c8922d]">
-                {fmtEur(stakeBase).replace("+","")} stake + {fmtEur(bonusVal).replace("+","")} bonus{isFB ? " (Free Bet)" : ""}
+                {stakeBase.toFixed(2)}€ stake + {bonusVal.toFixed(2)}€ bonus{isFB ? " (Free Bet)" : ""}
               </span>
             )}
             <button
