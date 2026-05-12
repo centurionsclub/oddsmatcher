@@ -1001,20 +1001,35 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     };
 
     // ── Calcoli sommario ──
-    const stake = parseFloat(filters.stakeMultipla || filters.stakePunta || "10") || 10;
+    const stakeBase = parseFloat(filters.stakeMultipla || filters.stakePunta || "10") || 10;
+    const bonusVal  = parseFloat(filters.bonus || "0") || 0;
+    const stake     = stakeBase + bonusVal;   // stake totale = puntata + eventuale bonus
+    const isFB      = filters.freebet;        // free bet: non si recupera lo stake
     const c = commission / 100;
     const n = multiplaSelected.length;
     const quotaTotale = multiplaSelected.reduce((acc, o) => acc * o.quotaBook, 1);
     const ratingMultipla = n > 0 ? multiplaSelected.reduce((acc, o) => acc + o.rating, 0) / n : 0;
+
+    // Per ogni gamba: lay stake per coprire la perdita se quella gamba perde
+    // Free bet: non si recupera lo stake → formula lay diversa
     const perLeg = multiplaSelected.map(o => {
-      const layStake = (stake * o.quotaBook) / (o.quotaExchange - c);
+      const layStake = isFB
+        ? (stake * (o.quotaBook - 1)) / (o.quotaExchange - c)
+        : (stake * o.quotaBook) / (o.quotaExchange - c);
       const liability = layStake * (o.quotaExchange - 1);
       return { layStake, liability };
     });
     const responsabilitaTotale = perLeg.reduce((acc, l) => acc + l.liability, 0);
-    // Perdita finale = scenario in cui l'accumulator vince:
-    // guadagno bookmaker - lay persi = perdita netta
-    const perditaFinale = responsabilitaTotale - stake * (quotaTotale - 1);
+
+    // Guadagno se accumulator VINCE (tutti i back vincono, tutte le lay perdono)
+    // Con free bet: lo stake non viene restituito → profitto = stake*quotaTotale - responsabilità
+    // Con soldi propri: profitto = stake*(quotaTotale-1) - responsabilità
+    const profittoIfWins = isFB
+      ? stake * quotaTotale - responsabilitaTotale
+      : stake * (quotaTotale - 1) - responsabilitaTotale;
+
+    // Perdita finale (positivo = perdi, negativo = guadagni)
+    const perditaFinale = -profittoIfWins;
     const ready = numEventiTarget > 0 && n === numEventiTarget;
 
     const fmtEur = (v: number) => `${Math.abs(v).toFixed(2).replace(".", ",")}€`;
@@ -1041,6 +1056,12 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             <span className={`font-bold ${perditaFinale > 0 ? "text-red-400" : "text-green-400"}`}>
               {perditaFinale > 0 ? "Perdita Finale" : "Guadagno Finale"} → {fmtEur(perditaFinale)}
             </span>
+            {bonusVal > 0 && (
+              <span className="text-xs text-[#c8922d]">
+                Stake {fmtEur(stakeBase)} + Bonus {fmtEur(bonusVal)} = {fmtEur(stake)}
+                {isFB ? " (Free Bet)" : ""}
+              </span>
+            )}
             <button
               onClick={() => setMultiplaSelected([])}
               className="ml-auto text-xs text-slate-400 hover:text-white border border-[#253347] px-2 py-1 rounded"
