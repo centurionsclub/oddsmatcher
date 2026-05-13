@@ -838,7 +838,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
   // ═══ RENDER: SINGOLA ═══
   if (activeTab === "singola") {
-    const filtered = applyFilters(singolaOpps).slice(0, 200);
+    const filtered = applyFilters(singolaOpps).slice(0, 1000);
     if (filtered.length === 0) {
       return (
         <div className="text-center py-12 text-white">
@@ -853,7 +853,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
   // ═══ RENDER: TRE VIE ═══
   if (activeTab === "trevie") {
-    const filtered = applyFilters(trevieOpps).slice(0, 200);
+    const filtered = applyFilters(trevieOpps).slice(0, 1000);
     if (filtered.length === 0) {
       return (
         <div className="text-center py-12 text-white">
@@ -1225,6 +1225,34 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   // ═══ Helper: render opportunity table ═══
   function renderOpportunityTable(opps: Opportunity[], isBookVsBook: boolean) {
     const showVolume = !isBookVsBook; // volume only in back-lay mode
+    const colSpan = showVolume ? 12 : 11;
+
+    // Sort: date ASC → rating DESC
+    const sorted = [...opps].sort((a, b) => {
+      const da = a.eventTime.slice(0, 10);
+      const db = b.eventTime.slice(0, 10);
+      if (da !== db) return da < db ? -1 : 1;
+      return b.rating - a.rating;
+    });
+
+    // Group by date
+    const dayGroups: { date: string; opps: Opportunity[] }[] = [];
+    for (const opp of sorted) {
+      const date = opp.eventTime.slice(0, 10);
+      const last = dayGroups[dayGroups.length - 1];
+      if (!last || last.date !== date) {
+        dayGroups.push({ date, opps: [opp] });
+      } else {
+        last.opps.push(opp);
+      }
+    }
+
+    // Italian day label: "Mer 14 Mag"
+    const formatDayLabel = (dateStr: string) => {
+      const d = new Date(dateStr + "T12:00:00");
+      return d.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
+    };
+
     return (
       <>
       {selectedOpp && (
@@ -1238,6 +1266,35 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
           initialRimborso={filters.rimborso}
         />
       )}
+
+      {/* ── Day selector strip ── */}
+      {dayGroups.length > 1 && (
+        <div className="flex flex-wrap gap-1.5 px-3 py-2 bg-[#080c17] border-b border-[#1e3050]">
+          {dayGroups.map(({ date, opps: dayOpps }) => (
+            <button
+              key={date}
+              onClick={() => {
+                const el = document.getElementById(`day-${date}`);
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className="px-3 py-1 rounded text-xs font-semibold bg-[#1e2d42] text-white hover:bg-[#2a4060] transition-colors whitespace-nowrap border border-[#2a3f5c]"
+            >
+              {formatDayLabel(date)}
+              <span className="ml-1.5 text-[10px] opacity-60">({dayOpps.length})</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Back-to-top floating button ── */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        className="fixed bottom-6 right-6 z-50 w-10 h-10 rounded-full bg-[#87c4e8] text-[#0d2035] flex items-center justify-center shadow-xl hover:bg-[#6ab0d8] transition-colors text-lg font-bold select-none"
+        title="Torna in cima"
+      >
+        ↑
+      </button>
+
       <div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -1258,55 +1315,68 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
-              {opps.map((opp, i) => {
-                const bookColor = getBookColor(opp.bookmaker);
-                const exchColor = getBookColor(opp.exchange);
-                // Split "1 vs X+2" → sc1="1", sc2="X+2"
-                const vsSplit = opp.scommessa.split(" vs ");
-                const sc1 = vsSplit[0] ?? opp.scommessa;
-                const sc2 = vsSplit[1] ?? opp.scommessa;
-                // Counter quota display for Quota 2
-                const counterQuota = opp.quotaExchange > 0 ? opp.quotaExchange.toFixed(2).replace(".", ",") : "—";
-                return (
-                  <tr key={i} className="hover:bg-[#1e2d42] transition-colors cursor-pointer" onClick={() => setSelectedOpp(opp)}>
-                    <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(opp.eventTime)}</td>
-                    <td className="py-2 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
-                    <td className="py-2 px-3 text-sm text-white font-medium max-w-[220px] truncate">{opp.eventName}</td>
-                    <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(opp.league)}</td>
-                    <td className="py-2 px-3 text-center text-sm font-bold text-white">{sc1}</td>
-                    <td className="py-2 px-3 text-center text-sm font-bold text-white">{sc2}</td>
-                    <td className="py-2 px-3 text-center">
-                      <span className={`text-sm font-bold ${
-                        opp.rating >= 100 ? "text-green-400" :
-                        opp.rating >= 98 ? "text-white" :
-                        opp.rating >= 95 ? "text-[#c8922d]" :
-                        "text-red-400"
-                      }`}>
-                        {opp.rating.toFixed(2)}%
+              {dayGroups.map(({ date, opps: dayOpps }) => (
+                <>
+                  {/* Day divider row */}
+                  <tr key={`divider-${date}`} id={`day-${date}`}>
+                    <td colSpan={colSpan} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
+                      <span className="text-[#87c4e8] font-semibold text-xs uppercase tracking-wider">
+                        📅 {formatDayLabel(date)}
+                      </span>
+                      <span className="ml-2 text-[#4a6a8a] text-xs">
+                        {dayOpps.length} {dayOpps.length === 1 ? "opportunità" : "opportunità"}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: bookColor.bg, color: bookColor.text }}>
-                        {opp.bookmaker}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">{opp.quotaBook.toFixed(2).replace(".", ",")}</td>
-                    <td className="py-2 px-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
-                        {opp.exchange}
-                      </span>
-                    </td>
-                    <td className={`py-2 px-3 text-center font-mono text-sm ${isBookVsBook ? "text-[#0d2035] bg-[#87c4e8]" : "text-[#2d0d1a] bg-[#f4a9ba]"}`}>
-                      {counterQuota}
-                    </td>
-                    {showVolume && (
-                      <td className="py-2 px-3 text-center text-xs font-mono text-[#f4a9ba]">
-                        {opp.volumeExchange != null ? formatVolume(opp.volumeExchange) : <span className="text-white opacity-30">—</span>}
-                      </td>
-                    )}
                   </tr>
-                );
-              })}
+                  {dayOpps.map((opp, i) => {
+                    const bookColor = getBookColor(opp.bookmaker);
+                    const exchColor = getBookColor(opp.exchange);
+                    const vsSplit = opp.scommessa.split(" vs ");
+                    const sc1 = vsSplit[0] ?? opp.scommessa;
+                    const sc2 = vsSplit[1] ?? opp.scommessa;
+                    const counterQuota = opp.quotaExchange > 0 ? opp.quotaExchange.toFixed(2).replace(".", ",") : "—";
+                    return (
+                      <tr key={`${date}-${i}`} className="hover:bg-[#1e2d42] transition-colors cursor-pointer" onClick={() => setSelectedOpp(opp)}>
+                        <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(opp.eventTime)}</td>
+                        <td className="py-2 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
+                        <td className="py-2 px-3 text-sm text-white font-medium max-w-[220px] truncate">{opp.eventName}</td>
+                        <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(opp.league)}</td>
+                        <td className="py-2 px-3 text-center text-sm font-bold text-white">{sc1}</td>
+                        <td className="py-2 px-3 text-center text-sm font-bold text-white">{sc2}</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className={`text-sm font-bold ${
+                            opp.rating >= 100 ? "text-green-400" :
+                            opp.rating >= 98 ? "text-white" :
+                            opp.rating >= 95 ? "text-[#c8922d]" :
+                            "text-red-400"
+                          }`}>
+                            {opp.rating.toFixed(2)}%
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: bookColor.bg, color: bookColor.text }}>
+                            {opp.bookmaker}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">{opp.quotaBook.toFixed(2).replace(".", ",")}</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
+                            {opp.exchange}
+                          </span>
+                        </td>
+                        <td className={`py-2 px-3 text-center font-mono text-sm ${isBookVsBook ? "text-[#0d2035] bg-[#87c4e8]" : "text-[#2d0d1a] bg-[#f4a9ba]"}`}>
+                          {counterQuota}
+                        </td>
+                        {showVolume && (
+                          <td className="py-2 px-3 text-center text-xs font-mono text-[#f4a9ba]">
+                            {opp.volumeExchange != null ? formatVolume(opp.volumeExchange) : <span className="text-white opacity-30">—</span>}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </>
+              ))}
             </tbody>
           </table>
         </div>
