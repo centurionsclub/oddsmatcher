@@ -43,30 +43,43 @@ serve(async (req) => {
     // Query live_odds — rows inserted by the Python scraper.
     // Only filter by event_time: show prematch events starting at least 20 min from now.
     // expires_at is NOT used as a gate — stale rows are still shown if the event hasn't started.
+    // We paginate in chunks of 5000 to bypass Supabase's PostgREST max_rows cap.
     const cutoff = new Date(Date.now() + 20 * 60 * 1000).toISOString();
-    let query = supabase
-      .from("live_odds")
-      .select("bookmaker, sport, league, event_name, event_time, market, outcome, odds, volume, market_id, event_id")
-      .gt("event_time", cutoff)
-      .order("event_time", { ascending: true })
-      .limit(8000);
+    const PAGE_SIZE = 1000;
+    let allRows: Record<string, unknown>[] = [];
+    let offset = 0;
+    while (true) {
+      let query = supabase
+        .from("live_odds")
+        .select("bookmaker, sport, league, event_name, event_time, market, outcome, odds, volume, market_id, event_id")
+        .gt("event_time", cutoff)
+        .order("event_time", { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1);
 
-    if (sport && sport !== "tutti") {
-      query = query.eq("sport", sport);
-    }
-    if (campionato && campionato.trim()) {
-      query = query.ilike("league", `%${campionato.trim()}%`);
-    }
-    if (partita && partita.trim()) {
-      query = query.ilike("event_name", `%${partita.trim()}%`);
+      if (sport && sport !== "tutti") {
+        query = query.eq("sport", sport);
+      }
+      if (campionato && campionato.trim()) {
+        query = query.ilike("league", `%${campionato.trim()}%`);
+      }
+      if (partita && partita.trim()) {
+        query = query.ilike("event_name", `%${partita.trim()}%`);
+      }
+
+      const { data: pageRows, error: pageError } = await query;
+      if (pageError) {
+        console.error("[odds-scraper] DB error:", pageError);
+        throw new Error(pageError.message);
+      }
+      if (!pageRows || pageRows.length === 0) break;
+      allRows = allRows.concat(pageRows as Record<string, unknown>[]);
+      if (pageRows.length < PAGE_SIZE) break; // last page
+      offset += PAGE_SIZE;
     }
 
-    const { data: rows, error } = await query;
+    const rows = allRows;
 
-    if (error) {
-      console.error("[odds-scraper] DB error:", error);
-      throw new Error(error.message);
-    }
+    console.log(`[odds-scraper] Fetched ${rows.length} raw rows (paginated)`);
 
     if (!rows || rows.length === 0) {
       console.log("[odds-scraper] No live odds in DB — scraper may not have run yet.");
