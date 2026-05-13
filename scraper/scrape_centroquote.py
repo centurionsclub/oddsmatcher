@@ -118,8 +118,8 @@ BM_ALIASES: dict[str, str] = {
     "e-play24":       "E-Play24",
     "fastbet":        "Fastbet",
     "stanleybet":     "Stanleybet",
-    "betfair exchange": "Betfair Exchange",
-    "betfair":        "Betfair Exchange",
+    # Betfair is scraped directly from Betfair Exchange API (betfair_scraper.py)
+    # — do NOT map here or it would overwrite real exchange lay odds with back odds
     "gioco digitale": "Gioco Digitale",
 }
 
