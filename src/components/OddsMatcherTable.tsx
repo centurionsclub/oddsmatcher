@@ -302,7 +302,7 @@ function BookLogo({ bookmaker }: { bookmaker: string }) {
     <img
       src={logoPath}
       alt={label}
-      className="h-7 w-auto max-w-[110px] object-contain rounded"
+      className="h-7 w-auto max-w-[110px] object-contain rounded block mx-auto"
       onError={() => setFailed(true)}
     />
   );
