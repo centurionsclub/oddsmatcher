@@ -238,7 +238,7 @@ const BOOK_COLORS: Record<string, { bg: string; text: string }> = {
   "william": { bg: "#1a3a5c", text: "#fff" },
   "gioco digitale": { bg: "#00a850", text: "#fff" },
   "netbet": { bg: "#1a8a1a", text: "#fff" },
-  "netwin": { bg: "#333", text: "#fff" },
+  "netwin": { bg: "#000000", text: "#fff" },
   "dazn": { bg: "#0d0f14", text: "#f8f8f5" },
   "domusbet": { bg: "#1a1a1a", text: "#e88a00" },
   "admiral": { bg: "#003366", text: "#fff" },
@@ -299,11 +299,11 @@ function BookLogo({ bookmaker }: { bookmaker: string }) {
     );
   }
   return (
-    <div className="flex justify-center items-center">
+    <div className="flex justify-center items-center rounded px-1" style={{ backgroundColor: c.bg }}>
       <img
         src={logoPath}
         alt={label}
-        className="h-7 w-auto max-w-[110px] object-contain rounded"
+        className="h-7 w-auto max-w-[110px] object-contain"
         onError={() => setFailed(true)}
       />
     </div>
