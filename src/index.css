@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Icona calendario bianca sui campi data */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
 @layer base {
   :root {
     /* Dark Navy Theme */
