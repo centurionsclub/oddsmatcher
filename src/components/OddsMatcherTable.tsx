@@ -969,7 +969,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
                 <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Esito</th>
+                <th className="text-center py-2.5 px-3 font-semibold">#</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Bookmaker</th>
                 <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
                 {tvHasStake && <th className="text-center py-2.5 px-3 font-semibold text-[#c8922d]">Stake</th>}
@@ -1036,8 +1036,8 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                             </>
                           )}
                           <td className="py-1.5 px-3 text-center font-bold text-white text-sm">
-                            <span className="inline-block w-6 h-6 rounded-full bg-[#1e3050] text-white text-xs font-bold flex items-center justify-center">
-                              {leg.outcome}
+                            <span className="inline-block px-2 py-0.5 rounded bg-[#1e3050] text-white text-[10px] font-bold whitespace-nowrap">
+                              Book {li + 1}
                             </span>
                           </td>
                           <td className="py-1.5 px-3 text-center">
