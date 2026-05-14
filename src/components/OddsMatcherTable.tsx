@@ -34,6 +34,20 @@ interface Opportunity {
   bookmakerUrl?: string;    // centroquote.it comparison page (direct link to match)
 }
 
+interface TreVieGroup {
+  eventTime: string;
+  sport: string;
+  eventName: string;
+  league: string;
+  market: string;
+  rating: number;
+  legs: Array<{
+    outcome: string;    // "1", "X", "2"
+    bookmaker: string;
+    odds: number;
+  }>;
+}
+
 interface BestOddsRow {
   eventTime: string;
   sport: string;
@@ -75,6 +89,9 @@ interface Props {
     quotaPartitaMassima?: string;
     daData?: string;
     aData?: string;
+    // Tre Vie specific
+    trevieMain?: string;
+    trevieSecondary?: string[];
   };
   commission: number;
   multiplaResetKey?: number;
@@ -562,102 +579,98 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     return Array.from(dedupMap.values()).sort((a, b) => b.rating - a.rating);
   }, [data, commission, committedExchanges, isPuntaPuntaMode, committedFilters.freebet]);
 
-  // ═══ TRE VIE: Book vs Book 3-way dutching ═══
-  const trevieOpps = useMemo(() => {
+  // ═══ TRE VIE: Dutch 3-way — Bookmaker Principale + Secondari ═══
+  const trevieOpps = useMemo((): TreVieGroup[] => {
     if (!data?.data || data.data.length === 0) return [];
-    const opps: Opportunity[] = [];
-    const bookmakerOdds = data.data.filter(odd => !isExchange(odd.bookmaker));
 
+    const tvMain = committedFilters.trevieMain || "";
+    const tvSecondary = committedFilters.trevieSecondary ?? [];
+
+    // Only non-exchange bookmakers; only calcio; only 1X2 market
+    let pool = data.data.filter(odd =>
+      !isExchange(odd.bookmaker) &&
+      odd.sport === "calcio" &&
+      odd.market === "1X2"
+    );
+
+    // If secondari are selected, restrict pool to them (+ always include principale)
+    if (tvSecondary.length > 0) {
+      pool = pool.filter(bm => {
+        const lower = bm.bookmaker.toLowerCase();
+        const inSecondary = tvSecondary.some(s => lower.includes(s.toLowerCase()) || s.toLowerCase().includes(lower));
+        const isMain = tvMain && (lower.includes(tvMain.toLowerCase()) || tvMain.toLowerCase().includes(lower));
+        return inSecondary || isMain;
+      });
+    }
+
+    // Group by event
     const eventGroups = new Map<string, OddsData[]>();
-    bookmakerOdds.forEach(bm => {
-      const key = normalizeEventName(bm.eventName) + "|" + bm.market;
+    pool.forEach(bm => {
+      const key = normalizeEventName(bm.eventName);
       if (!eventGroups.has(key)) eventGroups.set(key, []);
       eventGroups.get(key)!.push(bm);
     });
 
+    const groups: TreVieGroup[] = [];
+    const OUTCOMES_3WAY = ["1", "X", "2"];
+
     eventGroups.forEach(group => {
       if (group.length < 2) return;
-      const outcomes = getOutcomes(group[0]);
 
-      if (outcomes.length === 2) {
-        const [oA, oB] = outcomes;
-        let bestA = { odds: 0, book: "" };
-        let bestB = { odds: 0, book: "" };
+      // Ensure this event actually has 3-way odds
+      const sampleOdds = group[0].odds;
+      if (!("1" in sampleOdds) || !("X" in sampleOdds) || !("2" in sampleOdds)) return;
+
+      // Find best odds per outcome
+      const bestForOutcome: Record<string, { odds: number; bookmaker: string } | null> = {
+        "1": null, "X": null, "2": null,
+      };
+      for (const outcome of OUTCOMES_3WAY) {
         for (const bm of group) {
-          const a = bm.odds[oA.key];
-          const b = bm.odds[oB.key];
-          if (a && a > bestA.odds) { bestA = { odds: a, book: bm.bookmaker }; }
-          if (b && b > bestB.odds) { bestB = { odds: b, book: bm.bookmaker }; }
-        }
-        if (bestA.odds <= 1 || bestB.odds <= 1) return;
-
-        const margin = 1 / bestA.odds + 1 / bestB.odds;
-        const rating = (1 / margin) * 100;
-
-        if (rating > 85 && rating < 120) {
-          opps.push({
-            eventTime: group[0].eventTime,
-            sport: group[0].sport || "calcio",
-            eventName: cleanEventName(group[0].eventName),
-            league: group[0].league,
-            market: group[0].market,
-            scommessa: `${oA.label}/${oB.label}`,
-            rating,
-            bookmaker: bestA.book,
-            quotaBook: bestA.odds,
-            exchange: bestB.book,
-            quotaExchange: bestB.odds,
-            isBookVsBook: true,
-          });
-        }
-      }
-
-      if (outcomes.length === 3) {
-        const bestForOutcome: Record<string, { odds: number; bookmaker: string }> = {};
-        for (const outcome of outcomes) {
-          bestForOutcome[outcome.key] = { odds: 0, bookmaker: "" };
-          for (const bm of group) {
-            const o = bm.odds[outcome.key];
-            if (o && o > bestForOutcome[outcome.key].odds) {
-              bestForOutcome[outcome.key] = { odds: o, bookmaker: bm.bookmaker };
+          const o = bm.odds[outcome];
+          if (o && o > 1) {
+            if (!bestForOutcome[outcome] || o > bestForOutcome[outcome]!.odds) {
+              bestForOutcome[outcome] = { odds: o, bookmaker: bm.bookmaker };
             }
           }
         }
-        if (outcomes.some(o => bestForOutcome[o.key].odds <= 1)) return;
+      }
 
-        const margin = outcomes.reduce((sum, o) => sum + 1 / bestForOutcome[o.key].odds, 0);
-        const rating = (1 / margin) * 100;
+      // All three outcomes must have valid odds
+      if (OUTCOMES_3WAY.some(o => !bestForOutcome[o])) return;
 
-        if (rating > 85 && rating < 120) {
-          for (const mainOutcome of outcomes) {
-            const mainOdds = bestForOutcome[mainOutcome.key].odds;
-            const mainBook = bestForOutcome[mainOutcome.key].bookmaker;
-            const otherBooks = outcomes
-              .filter(o => o.key !== mainOutcome.key)
-              .map(o => bestForOutcome[o.key].bookmaker);
-            const uniqueOtherBooks = [...new Set(otherBooks)];
+      // If principale is specified, it must appear in at least one leg
+      if (tvMain) {
+        const mainLower = tvMain.toLowerCase();
+        const appearsInLeg = OUTCOMES_3WAY.some(o => {
+          const bm = bestForOutcome[o]!.bookmaker.toLowerCase();
+          return bm.includes(mainLower) || mainLower.includes(bm);
+        });
+        if (!appearsInLeg) return;
+      }
 
-            opps.push({
-              eventTime: group[0].eventTime,
-              sport: group[0].sport || "calcio",
-              eventName: cleanEventName(group[0].eventName),
-              league: group[0].league,
-              market: group[0].market,
-              scommessa: mainOutcome.label,
-              rating,
-              bookmaker: mainBook,
-              quotaBook: mainOdds,
-              exchange: uniqueOtherBooks.join(" + "),
-              quotaExchange: 0,
-              isBookVsBook: true,
-            });
-          }
-        }
+      const margin = OUTCOMES_3WAY.reduce((sum, o) => sum + 1 / bestForOutcome[o]!.odds, 0);
+      const rating = (1 / margin) * 100;
+
+      if (rating > 85 && rating < 120) {
+        groups.push({
+          eventTime: group[0].eventTime,
+          sport: "calcio",
+          eventName: cleanEventName(group[0].eventName),
+          league: group[0].league,
+          market: "1X2",
+          rating,
+          legs: OUTCOMES_3WAY.map(o => ({
+            outcome: o,
+            bookmaker: bestForOutcome[o]!.bookmaker,
+            odds: bestForOutcome[o]!.odds,
+          })),
+        });
       }
     });
 
-    return opps.sort((a, b) => b.rating - a.rating);
-  }, [data]);
+    return groups.sort((a, b) => b.rating - a.rating);
+  }, [data, committedFilters.trevieMain, committedFilters.trevieSecondary]);
 
   // ═══ BEST ODDS ═══
   const bestOddsRows = useMemo(() => {
@@ -873,15 +886,187 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
   // ═══ RENDER: TRE VIE ═══
   if (activeTab === "trevie") {
-    const filtered = applyFilters(trevieOpps).slice(0, 1000);
-    if (filtered.length === 0) {
+    // Apply text filter (partita)
+    let tvFiltered = trevieOpps;
+    if (committedFilters.partita) {
+      const search = committedFilters.partita.toLowerCase();
+      tvFiltered = tvFiltered.filter(g => g.eventName.toLowerCase().includes(search));
+    }
+    tvFiltered = tvFiltered.slice(0, 200);
+
+    if (tvFiltered.length === 0) {
       return (
         <div className="text-center py-12 text-white">
-          Nessuna opportunit&agrave; tre vie trovata con rating tra 85% e 105%. I dati potrebbero essere non aggiornati.
+          Nessuna opportunit&agrave; tre vie trovata. Prova a cambiare i filtri o clicca Aggiorna.
         </div>
       );
     }
-    return renderOpportunityTable(filtered, true);
+
+    // Stake totale per calcolo Dutch
+    const tvStake = parseFloat((committedFilters.stakePunta || "0").replace(",", "."))
+                  + parseFloat((committedFilters.bonus || "0").replace(",", "."));
+    const tvHasStake = tvStake > 0;
+
+    // Sort by day ASC then rating DESC
+    const tvSorted = [...tvFiltered].sort((a, b) => {
+      const da = a.eventTime.slice(0, 10);
+      const db = b.eventTime.slice(0, 10);
+      if (da !== db) return da < db ? -1 : 1;
+      return b.rating - a.rating;
+    });
+
+    // Group by day
+    const tvDayGroups: { date: string; groups: TreVieGroup[] }[] = [];
+    for (const g of tvSorted) {
+      const date = g.eventTime.slice(0, 10);
+      const last = tvDayGroups[tvDayGroups.length - 1];
+      if (!last || last.date !== date) tvDayGroups.push({ date, groups: [g] });
+      else last.groups.push(g);
+    }
+
+    const formatDayLabel = (dateStr: string) => {
+      const d = new Date(dateStr + "T12:00:00");
+      return d.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
+    };
+
+    const colCount = tvHasStake ? 9 : 8;
+
+    return (
+      <>
+        {/* Day selector strip */}
+        {tvDayGroups.length > 1 && (
+          <div className="flex flex-wrap gap-1.5 px-3 py-2 bg-[#080c17] border-b border-[#1e3050]">
+            {tvDayGroups.map(({ date, groups: dg }) => (
+              <button
+                key={date}
+                onClick={() => {
+                  const el = document.getElementById(`tvday-${date}`);
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="px-3 py-1 rounded text-xs font-semibold bg-[#1e2d42] text-white hover:bg-[#2a4060] transition-colors whitespace-nowrap border border-[#2a3f5c]"
+              >
+                {formatDayLabel(date)}
+                <span className="ml-1.5 text-[10px] opacity-60">({dg.length})</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Back-to-top */}
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="fixed bottom-6 right-6 z-50 w-10 h-10 rounded-full bg-[#87c4e8] text-[#0d2035] flex items-center justify-center shadow-xl hover:bg-[#6ab0d8] transition-colors text-lg font-bold select-none"
+          title="Torna in cima"
+        >↑</button>
+
+        <div className="text-right text-xs text-white px-4 py-2">{tvFiltered.length} eventi</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+                <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
+                <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
+                <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
+                <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Esito</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
+                {tvHasStake && <th className="text-center py-2.5 px-3 font-semibold text-[#c8922d]">Stake</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {tvDayGroups.map(({ date, groups: dg }) => (
+                <>
+                  {/* Day divider */}
+                  <tr key={`tvdiv-${date}`} id={`tvday-${date}`}>
+                    <td colSpan={colCount} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
+                      <span className="text-[#87c4e8] font-semibold text-xs uppercase tracking-wider">
+                        📅 {formatDayLabel(date)}
+                      </span>
+                      <span className="ml-2 text-[#4a6a8a] text-xs">
+                        {dg.length} {dg.length === 1 ? "evento" : "eventi"}
+                      </span>
+                    </td>
+                  </tr>
+                  {dg.map((grp, gi) => {
+                    const margin = grp.legs.reduce((s, l) => s + 1 / l.odds, 0);
+                    const guaranteed = tvHasStake ? tvStake / margin : 0;
+                    const profit = tvHasStake ? guaranteed - tvStake : 0;
+
+                    return grp.legs.map((leg, li) => {
+                      const isFirst = li === 0;
+                      const isLast = li === grp.legs.length - 1;
+                      const bookColor = getBookColor(leg.bookmaker);
+                      const legStake = tvHasStake ? guaranteed / leg.odds : 0;
+                      const ratingColor = grp.rating >= 100
+                        ? "text-green-400" : grp.rating >= 98
+                        ? "text-white" : grp.rating >= 95
+                        ? "text-[#c8922d]" : "text-red-400";
+
+                      return (
+                        <tr
+                          key={`tv-${date}-${gi}-${li}`}
+                          className={`transition-colors hover:bg-[#1a2535] ${isLast ? "border-b border-[#1e3050]" : "border-b border-[#0d1829]"}`}
+                        >
+                          {isFirst && (
+                            <>
+                              <td rowSpan={3} className="py-2 px-3 text-xs text-white whitespace-nowrap align-middle border-r border-[#1e3050]">
+                                {formatDate(grp.eventTime)}
+                              </td>
+                              <td rowSpan={3} className="py-2 px-2 text-center text-base align-middle border-r border-[#1e3050]">
+                                {getSportIcon(grp.sport)}
+                              </td>
+                              <td rowSpan={3} className="py-2 px-3 text-sm text-white font-medium align-middle max-w-[200px] truncate border-r border-[#1e3050]">
+                                {grp.eventName}
+                              </td>
+                              <td rowSpan={3} className="py-2 px-2 text-center text-lg align-middle border-r border-[#1e3050]">
+                                {getLeagueFlag(grp.league)}
+                              </td>
+                              <td rowSpan={3} className="py-2 px-3 text-center align-middle border-r border-[#1e3050]">
+                                <span className={`text-sm font-bold ${ratingColor}`}>
+                                  {grp.rating.toFixed(2)}%
+                                </span>
+                                {tvHasStake && (
+                                  <div className={`text-xs mt-1 font-semibold ${profit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                                    {profit >= 0 ? "+" : ""}{profit.toFixed(2)}€
+                                  </div>
+                                )}
+                              </td>
+                            </>
+                          )}
+                          <td className="py-1.5 px-3 text-center font-bold text-white text-sm">
+                            <span className="inline-block w-6 h-6 rounded-full bg-[#1e3050] text-white text-xs font-bold flex items-center justify-center">
+                              {leg.outcome}
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-3 text-center">
+                            <span
+                              className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap"
+                              style={{ backgroundColor: bookColor.bg, color: bookColor.text }}
+                            >
+                              {leg.bookmaker}
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">
+                            {leg.odds.toFixed(2).replace(".", ",")}
+                          </td>
+                          {tvHasStake && (
+                            <td className="py-1.5 px-3 text-center text-xs font-mono text-[#c8922d] font-semibold">
+                              {legStake.toFixed(2).replace(".", ",")}€
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    });
+                  })}
+                </>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
   }
 
   // ═══ RENDER: BEST ODDS ═══

@@ -80,6 +80,13 @@ const Index = () => {
   const [daData, setDaData] = useState("");
   const [aData, setAData] = useState("");
 
+  // Tre Vie specific states
+  const [trevieMain, setTrevieMain] = useState("");
+  const [trevieSecondary, setTrevieSecondary] = useState<string[]>([]);
+  const [trevieMainOpen, setTrevieMainOpen] = useState(false);
+  const [trevieSecondaryOpen, setTrevieSecondaryOpen] = useState(false);
+  const [trevieSecondarySearch, setTrevieSecondarySearch] = useState("");
+
   // Dropdown states
   const [marketsOpen, setMarketsOpen] = useState(false);
   const [bookmakerOpen, setBookmakerOpen] = useState(false);
@@ -119,13 +126,16 @@ const Index = () => {
 
   const handleAggiorna = () => {
     // Valida stake: almeno uno tra Stake Punta/Multipla e Bonus deve essere compilato
-    const relevantStake = activeSubTab === "multipla" ? stakeMultipla : stakePunta;
-    const stakeVal = parseFloat(relevantStake.replace(",", ".") || "0");
-    const bonusVal = parseFloat(bonus.replace(",", ".") || "0");
-    if (!stakeVal && !bonusVal) {
-      const stakeLabel = activeSubTab === "multipla" ? "Stake Multipla" : "Stake Punta";
-      setStakeError(`Inserisci un importo in "${stakeLabel}" oppure in "Bonus" per continuare.`);
-      return;
+    // (non richiesto per Tre Vie dove lo stake è opzionale)
+    if (activeSubTab !== "trevie") {
+      const relevantStake = activeSubTab === "multipla" ? stakeMultipla : stakePunta;
+      const stakeVal = parseFloat(relevantStake.replace(",", ".") || "0");
+      const bonusVal = parseFloat(bonus.replace(",", ".") || "0");
+      if (!stakeVal && !bonusVal) {
+        const stakeLabel = activeSubTab === "multipla" ? "Stake Multipla" : "Stake Punta";
+        setStakeError(`Inserisci un importo in "${stakeLabel}" oppure in "Bonus" per continuare.`);
+        return;
+      }
     }
     setStakeError(null);
     setFiltersOpen(false); // nascondi i filtri subito
@@ -167,6 +177,8 @@ const Index = () => {
     setQuotaPartitaMassima("");
     setDaData("");
     setAData("");
+    setTrevieMain("");
+    setTrevieSecondary([]);
     resetOdds();
     setMultiplaResetKey(k => k + 1); // reset selezione multipla
   };
@@ -282,8 +294,8 @@ const Index = () => {
               </div>
             </div>}
 
-            {/* Mercati */}
-            <div className="flex items-center gap-3 mb-3">
+            {/* Mercati - nascosto per tre vie (sempre 1X2) */}
+            {activeSubTab !== "trevie" && <div className="flex items-center gap-3 mb-3">
               <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Mercati</span>
               <div className="relative">
                 <button
@@ -315,7 +327,7 @@ const Index = () => {
                   </div>
                 )}
               </div>
-            </div>
+            </div>}
 
             {/* Bookmaker */}
             <div className="flex items-center gap-3 mb-3">
@@ -365,8 +377,8 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Exchange / Bookmaker */}
-            {(() => {
+            {/* Exchange / Bookmaker — nascosto per tre vie */}
+            {activeSubTab !== "trevie" && (() => {
               const hasBookInExchange = selectedExchanges.some(e => BOOKMAKERS.includes(e));
               const allExchangesSelected = EXCHANGES.every(e => selectedExchanges.includes(e));
               const allBookmakersSelected = BOOKMAKERS.every(b => selectedExchanges.includes(b));
@@ -489,6 +501,110 @@ const Index = () => {
             </div>
               );
             })()}
+
+            {/* Tre Vie: Bookmaker Principale */}
+            {activeSubTab === "trevie" && (
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Principale</span>
+                <div className="relative">
+                  <button
+                    onClick={() => { setTrevieMainOpen(!trevieMainOpen); setTrevieSecondaryOpen(false); }}
+                    className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
+                  >
+                    <span className="text-white">{trevieMain || "Tutti"}</span>
+                    <span className="text-slate-500">▾</span>
+                  </button>
+                  {trevieMainOpen && (
+                    <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[250px] max-h-[300px] overflow-y-auto">
+                      <button
+                        onClick={() => { setTrevieMain(""); setTrevieMainOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#c8922d]"
+                      >
+                        Tutti (nessun filtro)
+                      </button>
+                      {BOOKMAKERS.map(b => (
+                        <button
+                          key={b}
+                          onClick={() => { setTrevieMain(b); setTrevieMainOpen(false); }}
+                          className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[#1e2d42] ${
+                            trevieMain === b ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
+                          }`}
+                        >
+                          {trevieMain === b ? "✓ " : ""}{b}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {trevieMain && (
+                  <button
+                    onClick={() => setTrevieMain("")}
+                    className="text-xs text-slate-400 hover:text-white border border-[#253347] px-2 py-1 rounded"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Tre Vie: Bookmakers Secondari */}
+            {activeSubTab === "trevie" && (
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Secondari</span>
+                <div className="relative">
+                  <button
+                    onClick={() => { setTrevieSecondaryOpen(!trevieSecondaryOpen); setTrevieMainOpen(false); setTrevieSecondarySearch(""); }}
+                    className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
+                  >
+                    <span className="text-white">
+                      {trevieSecondary.length === 0 ? "Tutti" : `${trevieSecondary.length} selezionati`}
+                    </span>
+                    <span className="text-slate-500">▾</span>
+                  </button>
+                  {trevieSecondaryOpen && (
+                    <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[280px] flex flex-col max-h-[360px]">
+                      <div className="p-2 border-b border-[#253347] shrink-0">
+                        <input
+                          type="text"
+                          value={trevieSecondarySearch}
+                          onChange={e => setTrevieSecondarySearch(e.target.value)}
+                          placeholder="Cerca bookmaker..."
+                          autoFocus
+                          className="w-full bg-[#0d1320] text-white text-sm px-2 py-1.5 rounded border border-[#253347] placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#87c4e8]"
+                        />
+                      </div>
+                      <div className="overflow-y-auto">
+                        <button
+                          onClick={() => setTrevieSecondary([])}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#c8922d] border-b border-[#253347]"
+                        >
+                          Tutti (deseleziona)
+                        </button>
+                        <button
+                          onClick={() => setTrevieSecondary([...BOOKMAKERS])}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-white border-b border-[#253347] bg-[#1e2d42]"
+                        >
+                          ★ Seleziona Top
+                        </button>
+                        {BOOKMAKERS.filter(b => b.toLowerCase().includes(trevieSecondarySearch.toLowerCase())).map(b => (
+                          <button
+                            key={b}
+                            onClick={() => setTrevieSecondary(prev =>
+                              prev.includes(b) ? prev.filter(x => x !== b) : [...prev, b]
+                            )}
+                            className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[#1e2d42] ${
+                              trevieSecondary.includes(b) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
+                            }`}
+                          >
+                            {trevieSecondary.includes(b) ? "✓ " : ""}{b}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Stake */}
             <div className="flex items-center gap-3 mb-3">
@@ -686,10 +802,10 @@ const Index = () => {
         )}
 
         {/* Close dropdowns on outside click */}
-        {(marketsOpen || bookmakerOpen || exchangeOpen) && (
+        {(marketsOpen || bookmakerOpen || exchangeOpen || trevieMainOpen || trevieSecondaryOpen) && (
           <div
             className="fixed inset-0 z-40"
-            onClick={() => { setMarketsOpen(false); setBookmakerOpen(false); setExchangeOpen(false); }}
+            onClick={() => { setMarketsOpen(false); setBookmakerOpen(false); setExchangeOpen(false); setTrevieMainOpen(false); setTrevieSecondaryOpen(false); }}
           />
         )}
 
@@ -722,6 +838,8 @@ const Index = () => {
               quotaPartitaMassima,
               daData,
               aData,
+              trevieMain,
+              trevieSecondary,
             }}
             commission={commission}
             multiplaResetKey={multiplaResetKey}
