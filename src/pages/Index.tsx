@@ -329,8 +329,8 @@ const Index = () => {
               </div>
             </div>}
 
-            {/* Bookmaker */}
-            <div className="flex items-center gap-3 mb-3">
+            {/* Bookmaker — nascosto per tre vie (coperto da Book 1 / Book 2/3) */}
+            {activeSubTab !== "trevie" && <div className="flex items-center gap-3 mb-3">
               <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Bookmaker</span>
               <div className="relative">
                 <button
@@ -375,7 +375,7 @@ const Index = () => {
                   </div>
                 )}
               </div>
-            </div>
+            </div>}
 
             {/* Exchange / Bookmaker — nascosto per tre vie */}
             {activeSubTab !== "trevie" && (() => {
@@ -505,7 +505,7 @@ const Index = () => {
             {/* Tre Vie: Bookmaker Principale */}
             {activeSubTab === "trevie" && (
               <div className="flex items-center gap-3 mb-3">
-                <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Principale</span>
+                <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Book 1</span>
                 <div className="relative">
                   <button
                     onClick={() => { setTrevieMainOpen(!trevieMainOpen); setTrevieSecondaryOpen(false); }}
@@ -550,7 +550,7 @@ const Index = () => {
             {/* Tre Vie: Bookmakers Secondari */}
             {activeSubTab === "trevie" && (
               <div className="flex items-center gap-3 mb-3">
-                <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Secondari</span>
+                <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Book 2/3</span>
                 <div className="relative">
                   <button
                     onClick={() => { setTrevieSecondaryOpen(!trevieSecondaryOpen); setTrevieMainOpen(false); setTrevieSecondarySearch(""); }}
