@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { Navbar } from "@/components/Navbar";
 import { useToast } from "@/hooks/use-toast";
 import { useOddsSearch } from "@/hooks/use-odds-search";
-import { OddsMatcherTable } from "@/components/OddsMatcherTable";
+import { OddsMatcherTable, type Opportunity } from "@/components/OddsMatcherTable";
 import { supabase } from "@/integrations/supabase/client";
 
 const BOOKMAKERS = [
@@ -50,6 +50,7 @@ const Index = () => {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [multiplaResetKey, setMultiplaResetKey] = useState(0);
   const [activeSubTab, setActiveSubTab] = useState("singola");
+  const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
 
   // Filter states
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
@@ -256,6 +257,103 @@ const Index = () => {
           >
             PULISCI ✕
           </button>
+          {activeSubTab === "multipla" && (() => {
+            const nTarget = parseInt(numEventi || "0");
+            const isReady = nTarget >= 2 && multiplaSelected.length >= nTarget;
+
+            // Mappa scommessa Oddsmatcher → mercato betprofit
+            const toBetprofitMercato = (scommessa: string, sport: string): string => {
+              const sc = scommessa.split(" vs ")[0].trim();
+              if (sport === "tennis") {
+                return sc === "1" ? "Tennis 1" : sc === "2" ? "Tennis 2" : "Altro Tennis";
+              }
+              if (sport === "basket") {
+                return sc === "1" ? "Basket 1" : sc === "2" ? "Basket 2" : "Altro Basket";
+              }
+              const map: Record<string, string> = {
+                "1": "1 Calcio", "X": "X Calcio", "2": "2 Calcio",
+                "1X": "1X Calcio", "X2": "X2 Calcio", "12": "12 Calcio",
+                "Goal": "Goal Calcio", "No Goal": "No Goal Calcio",
+                "Over 0.5": "Over 0.5 Calcio", "Over 1.5": "Over 1.5 Calcio",
+                "Over 2.5": "Over 2.5 Calcio", "Over 3.5": "Over 3.5 Calcio",
+                "Over 4.5": "Over 4.5 Calcio",
+                "Under 0.5": "Under 0.5 Calcio", "Under 1.5": "Under 1.5 Calcio",
+                "Under 2.5": "Under 2.5 Calcio", "Under 3.5": "Under 3.5 Calcio",
+                "Under 4.5": "Under 4.5 Calcio",
+              };
+              return map[sc] ?? "Altro Calcio";
+            };
+
+            // Mappa campionato Oddsmatcher → competizione betprofit
+            const BETPROFIT_COMPETITIONS = [
+              "Serie A (Italia)", "Premier League (Inghilterra)", "La Liga (Spagna)",
+              "Bundesliga (Germania)", "Ligue 1 (Francia)", "UEFA Champions League",
+              "UEFA Europa League", "UEFA Conference League", "Coppa Italia",
+              "FA Cup (Inghilterra)", "Copa del Rey (Spagna)", "DFB-Pokal (Germania)",
+              "Coupe de France", "Eredivisie (Olanda)", "Primeira Liga (Portogallo)",
+              "Brasileirão", "Liga MX (Messico)", "MLS (USA)", "FIFA World Cup",
+              "Africa Cup of Nations", "Amichevoli internazionali", "Supercoppe nazionali",
+              "Qualificazioni Mondiali 2026", "Play-off Mondiali",
+            ];
+            const toBetprofitCompetizione = (league: string): string => {
+              const lower = league.toLowerCase();
+              for (const comp of BETPROFIT_COMPETITIONS) {
+                const key = comp.toLowerCase().replace(/\s*\(.*\)/, "").trim();
+                if (lower.includes(key) || key.includes(lower)) return comp;
+              }
+              return "Altro";
+            };
+
+            return (
+              <button
+                disabled={!isReady}
+                onClick={() => {
+                  const bonusVal = parseFloat(bonus || "0");
+                  const stakeVal = parseFloat(stakeMultipla || "0");
+
+                  const savedState = {
+                    selections: multiplaSelected.map(opp => ({
+                      evento: opp.eventName,
+                      competizione: toBetprofitCompetizione(opp.league),
+                      mercato: toBetprofitMercato(opp.scommessa, opp.sport),
+                      quota: opp.quotaBook,
+                      dataEvento: opp.eventTime,
+                    })),
+                    quotaInputs: multiplaSelected.map(opp =>
+                      opp.quotaBook.toFixed(2).replace(".", ",")
+                    ),
+                    formValues: {
+                      intestatario: "",
+                      conto: "",
+                      stake: stakeVal || undefined,
+                      tipoBonus: bonusVal > 0 ? "Bonus" : "Nessuno",
+                      bonus: bonusVal > 0 ? bonusVal : undefined,
+                      rimborso: undefined,
+                      percentualeBonus: undefined,
+                      numeroMinimoSelezioni: nTarget,
+                      urlEvento: "",
+                      note: "",
+                      tag: "",
+                    },
+                    selectedIntestatario: "",
+                    selectedConto: "",
+                    tipoBonus: bonusVal > 0 ? "Bonus" : "Nessuno",
+                  };
+
+                  // Encode in base64 (gestisce caratteri speciali italiani)
+                  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
+                  window.open(`https://betprofit.app/ongoing-bets?import=${encoded}`, "_blank");
+                }}
+                className={`px-4 py-2 rounded font-semibold text-sm transition-colors ${
+                  isReady
+                    ? "bg-green-600 text-white hover:bg-green-700 cursor-pointer"
+                    : "bg-[#1a2535] text-slate-500 border border-[#253347] cursor-not-allowed"
+                }`}
+              >
+                INVIA MULTIPLA ↗
+              </button>
+            );
+          })()}
         </div>
 
         {/* Filters Panel */}
@@ -857,6 +955,7 @@ const Index = () => {
             }}
             commission={commission}
             multiplaResetKey={multiplaResetKey}
+            onMultiplaSelectedChange={setMultiplaSelected}
           />
         </div>
       </div>

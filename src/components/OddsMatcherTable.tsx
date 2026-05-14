@@ -15,7 +15,7 @@ interface OddsData {
   centroquoteUrl?: string;          // centroquote.it comparison page URL
 }
 
-interface Opportunity {
+export interface Opportunity {
   eventTime: string;
   sport: string;
   eventName: string;
@@ -95,6 +95,7 @@ interface Props {
   };
   commission: number;
   multiplaResetKey?: number;
+  onMultiplaSelectedChange?: (selected: Opportunity[]) => void;
 }
 
 const EXCHANGE_NAMES = [
@@ -294,7 +295,7 @@ function findMatchingEvents(sourceEvent: OddsData, pool: OddsData[]): OddsData[]
   return pool.filter(ev => eventNamesMatch(sourceEvent.eventName, ev.eventName));
 }
 
-export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, filters, commission, multiplaResetKey }: Props) {
+export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, filters, commission, multiplaResetKey, onMultiplaSelectedChange }: Props) {
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
 
@@ -302,6 +303,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   useEffect(() => {
     setMultiplaSelected([]);
   }, [multiplaResetKey]);
+
+  // Notifica il parent ogni volta che cambia la selezione multipla
+  useEffect(() => {
+    onMultiplaSelectedChange?.(multiplaSelected);
+  }, [multiplaSelected, onMultiplaSelectedChange]);
 
   // ── Snapshot "committed" filters ──────────────────────────────────────────
   // selectedExchanges e filters vengono aggiornati in tempo reale dalla UI,

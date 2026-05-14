@@ -124,6 +124,7 @@ export function PuntaBancaModal({
   const [qBanca, setQBanca] = useState(opp.quotaExchange);
   const [rawQPunta, setRawQPunta] = useState(opp.quotaBook.toFixed(2));
   const [rawQBanca, setRawQBanca] = useState(opp.quotaExchange.toFixed(2));
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setQPunta(opp.quotaBook);
@@ -417,19 +418,29 @@ export function PuntaBancaModal({
             {/* Buttons */}
             <div className="flex gap-2 pt-1">
               <button
-                className="px-5 py-2 text-sm font-bold rounded transition-all"
-                style={{ backgroundColor: "#ffffff", border: "1px solid #1e2d42", color: "#1e2d42" }}
-                onMouseEnter={e => { const b = e.currentTarget; b.style.backgroundColor = "#1e2d42"; b.style.color = "#ffffff"; }}
-                onMouseLeave={e => { const b = e.currentTarget; b.style.backgroundColor = "#ffffff"; b.style.color = "#1e2d42"; }}
+                className="px-5 py-2 text-sm font-bold rounded transition-colors text-white hover:opacity-90"
+                style={{ backgroundColor: copied ? "#16a34a" : "#1e2d42" }}
+                onClick={() => {
+                  if (!result) return;
+                  const bookLabel = isBackLay ? "Banca" : "Punta 2";
+                  const lines = [
+                    `📋 ${isBackLay ? "PUNTA-BANCA" : "PUNTA-PUNTA"}${flagLabels ? ` · ${flagLabels}` : ""}`,
+                    `📅 ${formatDt(opp.eventTime)}`,
+                    `⚽ ${opp.eventName} — ${opp.league}`,
+                    `📌 Mercato: ${opp.market} | Esito: ${opp.scommessa}`,
+                    ``,
+                    `📗 Punta: ${opp.bookmaker} — ${fmtIt(result.totalStake)}€ @ ${fmt2(qPunta)}`,
+                    `📕 ${bookLabel}: ${opp.exchange} — ${fmtIt(result.layStake)}€ @ ${fmt2(qBanca)}${isBackLay ? ` (Rischio: ${fmtIt(Math.ceil(result.rischio * 100) / 100)}€)` : ""}`,
+                    ``,
+                    `📊 Rating: ${fmt2(result.rating)}% | Profitto: ${result.worst >= 0 ? "+" : ""}${fmtIt(Math.floor(result.worst * 100) / 100)}€`,
+                  ];
+                  navigator.clipboard.writeText(lines.join("\n")).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }).catch(() => {});
+                }}
               >
-                CALCOLA →
-              </button>
-              <button
-                className="px-5 py-2 text-sm font-bold rounded transition-colors text-white hover:opacity-90 flex items-center gap-1"
-                style={{ backgroundColor: "#1e2d42" }}
-                onClick={() => alert("Funzione in arrivo!")}
-              >
-                INVIA AL PT ↗
+                {copied ? "✓ Copiato!" : "INVIA ↗"}
               </button>
             </div>
 
