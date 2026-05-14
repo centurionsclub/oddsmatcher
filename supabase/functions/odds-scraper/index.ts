@@ -17,6 +17,7 @@ interface OddsData {
   volume: Record<string, number>;  // lay volume per outcome (Betfair only)
   marketId?: string;               // Betfair market ID (e.g. "1.234567890")
   eventId?: string;                // Betfair event ID for direct URL (e.g. "35512774")
+  centroquoteUrl?: string;         // centroquote.it comparison page URL (bookmaker side)
 }
 
 serve(async (req) => {
@@ -51,7 +52,7 @@ serve(async (req) => {
     while (true) {
       let query = supabase
         .from("live_odds")
-        .select("bookmaker, sport, league, event_name, event_time, market, outcome, odds, volume, market_id, event_id")
+        .select("bookmaker, sport, league, event_name, event_time, market, outcome, odds, volume, market_id, event_id, centroquote_url")
         .gt("event_time", cutoff)
         .order("event_time", { ascending: true })
         .range(offset, offset + PAGE_SIZE - 1);
@@ -122,6 +123,7 @@ serve(async (req) => {
           volume: {},
           marketId: row.market_id ?? undefined,
           eventId: row.event_id ?? undefined,
+          centroquoteUrl: row.centroquote_url ?? undefined,
         });
       }
       const entry = grouped.get(key)!;

@@ -12,6 +12,7 @@ interface OddsData {
   volume?: Record<string, number>;  // lay volume per outcome (Betfair Exchange only)
   marketId?: string;                // Betfair market ID
   eventId?: string;                 // Betfair event ID for direct URL
+  centroquoteUrl?: string;          // centroquote.it comparison page URL
 }
 
 interface Opportunity {
@@ -30,6 +31,7 @@ interface Opportunity {
   volumeExchange?: number;  // Betfair lay volume (€) — only in back-lay mode
   marketId?: string;        // Betfair market ID
   eventId?: string;         // Betfair event ID for direct URL
+  bookmakerUrl?: string;    // centroquote.it comparison page (direct link to match)
 }
 
 interface BestOddsRow {
@@ -540,6 +542,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 volumeExchange: bestVolume,
                 marketId: bestMarketId,
                 eventId: bestEventId,
+                bookmakerUrl: bmEvent.centroquoteUrl,
               });
             }
           });
@@ -1366,15 +1369,39 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                           </span>
                         </td>
                         <td className="py-2 px-3 text-center">
-                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: bookColor.bg, color: bookColor.text }}>
-                            {opp.bookmaker}
-                          </span>
+                          {opp.bookmakerUrl ? (
+                            <a
+                              href={opp.bookmakerUrl}
+                              target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap hover:opacity-80 transition-opacity"
+                              style={{ backgroundColor: bookColor.bg, color: bookColor.text }}
+                            >
+                              {opp.bookmaker} <span className="text-[9px] opacity-70">↗</span>
+                            </a>
+                          ) : (
+                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: bookColor.bg, color: bookColor.text }}>
+                              {opp.bookmaker}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">{opp.quotaBook.toFixed(2).replace(".", ",")}</td>
                         <td className="py-2 px-3 text-center">
-                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
-                            {opp.exchange}
-                          </span>
+                          {opp.eventId ? (
+                            <a
+                              href={`https://www.betfair.it/exchange/plus/it/${opp.sport ?? "calcio"}/${opp.eventId}`}
+                              target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap hover:opacity-80 transition-opacity"
+                              style={{ backgroundColor: exchColor.bg, color: exchColor.text }}
+                            >
+                              {opp.exchange} <span className="text-[9px] opacity-70">↗</span>
+                            </a>
+                          ) : (
+                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
+                              {opp.exchange}
+                            </span>
+                          )}
                         </td>
                         <td className={`py-2 px-3 text-center font-mono text-sm ${isBookVsBook ? "text-[#0d2035] bg-[#87c4e8]" : "text-[#2d0d1a] bg-[#f4a9ba]"}`}>
                           {counterQuota}

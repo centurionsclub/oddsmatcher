@@ -15,6 +15,7 @@ interface ModalOpportunity {
   volumeExchange?: number;
   marketId?: string;
   eventId?: string;
+  bookmakerUrl?: string;
 }
 
 interface Props {
@@ -257,8 +258,8 @@ export function PuntaBancaModal({
 
               <div className="border-b border-gray-200 px-4 py-3 text-sm">
                 Bookmaker -{" "}
-                <a href={getUrl(opp.bookmaker)} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
-                  {getDisplayDomain(opp.bookmaker)}
+                <a href={opp.bookmakerUrl || getUrl(opp.bookmaker)} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                  {opp.bookmakerUrl ? "centroquote.it ↗" : getDisplayDomain(opp.bookmaker)}
                 </a>{" "}→ {sc1}
               </div>
 
@@ -449,7 +450,7 @@ export function PuntaBancaModal({
                     <div className="px-4 py-3 text-sm text-gray-800 text-center">
                       <span className="font-bold">Punta</span> su {getDisplayDomain(opp.bookmaker)}{" "}
                       <a
-                        href={getUrl(opp.bookmaker)}
+                        href={opp.bookmakerUrl || getUrl(opp.bookmaker)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 underline font-medium"

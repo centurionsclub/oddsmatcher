@@ -264,6 +264,7 @@ async def scrape_match_page(
     page = await context.new_page()
     db_rows: list[dict] = []
     expires = (datetime.now(timezone.utc) + timedelta(minutes=CACHE_TTL_MINUTES)).isoformat()
+    cq_url = BASE_URL + match_url  # direct centroquote comparison page URL
 
     try:
         await page.goto(BASE_URL + match_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT_MS)
@@ -313,7 +314,7 @@ async def scrape_match_page(
                 continue
             for i, out in enumerate(outcomes_1x2):
                 if i < len(odds):
-                    db_rows.append(_make_row(bm, league, event_name, event_time, market_key, out, odds[i], expires))
+                    db_rows.append(_make_row(bm, league, event_name, event_time, market_key, out, odds[i], expires, cq_url))
 
         if sport != "calcio":
             # Tennis/basket: only moneyline
@@ -353,7 +354,7 @@ async def scrape_match_page(
                     continue
                 for i, out in enumerate(market_cfg["outcomes"]):
                     if i < len(odds):
-                        db_rows.append(_make_row(bm, league, event_name, event_time, market_cfg["key"], out, odds[i], expires))
+                        db_rows.append(_make_row(bm, league, event_name, event_time, market_cfg["key"], out, odds[i], expires, cq_url))
 
         # --- Over/Under: click tab then expand each threshold row ---
         # centroquote.it shows O/U as an accordion: click "Over/Under" tab to see
@@ -389,8 +390,8 @@ async def scrape_match_page(
                     if not bm:
                         continue
                     if len(odds) >= 2:
-                        db_rows.append(_make_row(bm, league, event_name, event_time, "Over/Under", f"Over {threshold}", odds[0], expires))
-                        db_rows.append(_make_row(bm, league, event_name, event_time, "Over/Under", f"Under {threshold}", odds[1], expires))
+                        db_rows.append(_make_row(bm, league, event_name, event_time, "Over/Under", f"Over {threshold}", odds[0], expires, cq_url))
+                        db_rows.append(_make_row(bm, league, event_name, event_time, "Over/Under", f"Under {threshold}", odds[1], expires, cq_url))
 
     except Exception as exc:
         print(f"    [Match] Error {match_url}: {exc}")
@@ -400,8 +401,8 @@ async def scrape_match_page(
     return db_rows
 
 
-def _make_row(bm, league, event_name, event_time, market, outcome, odds_val, expires):
-    return {
+def _make_row(bm, league, event_name, event_time, market, outcome, odds_val, expires, centroquote_url: str | None = None):
+    row = {
         "bookmaker": bm,
         "sport": league["sport"],
         "league": league["name"],
@@ -413,6 +414,9 @@ def _make_row(bm, league, event_name, event_time, market, outcome, odds_val, exp
         "scraped_at": datetime.now(timezone.utc).isoformat(),
         "expires_at": expires,
     }
+    if centroquote_url:
+        row["centroquote_url"] = centroquote_url
+    return row
 
 
 async def _extract_bm_rows(page: Page) -> list[tuple[str, list[float]]]:
