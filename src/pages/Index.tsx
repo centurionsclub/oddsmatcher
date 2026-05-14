@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useOddsSearch } from "@/hooks/use-odds-search";
 import { OddsMatcherTable, type Opportunity } from "@/components/OddsMatcherTable";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const BOOKMAKERS = [
   "888sport", "Bet365", "BetFlag Bookmaker", "Betsson", "Bwin",
@@ -51,15 +52,11 @@ const Index = () => {
   const [multiplaResetKey, setMultiplaResetKey] = useState(0);
   const [activeSubTab, setActiveSubTab] = useState("singola");
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
+  const { session } = useAuth();
   const [showInviaModal, setShowInviaModal] = useState(false);
   const [inviaIntestatario, setInviaIntestatario] = useState("");
   const [intestatariList, setIntestatariList] = useState<string[]>([]);
   const [intestatariLoading, setIntestatariLoading] = useState(false);
-  const [bpSession, setBpSession] = useState<boolean | null>(null); // null=loading, false=no auth, true=ok
-  const [bpEmail, setBpEmail] = useState("");
-  const [bpPassword, setBpPassword] = useState("");
-  const [bpLoginError, setBpLoginError] = useState("");
-  const [bpLoginLoading, setBpLoginLoading] = useState(false);
 
   // Filter states
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
@@ -174,49 +171,20 @@ const Index = () => {
     }
   }, [oddsLoading]);
 
-  // Controlla sessione e carica intestatari quando si apre il modal
+  // Carica intestatari quando si apre il modal
   useEffect(() => {
-    if (!showInviaModal) return;
-    setBpSession(null);
+    if (!showInviaModal || !session) return;
     setIntestatariList([]);
     setInviaIntestatario("");
-    setBpLoginError("");
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) {
-        setBpSession(false);
-        return;
-      }
-      setBpSession(true);
-      await fetchIntestatari();
-    });
-  }, [showInviaModal]);
-
-  const fetchIntestatari = async () => {
     setIntestatariLoading(true);
-    const { data, error } = await supabase.functions.invoke("get-intestatari");
-    if (!error && Array.isArray(data)) {
-      setIntestatariList(data);
-      if (data.length === 1) setInviaIntestatario(data[0]);
-    }
-    setIntestatariLoading(false);
-  };
-
-  const handleBpLogin = async () => {
-    setBpLoginError("");
-    setBpLoginLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: bpEmail.trim(),
-      password: bpPassword,
+    supabase.functions.invoke("get-intestatari").then(({ data, error }) => {
+      if (!error && Array.isArray(data)) {
+        setIntestatariList(data);
+        if (data.length === 1) setInviaIntestatario(data[0]);
+      }
+      setIntestatariLoading(false);
     });
-    setBpLoginLoading(false);
-    if (error) {
-      setBpLoginError(error.message);
-    } else {
-      setBpSession(true);
-      await fetchIntestatari();
-    }
-  };
+  }, [showInviaModal, session]);
 
   const handlePulisci = () => {
     setStakeError(null);
@@ -976,104 +944,51 @@ const Index = () => {
               style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
               onClick={e => { if (e.target === e.currentTarget) { setShowInviaModal(false); setInviaIntestatario(""); } }}
             >
-              <div className="bg-[#152033] border border-[#1e3050] rounded-xl shadow-2xl p-6 w-[380px] max-w-[90vw]">
+              <div className="bg-[#152033] border border-[#1e3050] rounded-xl shadow-2xl p-6 w-[360px] max-w-[90vw]">
                 <h2 className="text-white font-bold text-lg mb-1">Invia Multipla</h2>
+                <p className="text-slate-400 text-sm mb-4">Seleziona l'intestatario. La multipla verrà salvata automaticamente su BetProfit.</p>
 
-                {/* Stato: caricamento sessione */}
-                {bpSession === null && (
-                  <p className="text-slate-400 text-sm mt-2">Verifica sessione…</p>
-                )}
-
-                {/* Stato: non loggato → form login */}
-                {bpSession === false && (
-                  <>
-                    <p className="text-slate-400 text-sm mb-4">Accedi con le credenziali di BetProfit per caricare gli intestatari.</p>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Email</label>
-                    <input
-                      autoFocus
-                      type="email"
-                      value={bpEmail}
-                      onChange={e => setBpEmail(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") handleBpLogin(); }}
-                      placeholder="email@esempio.com"
-                      className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-[#c8922d]/40 placeholder-slate-500"
-                    />
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Password</label>
-                    <input
-                      type="password"
-                      value={bpPassword}
-                      onChange={e => setBpPassword(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") handleBpLogin(); }}
-                      placeholder="••••••••"
-                      className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#c8922d]/40 placeholder-slate-500"
-                    />
-                    {bpLoginError && (
-                      <p className="text-red-400 text-xs mb-3">{bpLoginError}</p>
+                <label className="block text-sm font-medium text-white mb-1">Intestatario</label>
+                {intestatariLoading ? (
+                  <div className="w-full bg-[#1a2535] border border-[#253347] text-slate-400 rounded px-3 py-2 text-sm mb-5">
+                    Caricamento…
+                  </div>
+                ) : intestatariList.length === 0 ? (
+                  <div className="w-full bg-[#1a2535] border border-red-500/40 text-red-400 rounded px-3 py-2 text-sm mb-5">
+                    Nessun intestatario abilitato trovato
+                  </div>
+                ) : (
+                  <select
+                    autoFocus
+                    value={inviaIntestatario}
+                    onChange={e => setInviaIntestatario(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Escape") { setShowInviaModal(false); setInviaIntestatario(""); } }}
+                    className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                  >
+                    {intestatariList.length > 1 && (
+                      <option value="">— Seleziona intestatario —</option>
                     )}
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => { setShowInviaModal(false); }}
-                        className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-[#253347] rounded transition-colors"
-                      >
-                        Annulla
-                      </button>
-                      <button
-                        onClick={handleBpLogin}
-                        disabled={bpLoginLoading || !bpEmail.trim() || !bpPassword}
-                        className="px-5 py-2 text-sm font-bold rounded transition-colors bg-[#c8922d] text-white hover:bg-[#b07a24] disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        {bpLoginLoading ? "Accesso…" : "Accedi"}
-                      </button>
-                    </div>
-                  </>
+                    {intestatariList.map(nome => (
+                      <option key={nome} value={nome}>{nome}</option>
+                    ))}
+                  </select>
                 )}
 
-                {/* Stato: loggato → dropdown intestatari */}
-                {bpSession === true && (
-                  <>
-                    <p className="text-slate-400 text-sm mb-4">Seleziona l'intestatario. La multipla verrà salvata automaticamente.</p>
-                    <label className="block text-sm font-medium text-white mb-1">Intestatario</label>
-                    {intestatariLoading ? (
-                      <div className="w-full bg-[#1a2535] border border-[#253347] text-slate-400 rounded px-3 py-2 text-sm mb-5">
-                        Caricamento…
-                      </div>
-                    ) : intestatariList.length === 0 ? (
-                      <div className="w-full bg-[#1a2535] border border-red-500/40 text-red-400 rounded px-3 py-2 text-sm mb-5">
-                        Nessun intestatario abilitato trovato
-                      </div>
-                    ) : (
-                      <select
-                        autoFocus
-                        value={inviaIntestatario}
-                        onChange={e => setInviaIntestatario(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Escape") setShowInviaModal(false); }}
-                        className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-green-500/40"
-                      >
-                        {intestatariList.length > 1 && (
-                          <option value="">— Seleziona intestatario —</option>
-                        )}
-                        {intestatariList.map(nome => (
-                          <option key={nome} value={nome}>{nome}</option>
-                        ))}
-                      </select>
-                    )}
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => { setShowInviaModal(false); setInviaIntestatario(""); }}
-                        className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-[#253347] rounded transition-colors"
-                      >
-                        Annulla
-                      </button>
-                      <button
-                        onClick={handleInvia}
-                        disabled={!inviaIntestatario.trim()}
-                        className="px-5 py-2 text-sm font-bold rounded transition-colors bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        Invia ↗
-                      </button>
-                    </div>
-                  </>
-                )}
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => { setShowInviaModal(false); setInviaIntestatario(""); }}
+                    className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-[#253347] rounded transition-colors"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    onClick={handleInvia}
+                    disabled={!inviaIntestatario.trim()}
+                    className="px-5 py-2 text-sm font-bold rounded transition-colors bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Invia ↗
+                  </button>
+                </div>
               </div>
             </div>
           );
