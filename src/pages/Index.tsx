@@ -342,7 +342,7 @@ const Index = () => {
 
                   // Encode in base64 (gestisce caratteri speciali italiani)
                   const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
-                  window.open(`https://betprofit.app/ongoing-bets?import=${encoded}`, "_blank");
+                  window.open(`https://betprofit.app/puntate?import=${encoded}`, "_blank");
                 }}
                 className={`px-4 py-2 rounded font-semibold text-sm transition-colors ${
                   isReady
