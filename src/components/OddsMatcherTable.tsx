@@ -299,12 +299,14 @@ function BookLogo({ bookmaker }: { bookmaker: string }) {
     );
   }
   return (
-    <img
-      src={logoPath}
-      alt={label}
-      className="h-7 w-auto max-w-[110px] object-contain rounded block mx-auto"
-      onError={() => setFailed(true)}
-    />
+    <div className="flex justify-center items-center">
+      <img
+        src={logoPath}
+        alt={label}
+        className="h-7 w-auto max-w-[110px] object-contain rounded"
+        onError={() => setFailed(true)}
+      />
+    </div>
   );
 }
 
