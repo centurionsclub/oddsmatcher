@@ -1093,8 +1093,6 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     if (mf.selectedMarkets && mf.selectedMarkets.length > 0) {
       filtered = filtered.filter(row =>
         mf.selectedMarkets.some((m: string) =>
-          row.market.toLowerCase().includes(m.toLowerCase()) ||
-          m.toLowerCase().includes(row.market.toLowerCase()) ||
           row.outcome.toLowerCase() === m.toLowerCase()
         )
       );
