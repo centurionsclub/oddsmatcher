@@ -53,6 +53,8 @@ const Index = () => {
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
   const [showInviaModal, setShowInviaModal] = useState(false);
   const [inviaIntestatario, setInviaIntestatario] = useState("");
+  const [intestatariList, setIntestatariList] = useState<string[]>([]);
+  const [intestatariLoading, setIntestatariLoading] = useState(false);
 
   // Filter states
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
@@ -166,6 +168,21 @@ const Index = () => {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [oddsLoading]);
+
+  // Carica intestatari da betprofit quando si apre il modal
+  useEffect(() => {
+    if (!showInviaModal) return;
+    setIntestatariLoading(true);
+    setIntestatariList([]);
+    setInviaIntestatario("");
+    supabase.functions.invoke("get-intestatari").then(({ data, error }) => {
+      if (!error && Array.isArray(data)) {
+        setIntestatariList(data);
+        if (data.length === 1) setInviaIntestatario(data[0]);
+      }
+      setIntestatariLoading(false);
+    });
+  }, [showInviaModal]);
 
   const handlePulisci = () => {
     setStakeError(null);
@@ -930,15 +947,30 @@ const Index = () => {
                 <p className="text-slate-400 text-sm mb-4">Inserisci l'intestatario del conto su Bet Profit. La multipla verrà salvata automaticamente.</p>
 
                 <label className="block text-sm font-medium text-white mb-1">Intestatario</label>
-                <input
-                  autoFocus
-                  type="text"
-                  value={inviaIntestatario}
-                  onChange={e => setInviaIntestatario(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") handleInvia(); if (e.key === "Escape") { setShowInviaModal(false); setInviaIntestatario(""); } }}
-                  placeholder="Es. Mario Rossi"
-                  className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-green-500/40 placeholder-slate-500"
-                />
+                {intestatariLoading ? (
+                  <div className="w-full bg-[#1a2535] border border-[#253347] text-slate-400 rounded px-3 py-2 text-sm mb-5">
+                    Caricamento…
+                  </div>
+                ) : intestatariList.length === 0 ? (
+                  <div className="w-full bg-[#1a2535] border border-red-500/40 text-red-400 rounded px-3 py-2 text-sm mb-5">
+                    Nessun intestatario trovato su BetProfit
+                  </div>
+                ) : (
+                  <select
+                    autoFocus
+                    value={inviaIntestatario}
+                    onChange={e => setInviaIntestatario(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Escape") { setShowInviaModal(false); setInviaIntestatario(""); } }}
+                    className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                  >
+                    {intestatariList.length > 1 && (
+                      <option value="">— Seleziona intestatario —</option>
+                    )}
+                    {intestatariList.map(nome => (
+                      <option key={nome} value={nome}>{nome}</option>
+                    ))}
+                  </select>
+                )}
 
                 <div className="flex gap-2 justify-end">
                   <button
