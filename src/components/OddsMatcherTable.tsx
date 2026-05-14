@@ -92,6 +92,8 @@ interface Props {
     // Tre Vie specific
     trevieMain?: string;
     trevieSecondary?: string[];
+    // Best Odds specific
+    selectedMarkets?: string[];
   };
   commission: number;
   multiplaResetKey?: number;
@@ -1085,11 +1087,23 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
   // ═══ RENDER: BEST ODDS ═══
   if (activeTab === "bestodds") {
-    const filtered = applyFilters(bestOddsRows).slice(0, 200);
+    let filtered = bestOddsRows;
+    // Filter by selected markets
+    const mf = committedFilters as any;
+    if (mf.selectedMarkets && mf.selectedMarkets.length > 0) {
+      filtered = filtered.filter(row =>
+        mf.selectedMarkets.some((m: string) =>
+          row.market.toLowerCase().includes(m.toLowerCase()) ||
+          m.toLowerCase().includes(row.market.toLowerCase()) ||
+          row.outcome.toLowerCase() === m.toLowerCase()
+        )
+      );
+    }
+    const filteredRows = applyFilters(filtered).slice(0, 200);
     return (
       <div>
         <div className="text-right text-xs text-white px-4 py-2">
-          {filtered.length} risultati
+          {filteredRows.length} risultati
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
@@ -1098,41 +1112,42 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
-                <th className="text-center py-2 px-2 font-semibold">Nazione</th>
                 <th className="text-center py-2 px-2 md:px-3 font-semibold">Mercato</th>
                 <th className="text-center py-2 px-2 md:px-3 font-semibold">Esito</th>
-                <th className="text-center py-2 px-2 md:px-3 font-semibold">Miglior Book</th>
-                <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#87c4e8]">Quota Max</th>
-                <th className="text-center py-2 px-2 md:px-3 font-semibold">Peggior Book</th>
-                <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#f4a9ba]">Quota Min</th>
-                <th className="text-center py-2 px-2 md:px-3 font-semibold">Diff</th>
+                <th className="text-left py-2 px-2 md:px-3 font-semibold text-[#87c4e8]">Quote (dal migliore)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
-              {filtered.map((row, i) => {
-                const bestColor = getBookColor(row.bestBookmaker);
-                const worstColor = getBookColor(row.worstBookmaker);
-                const diff = ((row.bestOdds - row.worstOdds) / row.worstOdds * 100).toFixed(1);
-                return (
-                  <tr key={i} className="hover:bg-[#1e2d42] transition-colors">
-                    <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
-                    <td className="py-2 px-2 text-center text-base">{getSportIcon(row.sport)}</td>
-                    <td className="py-2 px-3 text-sm text-white font-medium max-w-[220px] truncate">{row.eventName}</td>
-                    <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(row.league)}</td>
-                    <td className="py-2 px-3 text-center text-xs text-white">{row.market}</td>
-                    <td className="py-2 px-3 text-center text-sm font-medium text-white">{row.outcome}</td>
-                    <td className="py-2 px-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: bestColor.bg, color: bestColor.text }}>{row.bestBookmaker}</span>
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">{row.bestOdds.toFixed(2).replace(".", ",")}</td>
-                    <td className="py-2 px-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: worstColor.bg, color: worstColor.text }}>{row.worstBookmaker}</span>
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono text-sm text-[#2d0d1a] bg-[#f4a9ba]">{row.worstOdds.toFixed(2).replace(".", ",")}</td>
-                    <td className="py-2 px-3 text-center text-xs font-medium text-[#c8922d]">+{diff}%</td>
-                  </tr>
-                );
-              })}
+              {filteredRows.map((row, i) => (
+                <tr key={i} className="hover:bg-[#1e2d42] transition-colors">
+                  <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
+                  <td className="py-2 px-2 text-center text-base">{getSportIcon(row.sport)}</td>
+                  <td className="py-2 px-3 text-sm text-white font-medium max-w-[200px] truncate">{row.eventName}</td>
+                  <td className="py-2 px-3 text-center text-xs text-white">{row.market}</td>
+                  <td className="py-2 px-3 text-center text-sm font-bold text-white">{row.outcome}</td>
+                  <td className="py-2 px-3">
+                    <div className="flex flex-wrap gap-1">
+                      {row.allOdds.slice(0, 8).map((o, idx) => {
+                        const c = getBookColor(o.bookmaker);
+                        const isFirst = idx === 0;
+                        return (
+                          <span
+                            key={o.bookmaker}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap"
+                            style={{
+                              backgroundColor: isFirst ? "#c8922d" : c.bg,
+                              color: isFirst ? "#fff" : c.text,
+                              outline: isFirst ? "2px solid #ffd700" : "none",
+                            }}
+                          >
+                            {idx + 1}° {o.bookmaker.replace(/ bookmaker$/i, "").replace(/ exchange$/i, "")} — {o.odds.toFixed(2).replace(".", ",")}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

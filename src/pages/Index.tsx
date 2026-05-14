@@ -338,7 +338,7 @@ const Index = () => {
             </div>
 
             {/* Sport */}
-            {activeSubTab !== "multipla" && <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+            {activeSubTab !== "multipla" && activeSubTab !== "bestodds" && <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
               <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Sport</span>
               <div className="flex gap-1">
                 {[
@@ -364,7 +364,7 @@ const Index = () => {
 
             {/* Mercati - nascosto per tre vie (sempre 1X2) */}
             {activeSubTab !== "trevie" && <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
-              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Mercati</span>
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">{activeSubTab === "bestodds" ? "Mercato" : "Mercati"}</span>
               <div className="relative w-full sm:w-auto">
                 <button
                   onClick={() => { setMarketsOpen(!marketsOpen); setBookmakerOpen(false); setExchangeOpen(false); }}
@@ -398,7 +398,7 @@ const Index = () => {
             </div>}
 
             {/* Bookmaker — nascosto per tre vie (coperto da Book 1 / Book 2/3) */}
-            {activeSubTab !== "trevie" && <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+            {activeSubTab !== "trevie" && activeSubTab !== "bestodds" && <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
               <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Bookmaker</span>
               <div className="relative w-full sm:w-auto">
                 <button
@@ -446,7 +446,7 @@ const Index = () => {
             </div>}
 
             {/* Exchange / Bookmaker — nascosto per tre vie */}
-            {activeSubTab !== "trevie" && (() => {
+            {activeSubTab !== "trevie" && activeSubTab !== "bestodds" && (() => {
               const hasBookInExchange = selectedExchanges.some(e => BOOKMAKERS.includes(e));
               const allExchangesSelected = EXCHANGES.every(e => selectedExchanges.includes(e));
               const allBookmakersSelected = BOOKMAKERS.every(b => selectedExchanges.includes(b));
@@ -680,7 +680,7 @@ const Index = () => {
             )}
 
             {/* Stake */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+            {activeSubTab !== "bestodds" && <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
               <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">
                 {activeSubTab === "multipla" ? "Stake Multipla" : "Stake Punta"}
               </span>
@@ -700,10 +700,10 @@ const Index = () => {
                 />
                 Free Bet
               </label>
-            </div>
+            </div>}
 
             {/* Bonus */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+            {activeSubTab !== "bestodds" && <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
               <span className="text-sm font-semibold text-white bg-[#c8922d] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Bonus</span>
               <input
                 type="text"
@@ -717,7 +717,7 @@ const Index = () => {
                 <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-white" />
                 Rimborso
               </label>
-            </div>
+            </div>}
 
             {/* Errore stake vuoto */}
             {stakeError && (
@@ -728,7 +728,7 @@ const Index = () => {
             )}
 
             {/* Quota rows - condizionali per tab */}
-            {activeSubTab === "multipla" ? (
+            {activeSubTab !== "bestodds" && (activeSubTab === "multipla" ? (
               <>
                 {/* Quota Minima Multipla + N° Eventi */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
@@ -798,7 +798,7 @@ const Index = () => {
                   className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-full sm:w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
                 />
               </div>
-            )}
+            ))}
 
             {/* Partita */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
@@ -827,7 +827,7 @@ const Index = () => {
             </div>
 
             {/* Campionato */}
-            <div className={`flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 ${activeSubTab === "multipla" ? "mb-3" : ""}`}>
+            {activeSubTab !== "bestodds" && <div className={`flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 ${activeSubTab === "multipla" ? "mb-3" : ""}`}>
               <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Campionato</span>
               <div className="relative w-full sm:flex-1 sm:max-w-[300px]">
                 <input
@@ -850,7 +850,7 @@ const Index = () => {
                   </div>
                 )}
               </div>
-            </div>
+            </div>}
 
             {/* Da data / A data - multipla e tre vie */}
             {(activeSubTab === "multipla" || activeSubTab === "trevie") && (
@@ -1100,6 +1100,7 @@ const Index = () => {
               aData,
               trevieMain,
               trevieSecondary,
+              selectedMarkets,
             }}
             commission={commission}
             multiplaResetKey={multiplaResetKey}
