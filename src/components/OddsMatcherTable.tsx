@@ -1213,13 +1213,44 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       multiplaOpps = multiplaOpps.filter(o => new Date(o.eventTime).getTime() <= to);
     }
 
-    const savedQMin = filters.quotaMinima;
-    const savedQMax = filters.quotaMassima;
-    (filters as any).quotaMinima = "";
-    (filters as any).quotaMassima = "";
-    const filtered = applyFilters(multiplaOpps).slice(0, 200);
-    (filters as any).quotaMinima = savedQMin;
-    (filters as any).quotaMassima = savedQMax;
+    // Per multipla: applica solo filtro bookmaker, partita e liquidità — NO quota min/max
+    // (multipla ha i propri filtri quotaPartitaMinima/Massima già applicati sopra)
+    const filtered = (() => {
+      let r = multiplaOpps;
+      // Bookmaker filter
+      if (committedFilters.bookmaker.length > 0) {
+        r = r.filter(opp =>
+          committedFilters.bookmaker.some(bm =>
+            opp.bookmaker.toLowerCase().includes(bm.toLowerCase()) ||
+            bm.toLowerCase().includes(opp.bookmaker.toLowerCase())
+          )
+        );
+      }
+      // Partita filter
+      if (committedFilters.partita) {
+        const search = committedFilters.partita.toLowerCase();
+        r = r.filter(o => o.eventName.toLowerCase().includes(search));
+      }
+      // Liquidità: usa stakeMultipla se disponibile, altrimenti stakePunta
+      if (committedFilters.filtroLiquidita) {
+        const stakeRaw = committedFilters.stakeMultipla || committedFilters.stakePunta || "0";
+        const stake = parseFloat(stakeRaw.replace(",", ".")) || 0;
+        const bonus = parseFloat((committedFilters.bonus || "0").replace(",", ".")) || 0;
+        const totalStake = stake + bonus;
+        const effectiveStake = totalStake > 0 ? totalStake : 10;
+        const c = commission / 100;
+        r = r.filter(opp => {
+          if (opp.isBookVsBook || opp.volumeExchange == null) return true;
+          if (!opp.quotaBook || !opp.quotaExchange || opp.quotaExchange <= c) return true;
+          const isFB = committedFilters.freebet;
+          const layStake = isFB
+            ? (effectiveStake * (opp.quotaBook - 1)) / (opp.quotaExchange - c)
+            : (effectiveStake * opp.quotaBook) / (opp.quotaExchange - c);
+          return opp.volumeExchange >= layStake;
+        });
+      }
+      return r;
+    })().slice(0, 200);
 
     if (filtered.length === 0) {
       return (
