@@ -1242,7 +1242,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   // ═══ Helper: render opportunity table ═══
   function renderOpportunityTable(opps: Opportunity[], isBookVsBook: boolean) {
     const showVolume = !isBookVsBook; // volume only in back-lay mode
-    const colSpan = showVolume ? 12 : 11;
+    const colSpan = showVolume ? 11 : 10;
 
     // Sort: date ASC → rating DESC
     const sorted = [...opps].sort((a, b) => {
@@ -1321,14 +1321,13 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
                 <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 2</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Scommessa</th>
                 <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 2</th>
-                <th className={`text-center py-2.5 px-3 font-semibold ${isBookVsBook ? "text-[#87c4e8]" : "text-[#f4a9ba]"}`}>Quota 2</th>
-                {showVolume && <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Volume</th>}
+                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker</th>
+                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
+                <th className="text-center py-2.5 px-3 font-semibold">Exchange</th>
+                <th className={`text-center py-2.5 px-3 font-semibold ${isBookVsBook ? "text-[#87c4e8]" : "text-[#f4a9ba]"}`}>Quota</th>
+                {showVolume && <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Liquidità</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
@@ -1348,9 +1347,6 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                   {dayOpps.map((opp, i) => {
                     const bookColor = getBookColor(opp.bookmaker);
                     const exchColor = getBookColor(opp.exchange);
-                    const vsSplit = opp.scommessa.split(" vs ");
-                    const sc1 = vsSplit[0] ?? opp.scommessa;
-                    const sc2 = vsSplit[1] ?? opp.scommessa;
                     const counterQuota = opp.quotaExchange > 0 ? opp.quotaExchange.toFixed(2).replace(".", ",") : "—";
                     return (
                       <tr key={`${date}-${i}`} className="hover:bg-[#1e2d42] transition-colors cursor-pointer" onClick={() => setSelectedOpp(opp)}>
@@ -1358,8 +1354,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                         <td className="py-2 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
                         <td className="py-2 px-3 text-sm text-white font-medium max-w-[220px] truncate">{opp.eventName}</td>
                         <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(opp.league)}</td>
-                        <td className="py-2 px-3 text-center text-sm font-bold text-white">{sc1}</td>
-                        <td className="py-2 px-3 text-center text-sm font-bold text-white">{sc2}</td>
+                        <td className="py-2 px-3 text-center text-sm font-bold text-white">{opp.scommessa}</td>
                         <td className="py-2 px-3 text-center">
                           <span className={`text-sm font-bold ${
                             opp.rating >= 100 ? "text-green-400" :
