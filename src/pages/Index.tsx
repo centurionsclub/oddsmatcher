@@ -943,6 +943,7 @@ const Index = () => {
               selectedIntestatario: inviaIntestatario.trim(),
               selectedConto: "",
               tipoBonus: bonusVal > 0 ? "Bonus" : "Nessuno",
+              bookmakerPunta: multiplaSelected[0]?.bookmaker ?? "",
               intestatarioBanca: inviaIntestatarioBanca.trim(),
               bancate: [...multiplaSelected].sort((a, b) => new Date(a.eventTime).getTime() - new Date(b.eventTime).getTime()).map(opp => ({
                 evento: opp.eventName,
