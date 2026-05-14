@@ -1254,15 +1254,8 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
     if (filtered.length === 0) {
       return (
-        <div className="text-center py-12 text-white space-y-2">
-          <div>Nessuna opportunità trovata con i filtri multipla impostati.</div>
-          <div className="text-xs text-slate-400 font-mono">
-            data:{data?.data?.length ?? 0} singola:{singolaOpps.length} calcio:{singolaOpps.filter(o=>o.sport==="calcio").length} multiplaOpps:{multiplaOpps.length} filtered:{filtered.length}
-            {" | "} exchanges:{committedExchanges.join(",")}
-            {" | "} isPP:{isPuntaPuntaMode?"si":"no"}
-            {" | "} stake:"{committedFilters.stakeMultipla}"/"{committedFilters.stakePunta}"
-            {" | "} liq:{committedFilters.filtroLiquidita?"on":"off"}
-          </div>
+        <div className="text-center py-12 text-white">
+          Nessuna opportunità trovata. Clicca <strong>Aggiorna</strong> per caricare i dati.
         </div>
       );
     }
@@ -1369,17 +1362,28 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         )}
 
         {/* ── Contatore selezione ── */}
-        {numEventiTarget > 0 && (
-          <div className={`px-4 py-1.5 text-xs border-b border-[#1e3050] ${ready ? "bg-green-900/30" : "bg-[#0d1320]"}`}>
-            <span className="text-white">
+        <div className={`px-4 py-2 text-xs border-b border-[#1e3050] flex items-center gap-3 ${ready ? "bg-green-900/30" : "bg-[#0d1829]"}`}>
+          <span className="text-slate-400">👆 Clicca una riga per aggiungerla alla multipla</span>
+          {numEventiTarget > 0 && (
+            <span className="text-white font-semibold">
               Selezionati:{" "}
               <span className={`font-bold ${ready ? "text-green-400" : "text-[#c8922d]"}`}>
                 {n}/{numEventiTarget}
               </span>
-              {!ready && <span className="text-slate-400 ml-2">— clicca le righe per selezionare gli eventi della multipla</span>}
             </span>
-          </div>
-        )}
+          )}
+          {numEventiTarget === 0 && n > 0 && (
+            <span className="text-[#c8922d] font-semibold">{n} selezionati</span>
+          )}
+          {n > 0 && (
+            <button
+              onClick={() => setMultiplaSelected([])}
+              className="ml-auto text-xs text-slate-400 hover:text-white border border-[#253347] px-2 py-0.5 rounded"
+            >
+              Azzera ✕
+            </button>
+          )}
+        </div>
 
         {/* ── Tabella ── */}
         <div className="overflow-x-auto">
@@ -1417,13 +1421,16 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                     onClick={() => !isFull && toggleMultipla(opp)}
                     className={`transition-colors ${
                       isSelected
-                        ? "bg-[#193d1c] cursor-pointer"
+                        ? "bg-[#193d1c] border-l-4 border-green-500 cursor-pointer"
                         : isFull
                           ? "opacity-40 cursor-not-allowed"
-                          : "hover:bg-[#1a2535] cursor-pointer"
+                          : "hover:bg-[#1a2535] cursor-pointer border-l-4 border-transparent"
                     }`}
                   >
-                    <td className="py-2 px-3 text-white text-xs whitespace-nowrap">{formatDate(opp.eventTime)}</td>
+                    <td className="py-2 px-3 text-white text-xs whitespace-nowrap">
+                      <span className="mr-1">{isSelected ? "✅" : ""}</span>
+                      {formatDate(opp.eventTime)}
+                    </td>
                     <td className="py-2 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
                     <td className="py-2 px-3 text-white font-medium max-w-[180px] truncate">{opp.eventName}</td>
                     <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(opp.league)}</td>

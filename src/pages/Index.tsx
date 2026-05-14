@@ -124,19 +124,27 @@ const Index = () => {
   [campionato, allLeagues]);
 
   const handleAggiorna = () => {
-    // Valida stake: almeno uno tra Stake Punta/Multipla e Bonus deve essere compilato
-    // (non richiesto per Tre Vie dove lo stake è opzionale)
-    if (activeSubTab !== "trevie") {
-      const relevantStake = activeSubTab === "multipla" ? stakeMultipla : stakePunta;
-      const stakeVal = parseFloat(relevantStake.replace(",", ".") || "0");
+    // Singola: richiede stake punta o bonus
+    if (activeSubTab === "singola") {
+      const stakeVal = parseFloat(stakePunta.replace(",", ".") || "0");
       const bonusVal = parseFloat(bonus.replace(",", ".") || "0");
       if (!stakeVal && !bonusVal) {
-        const stakeLabel = activeSubTab === "multipla" ? "Stake Multipla" : "Stake Punta";
-        setStakeError(`Inserisci un importo in "${stakeLabel}" oppure in "Bonus" per continuare.`);
+        setStakeError(`Inserisci un importo in "Stake Punta" oppure in "Bonus" per continuare.`);
         return;
       }
     }
-    setStakeError(null);
+    // Multipla: avvisa se N° eventi < 2 (non blocca la ricerca)
+    if (activeSubTab === "multipla") {
+      const n = parseInt(numEventi || "0");
+      if (n < 2) {
+        setStakeError(`Imposta "N° Eventi" ad almeno 2 per la multipla.`);
+        // NON fare return: la ricerca va comunque avanti
+      } else {
+        setStakeError(null);
+      }
+    } else {
+      setStakeError(null);
+    }
     setFiltersOpen(false); // nascondi i filtri subito
     setMultiplaResetKey(k => k + 1); // reset selezione multipla
     searchOdds({
