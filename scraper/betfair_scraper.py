@@ -48,10 +48,12 @@ LOGIN_URL = "https://identitysso.betfair.it/api/login"
 BETTING_URL = "https://api.betfair.com/exchange/betting/rest/v1.0/"
 
 # Betfair eventTypeId per sport
+# https://api.betfair.com/exchange/betting/rest/v1/listEventTypes/
+# 7 = Horse Racing (NOT basket), 7522 = Basketball
 SPORT_IDS = {
     "calcio": "1",
     "tennis": "2",
-    "basket": "7",
+    "basket": "7522",
 }
 
 # Mercati da scrapare

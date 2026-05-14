@@ -655,8 +655,10 @@ _MATCH_TIME_JS = """
 
 def _parse_matches_raw(matches_raw: list) -> list[dict]:
     """Parse raw JS output into event dicts; also preserve inline bookmaker texts if present.
-    Skips live/in-progress matches (event_time already in the past by >90 min)."""
+    Skips live/in-progress matches (event_time already in the past by >90 min).
+    Deduplicates: some leagues (e.g. NBA) list the same game twice with teams swapped."""
     events = []
+    seen_pairs: set = set()   # frozenset({home_lower, away_lower})
     now_utc = datetime.now(timezone.utc)
     cutoff = now_utc - timedelta(minutes=90)  # matches started >90 min ago are likely live/finished
     for m in (matches_raw or []):
@@ -664,6 +666,11 @@ def _parse_matches_raw(matches_raw: list) -> list[dict]:
         away = m.get("away", "").strip()
         if not home or not away:
             continue
+        # Dedup: skip if same team pair already seen (regardless of home/away order)
+        pair_key = frozenset({home.lower(), away.lower()})
+        if pair_key in seen_pairs:
+            continue
+        seen_pairs.add(pair_key)
         event_time = _parse_time_best_effort(m.get("timeText", ""))
         # Skip matches that are clearly already live/finished (started >90 min ago)
         try:
