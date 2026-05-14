@@ -1110,12 +1110,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                             </span>
                           </td>
                           <td className="py-1.5 px-3 text-center">
-                            <span
-                              className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap"
-                              style={{ backgroundColor: bookColor.bg, color: bookColor.text }}
-                            >
-                              {leg.bookmaker}
-                            </span>
+                            <BookLogo bookmaker={leg.bookmaker} />
                           </td>
                           <td className="py-1.5 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">
                             {leg.odds.toFixed(2).replace(".", ",")}
@@ -1260,11 +1255,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                       </span>
                     </td>
                     <td className="py-2 px-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: c1.bg, color: c1.text }}>{row.book1}</span>
+                      <BookLogo bookmaker={row.book1} />
                     </td>
                     <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">{row.odds1.toFixed(2).replace(".", ",")}</td>
                     <td className="py-2 px-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: c2.bg, color: c2.text }}>{row.book2}</span>
+                      <BookLogo bookmaker={row.book2} />
                     </td>
                     <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#2d0d1a] bg-[#f4a9ba]">{row.odds2.toFixed(2).replace(".", ",")}</td>
                   </tr>
@@ -1525,17 +1520,13 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                       <span className={`text-sm font-bold ${ratingColor}`}>{opp.rating.toFixed(2)}%</span>
                     </td>
                     <td className="py-2 px-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: bookColor.bg, color: bookColor.text }}>
-                        {opp.bookmaker}
-                      </span>
+                      <BookLogo bookmaker={opp.bookmaker} />
                     </td>
                     <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">
                       {opp.quotaBook.toFixed(2).replace(".", ",")}
                     </td>
                     <td className="py-2 px-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
-                        {opp.exchange}
-                      </span>
+                      <BookLogo bookmaker={opp.exchange} />
                     </td>
                     <td className="py-2 px-3 text-center font-mono text-sm text-[#2d0d1a] bg-[#f4a9ba]">
                       {opp.quotaExchange.toFixed(2).replace(".", ",")}
@@ -1691,37 +1682,21 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                         </td>
                         <td className="py-2 px-3 text-center">
                           {opp.bookmakerUrl ? (
-                            <a
-                              href={opp.bookmakerUrl}
-                              target="_blank" rel="noopener noreferrer"
-                              onClick={e => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap hover:opacity-80 transition-opacity"
-                              style={{ backgroundColor: bookColor.bg, color: bookColor.text }}
-                            >
-                              {opp.bookmaker} <span className="text-[9px] opacity-70">↗</span>
+                            <a href={opp.bookmakerUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="hover:opacity-80 transition-opacity inline-block">
+                              <BookLogo bookmaker={opp.bookmaker} />
                             </a>
                           ) : (
-                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: bookColor.bg, color: bookColor.text }}>
-                              {opp.bookmaker}
-                            </span>
+                            <BookLogo bookmaker={opp.bookmaker} />
                           )}
                         </td>
                         <td className="py-2 px-3 text-center font-mono text-sm font-bold text-[#0d2035] bg-[#87c4e8]">{opp.quotaBook.toFixed(2).replace(".", ",")}</td>
                         <td className="py-2 px-3 text-center">
                           {opp.eventId ? (
-                            <a
-                              href={`https://www.betfair.it/exchange/plus/it/${opp.sport ?? "calcio"}/${opp.eventId}`}
-                              target="_blank" rel="noopener noreferrer"
-                              onClick={e => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap hover:opacity-80 transition-opacity"
-                              style={{ backgroundColor: exchColor.bg, color: exchColor.text }}
-                            >
-                              {opp.exchange} <span className="text-[9px] opacity-70">↗</span>
+                            <a href={`https://www.betfair.it/exchange/plus/it/${opp.sport ?? "calcio"}/${opp.eventId}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="hover:opacity-80 transition-opacity inline-block">
+                              <BookLogo bookmaker={opp.exchange} />
                             </a>
                           ) : (
-                            <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap" style={{ backgroundColor: exchColor.bg, color: exchColor.text }}>
-                              {opp.exchange}
-                            </span>
+                            <BookLogo bookmaker={opp.exchange} />
                           )}
                         </td>
                         <td className={`py-2 px-3 text-center font-mono text-sm ${isBookVsBook ? "text-[#0d2035] bg-[#87c4e8]" : "text-[#2d0d1a] bg-[#f4a9ba]"}`}>
