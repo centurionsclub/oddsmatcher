@@ -6,7 +6,7 @@ import { OddsMatcherTable } from "@/components/OddsMatcherTable";
 import { supabase } from "@/integrations/supabase/client";
 
 const BOOKMAKERS = [
-  "888sport", "AdmiralBet", "Bet365", "Betfair Bookmaker", "BetFlag Bookmaker",
+  "888sport", "AdmiralBet", "Bet365", "BetFlag Bookmaker",
   "Betsson", "Bwin", "Codere", "DAZN Bet", "DomusBet", "E-Play24", "Eurobet",
   "Fastbet", "Gioco Digitale", "GoldBet", "LeoVegas", "Lottomatica", "NetBet",
   "NetWin", "Planetwin365", "Sisal", "Snai", "Stanleybet", "William Hill",
