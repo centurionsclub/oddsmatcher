@@ -299,7 +299,7 @@ function BookLogo({ bookmaker }: { bookmaker: string }) {
     );
   }
   return (
-    <div className="flex justify-center items-center rounded px-1" style={{ backgroundColor: c.bg }}>
+    <div className="flex justify-center items-center">
       <img
         src={logoPath}
         alt={label}
