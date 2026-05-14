@@ -581,7 +581,12 @@ const Index = () => {
                           Tutti (deseleziona)
                         </button>
                         <button
-                          onClick={() => setTrevieSecondary([...BOOKMAKERS])}
+                          onClick={() => setTrevieSecondary(
+                            BOOKMAKERS.filter(b => [
+                              "lottomatica","goldbet","bet365","planetwin365",
+                              "snai","sisal","william hill","eurobet","admiralbet",
+                            ].some(t => b.toLowerCase().includes(t)))
+                          )}
                           className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-white border-b border-[#253347] bg-[#1e2d42]"
                         >
                           ★ Seleziona Top
