@@ -58,6 +58,8 @@ const Index = () => {
   const [inviaIntestatarioBanca, setInviaIntestatarioBanca] = useState("");
   const [intestatariList, setIntestatariList] = useState<string[]>([]);
   const [intestatariLoading, setIntestatariLoading] = useState(false);
+  const [inviaTag, setInviaTag] = useState("none");
+  const [tagList, setTagList] = useState<string[]>([]);
 
   // Filter states
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
@@ -172,21 +174,35 @@ const Index = () => {
     }
   }, [oddsLoading]);
 
-  // Carica intestatari quando si apre il modal
+  // Carica intestatari e tag quando si apre il modal
   useEffect(() => {
     if (!showInviaModal || !session) return;
     setIntestatariList([]);
     setInviaIntestatario("");
     setInviaIntestatarioBanca("");
+    setInviaTag("none");
+    setTagList([]);
     setIntestatariLoading(true);
-    supabase.functions.invoke("get-intestatari").then(({ data, error }) => {
-      if (!error && Array.isArray(data)) {
-        setIntestatariList(data);
-        if (data.length === 1) {
-          setInviaIntestatario(data[0]);
-          setInviaIntestatarioBanca(data[0]);
+
+    const PREDEFINED_TAGS = [
+      "Bonus benvenuto", "Bonus personale", "Bonus ricorrente",
+      "Dividi Payout", "Scommessa personale", "Surebet a 2 vie", "Surebet a 3 vie",
+    ];
+
+    Promise.all([
+      supabase.functions.invoke("get-intestatari"),
+      supabase.from("tags").select("nome").order("nome"),
+    ]).then(([intRes, tagRes]) => {
+      if (!intRes.error && Array.isArray(intRes.data)) {
+        setIntestatariList(intRes.data);
+        if (intRes.data.length === 1) {
+          setInviaIntestatario(intRes.data[0]);
+          setInviaIntestatarioBanca(intRes.data[0]);
         }
       }
+      const customTags: string[] = (tagRes.data ?? []).map((t: { nome: string }) => t.nome);
+      const allTags = [...new Set([...PREDEFINED_TAGS, ...customTags])];
+      setTagList(allTags);
       setIntestatariLoading(false);
     });
   }, [showInviaModal, session]);
@@ -938,7 +954,7 @@ const Index = () => {
                 numeroMinimoSelezioni: nTarget,
                 urlEvento: "",
                 note: "",
-                tag: "none",
+                tag: inviaTag,
               },
               selectedIntestatario: inviaIntestatario.trim(),
               selectedConto: "",
@@ -962,6 +978,7 @@ const Index = () => {
             setShowInviaModal(false);
             setInviaIntestatario("");
             setInviaIntestatarioBanca("");
+            setInviaTag("none");
           };
 
           return (
@@ -998,7 +1015,7 @@ const Index = () => {
                     </div>
 
                     {/* Intestatario Banca */}
-                    <div className="mb-6">
+                    <div className="mb-4">
                       <label className="block text-xs font-semibold text-[#f4a9ba] uppercase tracking-wide mb-1">
                         Intestatario Banca
                       </label>
@@ -1013,12 +1030,29 @@ const Index = () => {
                         ))}
                       </select>
                     </div>
+
+                    {/* Tag */}
+                    <div className="mb-6">
+                      <label className="block text-xs font-semibold text-[#c8922d] uppercase tracking-wide mb-1">
+                        Tag
+                      </label>
+                      <select
+                        value={inviaTag}
+                        onChange={e => setInviaTag(e.target.value)}
+                        className="w-full bg-[#1a2535] border border-[#c8922d]/40 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/40"
+                      >
+                        <option value="none">— Nessun tag —</option>
+                        {tagList.map(tag => (
+                          <option key={tag} value={tag}>{tag}</option>
+                        ))}
+                      </select>
+                    </div>
                   </>
                 )}
 
                 <div className="flex gap-2 justify-end">
                   <button
-                    onClick={() => { setShowInviaModal(false); setInviaIntestatario(""); setInviaIntestatarioBanca(""); }}
+                    onClick={() => { setShowInviaModal(false); setInviaIntestatario(""); setInviaIntestatarioBanca(""); setInviaTag("none"); }}
                     className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-[#253347] rounded transition-colors"
                   >
                     Annulla
