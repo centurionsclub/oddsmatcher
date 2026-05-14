@@ -55,7 +55,7 @@ export function Navbar() {
 
       {/* Mobile */}
       <div className="md:hidden px-4 flex items-center justify-between h-12">
-        <span className="text-[#c8922d] font-bold tracking-widest text-base">ODDSMATCHER</span>
+        <span className="text-[#c8922d] font-bold text-lg" style={{ fontFamily: "'Cinzel', serif", letterSpacing: "0.12em" }}>ODDSMATCHER</span>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="text-white p-2 rounded focus:outline-none"

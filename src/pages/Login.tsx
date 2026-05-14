@@ -24,7 +24,7 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-[#0d1320] flex flex-col items-center justify-center px-4">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-widest text-[#c8922d]" style={{ fontFamily: "'Roboto', sans-serif" }}>
+        <h1 className="text-3xl md:text-4xl font-bold text-[#c8922d]" style={{ fontFamily: "'Cinzel', serif", letterSpacing: "0.15em" }}>
           ODDSMATCHER
         </h1>
         <p className="text-slate-400 text-sm mt-1">Accedi con le tue credenziali</p>

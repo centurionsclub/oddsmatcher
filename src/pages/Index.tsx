@@ -269,7 +269,7 @@ const Index = () => {
 
       {/* Title Banner */}
       <div className="bg-[#0a0e1a] text-white text-center py-3 border-b border-[#1e3050]">
-        <h1 className="text-xl font-bold tracking-widest text-[#c8922d]" style={{ fontFamily: "'Roboto', sans-serif" }}>ODDSMATCHER</h1>
+        <h1 className="text-3xl font-bold text-[#c8922d]" style={{ fontFamily: "'Cinzel', serif", letterSpacing: "0.15em" }}>ODDSMATCHER</h1>
       </div>
 
       <div className="max-w-[1600px] mx-auto px-4 py-4">
