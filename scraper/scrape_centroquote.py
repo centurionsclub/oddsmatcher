@@ -420,14 +420,36 @@ def _make_row(bm, league, event_name, event_time, market, outcome, odds_val, exp
 
 
 async def _extract_bm_rows(page: Page) -> list[tuple[str, list[float]]]:
-    """Extract (bookmaker, [odds]) from div.flex.h-9 rows on current page."""
+    """Extract (bookmaker, [odds]) from div.flex.h-9 rows on current page.
+    Rows containing ANY struck-through (barrate) odds are skipped entirely."""
     try:
-        rows = page.locator("div.flex.h-9")
-        count = await rows.count()
+        raw_rows = await page.evaluate("""
+            () => {
+                const rows = Array.from(document.querySelectorAll('div.flex.h-9'));
+                return rows.map(row => {
+                    // A row is "struck" if any child element has the Tailwind 'line-through'
+                    // class OR an inline text-decoration:line-through style.
+                    const hasStruck = Array.from(row.querySelectorAll('*')).some(el => {
+                        try {
+                            const cls = typeof el.className === 'string' ? el.className : '';
+                            if (cls.includes('line-through')) return true;
+                            if (el.style && el.style.textDecoration === 'line-through') return true;
+                            // Also check computed style for dynamically applied strikethrough
+                            const td = window.getComputedStyle(el).textDecorationLine;
+                            if (td && td.includes('line-through')) return true;
+                        } catch(e) {}
+                        return false;
+                    });
+                    return { text: row.innerText || '', hasStruck };
+                });
+            }
+        """)
         result = []
-        for i in range(count):
+        for row_data in (raw_rows or []):
             try:
-                text = await rows.nth(i).inner_text(timeout=3000)
+                if row_data.get("hasStruck"):
+                    continue  # quota barrata → ignora l'intera riga
+                text = row_data.get("text", "")
                 bm, odds = parse_row_text(text)
                 if bm and len(odds) >= 1:
                     result.append((bm, odds))
