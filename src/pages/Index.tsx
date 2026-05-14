@@ -6,10 +6,9 @@ import { OddsMatcherTable } from "@/components/OddsMatcherTable";
 import { supabase } from "@/integrations/supabase/client";
 
 const BOOKMAKERS = [
-  "888sport", "AdmiralBet", "Bet365", "BetFlag Bookmaker",
-  "Betsson", "Bwin", "Codere", "DAZN Bet", "DomusBet", "E-Play24", "Eurobet",
-  "Fastbet", "Gioco Digitale", "GoldBet", "LeoVegas", "Lottomatica", "NetBet",
-  "NetWin", "Planetwin365", "Sisal", "Snai", "Stanleybet", "William Hill",
+  "888sport", "Bet365", "BetFlag Bookmaker", "Betsson", "Bwin",
+  "Eurobet", "GoldBet", "Lottomatica", "NetWin",
+  "Planetwin365", "Sisal", "Snai", "William Hill",
 ];
 
 const EXCHANGES = [
@@ -584,7 +583,7 @@ const Index = () => {
                           onClick={() => setTrevieSecondary(
                             BOOKMAKERS.filter(b => [
                               "lottomatica","goldbet","bet365","planetwin365",
-                              "snai","sisal","william hill","eurobet","admiralbet",
+                              "snai","sisal","william hill","eurobet",
                             ].some(t => b.toLowerCase().includes(t)))
                           )}
                           className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-white border-b border-[#253347] bg-[#1e2d42]"
