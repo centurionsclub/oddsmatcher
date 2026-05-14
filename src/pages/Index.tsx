@@ -49,6 +49,7 @@ const Index = () => {
   const { data: oddsData, loading: oddsLoading, error: oddsError, search: searchOdds, reset: resetOdds } = useOddsSearch();
 
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [multiplaResetKey, setMultiplaResetKey] = useState(0);
   const [activeSubTab, setActiveSubTab] = useState("singola");
 
   // Filter states
@@ -59,6 +60,7 @@ const Index = () => {
   const [selectedSport, setSelectedSport] = useState("tutti");
   const [filtroLiquidita, setFiltroLiquidita] = useState(true);
   const [stakePunta, setStakePunta] = useState("");
+  const [stakeError, setStakeError] = useState<string | null>(null);
   const [freeBet, setFreeBet] = useState(false);
   const [bonus, setBonus] = useState("");
   const [rimborso, setRimborso] = useState(false);
@@ -116,7 +118,18 @@ const Index = () => {
   [campionato, allLeagues]);
 
   const handleAggiorna = () => {
+    // Valida stake: almeno uno tra Stake Punta/Multipla e Bonus deve essere compilato
+    const relevantStake = activeSubTab === "multipla" ? stakeMultipla : stakePunta;
+    const stakeVal = parseFloat(relevantStake.replace(",", ".") || "0");
+    const bonusVal = parseFloat(bonus.replace(",", ".") || "0");
+    if (!stakeVal && !bonusVal) {
+      const stakeLabel = activeSubTab === "multipla" ? "Stake Multipla" : "Stake Punta";
+      setStakeError(`Inserisci un importo in "${stakeLabel}" oppure in "Bonus" per continuare.`);
+      return;
+    }
+    setStakeError(null);
     setFiltersOpen(false); // nascondi i filtri subito
+    setMultiplaResetKey(k => k + 1); // reset selezione multipla
     searchOdds({
       sport: selectedSport,
       mercato: "tutti",
@@ -133,6 +146,7 @@ const Index = () => {
   }, [oddsLoading]);
 
   const handlePulisci = () => {
+    setStakeError(null);
     setSelectedMarkets([]);
     setSelectedBookmakers([]);
     setSelectedExchanges(["Betfair Exchange", "BetFlag Exchange"]);
@@ -154,6 +168,7 @@ const Index = () => {
     setDaData("");
     setAData("");
     resetOdds();
+    setMultiplaResetKey(k => k + 1); // reset selezione multipla
   };
 
   const toggleMarket = (m: string) => {
@@ -483,9 +498,9 @@ const Index = () => {
               <input
                 type="text"
                 value={activeSubTab === "multipla" ? stakeMultipla : stakePunta}
-                onChange={(e) => activeSubTab === "multipla" ? setStakeMultipla(e.target.value) : setStakePunta(e.target.value)}
+                onChange={(e) => { activeSubTab === "multipla" ? setStakeMultipla(e.target.value) : setStakePunta(e.target.value); setStakeError(null); }}
                 placeholder="0 €"
-                className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                className={`border rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 bg-[#1a2535] text-white placeholder-slate-500 ${stakeError ? "border-red-500 focus:ring-red-500/30" : "border-[#253347] focus:ring-[#c8922d]/30"}`}
               />
               <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#1e2d42] px-3 py-1 rounded cursor-pointer">
                 <input
@@ -504,16 +519,24 @@ const Index = () => {
               <input
                 type="text"
                 value={bonus}
-                onChange={(e) => setBonus(e.target.value)}
+                onChange={(e) => { setBonus(e.target.value); setStakeError(null); }}
                 placeholder="0 €"
                 disabled={freeBet}
-                className={`border border-[#253347] rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30 ${freeBet ? "bg-[#0d1320] text-slate-600 cursor-not-allowed opacity-50" : "bg-[#1a2535] text-white placeholder-slate-500"}`}
+                className={`border rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 ${freeBet ? "border-[#253347] bg-[#0d1320] text-slate-600 cursor-not-allowed opacity-50" : stakeError ? "border-red-500 bg-[#1a2535] text-white placeholder-slate-500 focus:ring-red-500/30" : "border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 focus:ring-[#c8922d]/30"}`}
               />
               <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#c8922d] px-3 py-1 rounded cursor-pointer">
                 <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-white" />
                 Rimborso
               </label>
             </div>
+
+            {/* Errore stake vuoto */}
+            {stakeError && (
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-900/40 border border-red-500/60 rounded text-red-300 text-sm">
+                <span className="text-base">⚠️</span>
+                {stakeError}
+              </div>
+            )}
 
             {/* Quota rows - condizionali per tab */}
             {activeSubTab === "multipla" ? (
@@ -701,6 +724,7 @@ const Index = () => {
               aData,
             }}
             commission={commission}
+            multiplaResetKey={multiplaResetKey}
           />
         </div>
       </div>
