@@ -886,11 +886,19 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
   // ═══ RENDER: TRE VIE ═══
   if (activeTab === "trevie") {
-    // Apply text filter (partita)
+    // Apply filters
     let tvFiltered = trevieOpps;
     if (committedFilters.partita) {
       const search = committedFilters.partita.toLowerCase();
       tvFiltered = tvFiltered.filter(g => g.eventName.toLowerCase().includes(search));
+    }
+    if (committedFilters.daData) {
+      const from = new Date(committedFilters.daData).getTime();
+      tvFiltered = tvFiltered.filter(g => new Date(g.eventTime).getTime() >= from);
+    }
+    if (committedFilters.aData) {
+      const to = new Date(committedFilters.aData + "T23:59:59").getTime();
+      tvFiltered = tvFiltered.filter(g => new Date(g.eventTime).getTime() <= to);
     }
     tvFiltered = tvFiltered.slice(0, 200);
 

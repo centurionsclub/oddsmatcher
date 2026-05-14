@@ -784,8 +784,8 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Da data / A data - solo multipla */}
-            {activeSubTab === "multipla" && (
+            {/* Da data / A data - multipla e tre vie */}
+            {(activeSubTab === "multipla" || activeSubTab === "trevie") && (
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Da data</span>
                 <input
