@@ -944,7 +944,7 @@ const Index = () => {
               selectedConto: "",
               tipoBonus: bonusVal > 0 ? "Bonus" : "Nessuno",
               intestatarioBanca: inviaIntestatarioBanca.trim(),
-              bancate: multiplaSelected.map(opp => ({
+              bancate: [...multiplaSelected].sort((a, b) => new Date(a.eventTime).getTime() - new Date(b.eventTime).getTime()).map(opp => ({
                 evento: opp.eventName,
                 dataEvento: opp.eventTime,
                 mercato: toBetprofitMercato(opp.scommessa, opp.sport),
