@@ -352,8 +352,270 @@ function findMatchingEvents(sourceEvent: OddsData, pool: OddsData[]): OddsData[]
   return pool.filter(ev => eventNamesMatch(sourceEvent.eventName, ev.eventName));
 }
 
+// ─── Shared helper functions (used by both modal and table) ──────────────────
+function formatDate(dateString: string): string {
+  try {
+    const d = new Date(dateString);
+    return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+  } catch { return dateString; }
+}
+
+function getSportIcon(sport: string): string {
+  switch (sport.toLowerCase()) {
+    case "calcio": case "soccer": case "football": return "⚽";
+    case "tennis": return "🎾";
+    case "basket": case "basketball": return "🏀";
+    default: return "⚽";
+  }
+}
+
+function getLeagueFlag(league: string): string {
+  const l = league.toLowerCase();
+  if (l.includes("serie a") || l.includes("serie b") || l.includes("coppa italia")) return "🇮🇹";
+  if (l.includes("premier") || l.includes("championship") || l.includes("fa cup") || l.includes("league one") || l.includes("league two")) return "🏴󠁧󠁢󠁥󠁮󠁧󠁿";
+  if (l.includes("laliga") || l.includes("la liga") || l.includes("segunda")) return "🇪🇸";
+  if (l.includes("bundesliga") || l.includes("bundesliga 2")) return "🇩🇪";
+  if (l.includes("ligue 1") || l.includes("ligue 2")) return "🇫🇷";
+  if (l.includes("champions") || l.includes("europa league") || l.includes("conference")) return "🇪🇺";
+  if (l.includes("nba")) return "🇺🇸";
+  if (l.includes("atp") || l.includes("wta")) return "🌍";
+  if (l.includes("eredivisie") || l.includes("olanda")) return "🇳🇱";
+  if (l.includes("primeira") || l.includes("portogallo")) return "🇵🇹";
+  if (l.includes("super lig") || l.includes("turchia")) return "🇹🇷";
+  return "🏳";
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── Tre Vie Modal ────────────────────────────────────────────────────────────
+function TreVieModal({ grp, initialStake, onClose }: { grp: TreVieGroup; initialStake: string; onClose: () => void }) {
+  // All three stakes are editable; first is pre-filled from Stake Punta
+  const [stakes, setStakes] = useState<string[]>([initialStake, "", ""]);
+  // Per-outcome results after CALCOLA
+  const [results, setResults] = useState<number[] | null>(null);
+  const [totalStakeCalc, setTotalStakeCalc] = useState<number | null>(null);
+
+  const ratingColor = grp.rating >= 100
+    ? "text-green-400" : grp.rating >= 98
+    ? "text-white" : grp.rating >= 95
+    ? "text-[#c8922d]" : "text-red-400";
+
+  function updateStake(i: number, val: string) {
+    const ns = [...stakes]; ns[i] = val;
+    setStakes(ns);
+    setResults(null);
+    setTotalStakeCalc(null);
+  }
+
+  // Bilancia: dato lo stake del Book 1, calcola gli altri affinché la vincita sia identica
+  // e mostra subito il risultato
+  function handleBilancia() {
+    const s1 = parseFloat(stakes[0].replace(",", ".") || "0");
+    if (s1 <= 0) return;
+    const guaranteed = s1 * grp.legs[0].odds;
+    const balancedNums = grp.legs.map(leg => guaranteed / leg.odds);
+    const balanced = balancedNums.map(v => v.toFixed(2));
+    setStakes(balanced);
+    // Calcola subito risultati con i valori bilanciati
+    const total = balancedNums.reduce((a, c) => a + c, 0);
+    const res = grp.legs.map((leg, i) => balancedNums[i] * leg.odds - total);
+    setResults(res);
+    setTotalStakeCalc(total);
+  }
+
+  function handleCalcola() {
+    const s = stakes.map(v => parseFloat(v.replace(",", ".") || "0"));
+    const total = s.reduce((a, c) => a + c, 0);
+    if (total <= 0) return;
+    // result_i = stake_i * odds_i - total (profit if outcome i wins)
+    const res = grp.legs.map((leg, i) => s[i] * leg.odds - total);
+    setResults(res);
+    setTotalStakeCalc(total);
+  }
+
+  // Colori per ogni risultato
+  const resultColor = (v: number) =>
+    v >= 0 ? "text-green-400" : "text-red-400";
+  const resultBg = (v: number) =>
+    v >= 0 ? "bg-green-900/25 border-green-500/40" : "bg-red-900/25 border-red-500/40";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-[#0d1829] border border-[#1e3050] rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[#1e3050]">
+          <span className="text-[#87c4e8] font-bold text-sm uppercase tracking-wider">PUNTA → TRE VIE</span>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">×</button>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-0">
+          {/* LEFT: Event info */}
+          <div className="md:w-5/12 border-b md:border-b-0 md:border-r border-[#1e3050] p-5 flex flex-col gap-4">
+            <div>
+              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Evento</div>
+              <div className="text-white font-semibold text-base leading-tight">{grp.eventName}</div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Sport</div>
+                <div className="text-white text-sm">{getSportIcon(grp.sport)} {grp.sport || "Calcio"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Data/Ora</div>
+                <div className="text-white text-sm">{formatDate(grp.eventTime)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Campionato</div>
+                <div className="text-white text-sm">{getLeagueFlag(grp.league)} {grp.league}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Rating</div>
+                <div className={`font-bold text-sm ${ratingColor}`}>{grp.rating.toFixed(2)}%</div>
+              </div>
+            </div>
+
+            {/* Legs */}
+            <div>
+              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Scommesse</div>
+              <div className="flex flex-col gap-2">
+                {grp.legs.map((leg, i) => (
+                  <div key={i} className="flex items-center justify-between bg-[#0a1220] border border-[#1e3050] rounded px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-500 w-16">ESITO {leg.outcome}</span>
+                      <BookLogo bookmaker={leg.bookmaker} />
+                    </div>
+                    <span className="font-mono font-bold text-[#87c4e8] text-sm">{leg.odds.toFixed(2).replace(".", ",")}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: Calculator */}
+          <div className="md:w-7/12 p-5 flex flex-col gap-4">
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider">Calcolatore</div>
+
+            {/* Table: Esito | Quota | Stake | Risultato */}
+            <div className="rounded-lg overflow-hidden border border-[#1e3050]">
+              {/* Header */}
+              <div className="grid bg-[#0a1220] text-[10px] font-bold text-slate-400 uppercase tracking-wider"
+                style={{ gridTemplateColumns: "1fr 72px 100px" + (results ? " 90px" : "") }}>
+                <div className="px-3 py-2">Esito / Book</div>
+                <div className="px-2 py-2 text-center border-l border-[#1e3050]">Quota</div>
+                <div className="px-2 py-2 text-center border-l border-[#1e3050]">Stake</div>
+                {results && <div className="px-2 py-2 text-center border-l border-[#1e3050]">Se vince</div>}
+              </div>
+
+              {grp.legs.map((leg, i) => (
+                <div
+                  key={i}
+                  className="grid border-t border-[#1e3050] bg-[#0d1829]"
+                  style={{ gridTemplateColumns: "1fr 72px 100px" + (results ? " 90px" : "") }}
+                >
+                  {/* Esito + bookmaker */}
+                  <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
+                    <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded bg-[#1e3050] text-white">
+                      {leg.outcome}
+                    </span>
+                    <span className="text-[10px] text-slate-400 truncate">
+                      {leg.bookmaker.replace(/ bookmaker$/i, "").replace(/ exchange$/i, "")}
+                    </span>
+                  </div>
+                  {/* Quota */}
+                  <div className="px-2 py-2.5 text-center border-l border-[#1e3050] flex items-center justify-center">
+                    <span className="font-mono font-bold text-[#87c4e8] text-sm">{leg.odds.toFixed(2).replace(".", ",")}</span>
+                  </div>
+                  {/* Stake — editable */}
+                  <div className="px-2 py-1.5 border-l border-[#1e3050] flex items-center">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      value={stakes[i]}
+                      onChange={e => updateStake(i, e.target.value)}
+                      className="bg-[#1a2535] border border-[#253347] text-white rounded px-2 py-1.5 text-sm text-center font-mono w-full focus:outline-none focus:ring-1 focus:ring-[#87c4e8]/60"
+                    />
+                  </div>
+                  {/* Result per outcome */}
+                  {results && (
+                    <div className="px-2 py-2.5 border-l border-[#1e3050] flex items-center justify-center">
+                      <span className={`font-mono font-bold text-sm ${resultColor(results[i])}`}>
+                        {results[i] >= 0 ? "+" : ""}{results[i].toFixed(2).replace(".", ",")}€
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Totale */}
+              <div
+                className="grid border-t-2 border-[#87c4e8]/30 bg-[#0a1220]"
+                style={{ gridTemplateColumns: "1fr 72px 100px" + (results ? " 90px" : "") }}
+              >
+                <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase flex items-center col-span-2">
+                  Totale stake
+                </div>
+                <div className="px-2 py-2 border-l border-[#1e3050] flex items-center justify-center">
+                  <span className="font-mono text-sm font-bold text-white">
+                    {(() => {
+                      const tot = stakes.reduce((a, v) => a + parseFloat(v.replace(",", ".") || "0"), 0);
+                      return tot > 0 ? tot.toFixed(2).replace(".", ",") + "€" : "—";
+                    })()}
+                  </span>
+                </div>
+                {results && <div />}
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={handleBilancia}
+                className="px-4 py-2.5 rounded font-bold text-xs bg-[#1e3050] text-slate-200 hover:bg-[#2a4060] transition-colors border border-[#2a4060] whitespace-nowrap"
+                title="Calcola gli stake di Book 2 e Book 3 in modo che la vincita sia identica per tutti gli esiti"
+              >
+                ⚖ BILANCIA
+              </button>
+              <button
+                onClick={handleCalcola}
+                className="flex-1 py-2.5 rounded font-bold text-sm bg-[#87c4e8] text-[#0d2035] hover:bg-[#6ab0d8] transition-colors"
+              >
+                CALCOLA
+              </button>
+              <button
+                onClick={() => alert("Funzionalità PT non ancora disponibile")}
+                className="flex-1 py-2.5 rounded font-bold text-sm bg-[#c8922d] text-white hover:bg-[#b07a24] transition-colors"
+              >
+                INVIA AL PT
+              </button>
+            </div>
+
+            {/* Results summary */}
+            {results && (
+              <div className="flex gap-2">
+                {grp.legs.map((leg, i) => (
+                  <div key={i} className={`flex-1 rounded border px-3 py-3 text-center ${resultBg(results[i])}`}>
+                    <div className="text-[10px] text-slate-400 uppercase mb-1">Esito {leg.outcome}</div>
+                    <div className={`font-mono font-bold text-lg ${resultColor(results[i])}`}>
+                      {results[i] >= 0 ? "+" : ""}{results[i].toFixed(2).replace(".", ",")}€
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, filters, commission, multiplaResetKey, onMultiplaSelectedChange }: Props) {
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
+  const [selectedTreVie, setSelectedTreVie] = useState<TreVieGroup | null>(null);
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
 
   // Reset selezione multipla quando l'utente clicca Aggiorna o Pulisci
@@ -881,38 +1143,6 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     return result;
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      const d = new Date(dateString);
-      return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
-    } catch { return dateString; }
-  };
-
-  const getSportIcon = (sport: string) => {
-    switch (sport.toLowerCase()) {
-      case "calcio": case "soccer": case "football": return "⚽";
-      case "tennis": return "🎾";
-      case "basket": case "basketball": return "🏀";
-      default: return "⚽";
-    }
-  };
-
-  const getLeagueFlag = (league: string): string => {
-    const l = league.toLowerCase();
-    if (l.includes("serie a") || l.includes("serie b") || l.includes("coppa italia")) return "🇮🇹";
-    if (l.includes("premier") || l.includes("championship") || l.includes("fa cup") || l.includes("league one") || l.includes("league two")) return "🏴󠁧󠁢󠁥󠁮󠁧󠁿";
-    if (l.includes("laliga") || l.includes("la liga") || l.includes("segunda")) return "🇪🇸";
-    if (l.includes("bundesliga") || l.includes("bundesliga 2")) return "🇩🇪";
-    if (l.includes("ligue 1") || l.includes("ligue 2")) return "🇫🇷";
-    if (l.includes("champions") || l.includes("europa league") || l.includes("conference")) return "🇪🇺";
-    if (l.includes("nba")) return "🇺🇸";
-    if (l.includes("atp") || l.includes("wta")) return "🌍";
-    if (l.includes("eredivisie") || l.includes("olanda")) return "🇳🇱";
-    if (l.includes("primeira") || l.includes("portogallo")) return "🇵🇹";
-    if (l.includes("super lig") || l.includes("turchia")) return "🇹🇷";
-    return "🏳";
-  };
-
   if (loading) {
     return (
       <div className="text-center py-12 text-white">
@@ -1004,6 +1234,13 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
     return (
       <>
+        {selectedTreVie && (
+          <TreVieModal
+            grp={selectedTreVie}
+            initialStake={committedFilters.stakePunta || ""}
+            onClose={() => setSelectedTreVie(null)}
+          />
+        )}
         {/* Day selector strip */}
         {tvDayGroups.length > 1 && (
           <div className="flex flex-wrap gap-1.5 px-3 py-2 bg-[#080c17] border-b border-[#1e3050]">
@@ -1078,7 +1315,8 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                       return (
                         <tr
                           key={`tv-${date}-${gi}-${li}`}
-                          className={`transition-colors hover:bg-[#1a2535] ${isLast ? "border-b border-[#1e3050]" : "border-b border-[#0d1829]"}`}
+                          className={`transition-colors hover:bg-[#1a2535] cursor-pointer ${isLast ? "border-b border-[#1e3050]" : "border-b border-[#0d1829]"}`}
+                          onClick={() => setSelectedTreVie(grp)}
                         >
                           {isFirst && (
                             <>
