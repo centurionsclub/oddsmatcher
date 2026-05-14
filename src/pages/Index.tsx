@@ -51,6 +51,8 @@ const Index = () => {
   const [multiplaResetKey, setMultiplaResetKey] = useState(0);
   const [activeSubTab, setActiveSubTab] = useState("singola");
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
+  const [showInviaModal, setShowInviaModal] = useState(false);
+  const [inviaIntestatario, setInviaIntestatario] = useState("");
 
   // Filter states
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
@@ -260,90 +262,10 @@ const Index = () => {
           {activeSubTab === "multipla" && (() => {
             const nTarget = parseInt(numEventi || "0");
             const isReady = nTarget >= 2 && multiplaSelected.length >= nTarget;
-
-            // Mappa scommessa Oddsmatcher → mercato betprofit
-            const toBetprofitMercato = (scommessa: string, sport: string): string => {
-              const sc = scommessa.split(" vs ")[0].trim();
-              if (sport === "tennis") {
-                return sc === "1" ? "Tennis 1" : sc === "2" ? "Tennis 2" : "Altro Tennis";
-              }
-              if (sport === "basket") {
-                return sc === "1" ? "Basket 1" : sc === "2" ? "Basket 2" : "Altro Basket";
-              }
-              const map: Record<string, string> = {
-                "1": "1 Calcio", "X": "X Calcio", "2": "2 Calcio",
-                "1X": "1X Calcio", "X2": "X2 Calcio", "12": "12 Calcio",
-                "Goal": "Goal Calcio", "No Goal": "No Goal Calcio",
-                "Over 0.5": "Over 0.5 Calcio", "Over 1.5": "Over 1.5 Calcio",
-                "Over 2.5": "Over 2.5 Calcio", "Over 3.5": "Over 3.5 Calcio",
-                "Over 4.5": "Over 4.5 Calcio",
-                "Under 0.5": "Under 0.5 Calcio", "Under 1.5": "Under 1.5 Calcio",
-                "Under 2.5": "Under 2.5 Calcio", "Under 3.5": "Under 3.5 Calcio",
-                "Under 4.5": "Under 4.5 Calcio",
-              };
-              return map[sc] ?? "Altro Calcio";
-            };
-
-            // Mappa campionato Oddsmatcher → competizione betprofit
-            const BETPROFIT_COMPETITIONS = [
-              "Serie A (Italia)", "Premier League (Inghilterra)", "La Liga (Spagna)",
-              "Bundesliga (Germania)", "Ligue 1 (Francia)", "UEFA Champions League",
-              "UEFA Europa League", "UEFA Conference League", "Coppa Italia",
-              "FA Cup (Inghilterra)", "Copa del Rey (Spagna)", "DFB-Pokal (Germania)",
-              "Coupe de France", "Eredivisie (Olanda)", "Primeira Liga (Portogallo)",
-              "Brasileirão", "Liga MX (Messico)", "MLS (USA)", "FIFA World Cup",
-              "Africa Cup of Nations", "Amichevoli internazionali", "Supercoppe nazionali",
-              "Qualificazioni Mondiali 2026", "Play-off Mondiali",
-            ];
-            const toBetprofitCompetizione = (league: string): string => {
-              const lower = league.toLowerCase();
-              for (const comp of BETPROFIT_COMPETITIONS) {
-                const key = comp.toLowerCase().replace(/\s*\(.*\)/, "").trim();
-                if (lower.includes(key) || key.includes(lower)) return comp;
-              }
-              return "Altro";
-            };
-
             return (
               <button
                 disabled={!isReady}
-                onClick={() => {
-                  const bonusVal = parseFloat(bonus || "0");
-                  const stakeVal = parseFloat(stakeMultipla || "0");
-
-                  const savedState = {
-                    selections: multiplaSelected.map(opp => ({
-                      evento: opp.eventName,
-                      competizione: toBetprofitCompetizione(opp.league),
-                      mercato: toBetprofitMercato(opp.scommessa, opp.sport),
-                      quota: opp.quotaBook,
-                      dataEvento: opp.eventTime,
-                    })),
-                    quotaInputs: multiplaSelected.map(opp =>
-                      opp.quotaBook.toFixed(2).replace(".", ",")
-                    ),
-                    formValues: {
-                      intestatario: "",
-                      conto: "",
-                      stake: stakeVal || undefined,
-                      tipoBonus: bonusVal > 0 ? "Bonus" : "Nessuno",
-                      bonus: bonusVal > 0 ? bonusVal : undefined,
-                      rimborso: undefined,
-                      percentualeBonus: undefined,
-                      numeroMinimoSelezioni: nTarget,
-                      urlEvento: "",
-                      note: "",
-                      tag: "",
-                    },
-                    selectedIntestatario: "",
-                    selectedConto: "",
-                    tipoBonus: bonusVal > 0 ? "Bonus" : "Nessuno",
-                  };
-
-                  // Encode in base64 (gestisce caratteri speciali italiani)
-                  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
-                  window.open(`https://betprofit.app/puntate?import=${encoded}`, "_blank");
-                }}
+                onClick={() => setShowInviaModal(true)}
                 className={`px-4 py-2 rounded font-semibold text-sm transition-colors ${
                   isReady
                     ? "bg-green-600 text-white hover:bg-green-700 cursor-pointer"
@@ -920,6 +842,123 @@ const Index = () => {
             onClick={() => { setMarketsOpen(false); setBookmakerOpen(false); setExchangeOpen(false); setTrevieMainOpen(false); setTrevieSecondaryOpen(false); }}
           />
         )}
+
+        {/* Modale intestatario per invio multipla a betprofit */}
+        {showInviaModal && (() => {
+          const nTarget = parseInt(numEventi || "0");
+          const bonusVal = parseFloat(bonus || "0");
+          const stakeVal = parseFloat(stakeMultipla || "0");
+
+          const toBetprofitMercato = (scommessa: string, sport: string): string => {
+            const sc = scommessa.split(" vs ")[0].trim();
+            if (sport === "tennis") return sc === "1" ? "Tennis 1" : sc === "2" ? "Tennis 2" : "Altro Tennis";
+            if (sport === "basket") return sc === "1" ? "Basket 1" : sc === "2" ? "Basket 2" : "Altro Basket";
+            const map: Record<string, string> = {
+              "1": "1 Calcio", "X": "X Calcio", "2": "2 Calcio",
+              "1X": "1X Calcio", "X2": "X2 Calcio", "12": "12 Calcio",
+              "Goal": "Goal Calcio", "No Goal": "No Goal Calcio",
+              "Over 0.5": "Over 0.5 Calcio", "Over 1.5": "Over 1.5 Calcio",
+              "Over 2.5": "Over 2.5 Calcio", "Over 3.5": "Over 3.5 Calcio", "Over 4.5": "Over 4.5 Calcio",
+              "Under 0.5": "Under 0.5 Calcio", "Under 1.5": "Under 1.5 Calcio",
+              "Under 2.5": "Under 2.5 Calcio", "Under 3.5": "Under 3.5 Calcio", "Under 4.5": "Under 4.5 Calcio",
+            };
+            return map[sc] ?? "Altro Calcio";
+          };
+
+          const BETPROFIT_COMPETITIONS = [
+            "Serie A (Italia)", "Premier League (Inghilterra)", "La Liga (Spagna)",
+            "Bundesliga (Germania)", "Ligue 1 (Francia)", "UEFA Champions League",
+            "UEFA Europa League", "UEFA Conference League", "Coppa Italia",
+            "FA Cup (Inghilterra)", "Copa del Rey (Spagna)", "DFB-Pokal (Germania)",
+            "Coupe de France", "Eredivisie (Olanda)", "Primeira Liga (Portogallo)",
+            "Brasileirão", "Liga MX (Messico)", "MLS (USA)", "FIFA World Cup",
+            "Africa Cup of Nations", "Amichevoli internazionali", "Supercoppe nazionali",
+            "Qualificazioni Mondiali 2026", "Play-off Mondiali",
+          ];
+          const toBetprofitCompetizione = (league: string): string => {
+            const lower = league.toLowerCase();
+            for (const comp of BETPROFIT_COMPETITIONS) {
+              const key = comp.toLowerCase().replace(/\s*\(.*\)/, "").trim();
+              if (lower.includes(key) || key.includes(lower)) return comp;
+            }
+            return "Altro";
+          };
+
+          const handleInvia = () => {
+            if (!inviaIntestatario.trim()) return;
+            const savedState = {
+              autoSave: true,
+              selections: multiplaSelected.map(opp => ({
+                evento: opp.eventName,
+                competizione: toBetprofitCompetizione(opp.league),
+                mercato: toBetprofitMercato(opp.scommessa, opp.sport),
+                quota: opp.quotaBook,
+                dataEvento: opp.eventTime,
+              })),
+              quotaInputs: multiplaSelected.map(opp => opp.quotaBook.toFixed(2).replace(".", ",")),
+              formValues: {
+                intestatario: inviaIntestatario.trim(),
+                conto: "",
+                stake: stakeVal || 0,
+                tipoBonus: bonusVal > 0 ? "Bonus" : "Nessuno",
+                bonus: bonusVal > 0 ? bonusVal : 0,
+                rimborso: 0,
+                percentualeBonus: 0,
+                numeroMinimoSelezioni: nTarget,
+                urlEvento: "",
+                note: "",
+                tag: "none",
+              },
+              selectedIntestatario: inviaIntestatario.trim(),
+              selectedConto: "",
+              tipoBonus: bonusVal > 0 ? "Bonus" : "Nessuno",
+            };
+            const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
+            window.open(`https://betprofit.app/puntate?import=${encoded}`, "_blank");
+            setShowInviaModal(false);
+            setInviaIntestatario("");
+          };
+
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center"
+              style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
+              onClick={e => { if (e.target === e.currentTarget) { setShowInviaModal(false); setInviaIntestatario(""); } }}
+            >
+              <div className="bg-[#152033] border border-[#1e3050] rounded-xl shadow-2xl p-6 w-[360px] max-w-[90vw]">
+                <h2 className="text-white font-bold text-lg mb-1">Invia Multipla</h2>
+                <p className="text-slate-400 text-sm mb-4">Inserisci l'intestatario del conto su Bet Profit. La multipla verrà salvata automaticamente.</p>
+
+                <label className="block text-sm font-medium text-white mb-1">Intestatario</label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={inviaIntestatario}
+                  onChange={e => setInviaIntestatario(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleInvia(); if (e.key === "Escape") { setShowInviaModal(false); setInviaIntestatario(""); } }}
+                  placeholder="Es. Mario Rossi"
+                  className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-green-500/40 placeholder-slate-500"
+                />
+
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => { setShowInviaModal(false); setInviaIntestatario(""); }}
+                    className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-[#253347] rounded transition-colors"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    onClick={handleInvia}
+                    disabled={!inviaIntestatario.trim()}
+                    className="px-5 py-2 text-sm font-bold rounded transition-colors bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Invia ↗
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Results Table */}
         <div ref={resultsRef} className="bg-[#152033] rounded-lg border border-[#1e3050] overflow-hidden">
