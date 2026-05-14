@@ -284,32 +284,48 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     setMultiplaSelected([]);
   }, [multiplaResetKey]);
 
+  // ── Snapshot "committed" filters ──────────────────────────────────────────
+  // selectedExchanges e filters vengono aggiornati in tempo reale dalla UI,
+  // ma i calcoli pesanti (singolaOpps ecc.) devono girare SOLO quando arrivano
+  // nuovi dati (= l'utente ha cliccato Aggiorna). Usiamo uno snapshot che si
+  // congela fino alla prossima fetch.
+  const [committedExchanges, setCommittedExchanges] = useState<string[]>(selectedExchanges ?? []);
+  const [committedFilters, setCommittedFilters] = useState(filters);
+
+  useEffect(() => {
+    // data cambia solo quando Aggiorna viene cliccato → aggiorna snapshot
+    setCommittedExchanges(selectedExchanges ?? []);
+    setCommittedFilters(filters);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const REAL_EXCHANGE_NAMES = ["betfair exchange", "betflag exchange", "smarkets", "betdaq", "matchbook"];
 
   // Check if a bookmaker name is a real exchange
   const isRealExchange = (name: string) =>
     REAL_EXCHANGE_NAMES.some(ex => name.toLowerCase().includes(ex.toLowerCase()));
 
-  // Check if a bookmaker is selected as exchange side
+  // Check if a bookmaker is selected as exchange side — usa snapshot committato
   const isOnExchangeSide = (name: string): boolean => {
-    if (!selectedExchanges || selectedExchanges.length === 0)
+    if (!committedExchanges || committedExchanges.length === 0)
       return isRealExchange(name);
-    return selectedExchanges.some(ex =>
+    return committedExchanges.some(ex =>
       name.toLowerCase().includes(ex.toLowerCase()) ||
       ex.toLowerCase().includes(name.toLowerCase())
     );
   };
 
-  // Is punta-punta mode (no real exchanges selected, only bookmakers)
-  const isPuntaPuntaMode = !!selectedExchanges && selectedExchanges.length > 0 &&
-    !selectedExchanges.some(ex => isRealExchange(ex));
+  // Is punta-punta mode — usa snapshot committato
+  const isPuntaPuntaMode = committedExchanges.length > 0 &&
+    !committedExchanges.some(ex => isRealExchange(ex));
 
   // ═══ SINGOLA: Book vs Exchange (back-lay) OR Book vs Book (punta-punta) ═══
   const singolaOpps = useMemo(() => {
     if (!data?.data || data.data.length === 0) return [];
     const opps: Opportunity[] = [];
     const commissionRate = commission / 100;
-    const isFB = filters.freebet;
+    const isFB = committedFilters.freebet;
 
     const bookmakerSide = data.data.filter(odd => !isOnExchangeSide(odd.bookmaker));
     const rawExchangeSide = data.data.filter(odd => isOnExchangeSide(odd.bookmaker));
@@ -541,7 +557,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       if (!existing || opp.rating > existing.rating) dedupMap.set(key, opp);
     }
     return Array.from(dedupMap.values()).sort((a, b) => b.rating - a.rating);
-  }, [data, commission, selectedExchanges, isPuntaPuntaMode, filters.freebet]);
+  }, [data, commission, committedExchanges, isPuntaPuntaMode, committedFilters.freebet]);
 
   // ═══ TRE VIE: Book vs Book 3-way dutching ═══
   const trevieOpps = useMemo(() => {
@@ -742,28 +758,29 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
   const applyFilters = <T extends { eventName: string; bookmaker?: string; quotaBook?: number }>(items: T[]): T[] => {
     let result = items;
-    if (filters.bookmaker.length > 0) {
+    // Usa committedFilters (snapshot al momento dell'ultimo Aggiorna)
+    if (committedFilters.bookmaker.length > 0) {
       result = result.filter(opp => {
         const book = (opp as any).bookmaker || (opp as any).bestBookmaker || "";
-        return filters.bookmaker.some(bm =>
+        return committedFilters.bookmaker.some(bm =>
           book.toLowerCase().includes(bm.toLowerCase()) ||
           bm.toLowerCase().includes(book.toLowerCase())
         );
       });
     }
-    const qMin = parseFloat((filters.quotaMinima || "0").replace(",", "."));
-    const qMax = parseFloat((filters.quotaMassima || "0").replace(",", "."));
+    const qMin = parseFloat((committedFilters.quotaMinima || "0").replace(",", "."));
+    const qMax = parseFloat((committedFilters.quotaMassima || "0").replace(",", "."));
     const qField = (item: any) => item.quotaBook || item.bestOdds || item.odds1 || 0;
     if (qMin > 0) result = result.filter(o => qField(o) >= qMin);
     if (qMax > 0) result = result.filter(o => qField(o) <= qMax);
-    if (filters.partita) {
-      const search = filters.partita.toLowerCase();
+    if (committedFilters.partita) {
+      const search = committedFilters.partita.toLowerCase();
       result = result.filter(o => o.eventName.toLowerCase().includes(search));
     }
     // Filtro liquidità: mostra solo opportunità con volume exchange >= lay stake calcolato
-    if (filters.filtroLiquidita) {
-      const stake = parseFloat((filters.stakePunta || "0").replace(",", ".")) || 0;
-      const bonus = parseFloat((filters.bonus || "0").replace(",", ".")) || 0;
+    if (committedFilters.filtroLiquidita) {
+      const stake = parseFloat((committedFilters.stakePunta || "0").replace(",", ".")) || 0;
+      const bonus = parseFloat((committedFilters.bonus || "0").replace(",", ".")) || 0;
       const totalStake = stake + bonus;
       const c = commission / 100;
       result = result.filter(o => {
@@ -775,7 +792,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         if (!backOdds || !layOdds || layOdds <= c) return true;
         // Se lo stake è 0, filtra almeno per volume minimo di 10€
         const effectiveStake = totalStake > 0 ? totalStake : 10;
-        const isFB = filters.freebet;
+        const isFB = committedFilters.freebet;
         const layStake = isFB
           ? (effectiveStake * (backOdds - 1)) / (layOdds - c)
           : (effectiveStake * backOdds) / (layOdds - c);
