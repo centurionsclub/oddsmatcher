@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
+  <rect width="200" height="50" fill="#2c5282" rx="4"/>
+  <text x="100" y="29" text-anchor="middle" fill="#ffffff" font-family="Arial,sans-serif" font-size="13" font-weight="normal">William</text>
+  <text x="100" y="44" text-anchor="middle" fill="#ffffff" font-family="Arial Black,Arial" font-size="16" font-weight="900">HILL</text>
+</svg>

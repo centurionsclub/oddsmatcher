@@ -255,47 +255,37 @@ function getBookColor(name: string): { bg: string; text: string } {
   return { bg: "#2a3a50", text: "#fff" };
 }
 
-// Bookmaker logo URLs (Clearbit CDN)
-const BOOKMAKER_LOGO_DOMAINS: Array<[string, string]> = [
-  ["888sport",      "888sport.it"],
-  ["bet365",        "bet365.com"],
-  ["betflag",       "betflag.it"],
-  ["betsson",       "betsson.it"],
-  ["bwin",          "bwin.it"],
-  ["eurobet",       "eurobet.it"],
-  ["goldbet",       "goldbet.it"],
-  ["lottomatica",   "lottomatica.it"],
-  ["netwin",        "netwin.it"],
-  ["planetwin365",  "planetwin365.eu"],
-  ["sisal",         "sisal.it"],
-  ["snai",          "snai.it"],
-  ["william",       "williamhill.it"],
-  ["gioco digitale","giocodigitale.it"],
-  ["codere",        "codere.it"],
-  ["admiralbet",    "admiralbet.it"],
-  ["admiral",       "admiralbet.it"],
-  ["leovegas",      "leovegas.it"],
-  ["stanleybet",    "stanleybet.it"],
-  ["betway",        "betway.it"],
-  ["unibet",        "unibet.it"],
-  ["pokerstars",    "pokerstars.it"],
-  ["sportium",      "sportium.es"],
+// Mappa bookmaker → file SVG locale in /public/bookmakers/
+const BOOKMAKER_LOCAL_LOGOS: Array<[string, string]> = [
+  ["888sport",     "/bookmakers/888sport.svg"],
+  ["bet365",       "/bookmakers/bet365.svg"],
+  ["betflag",      "/bookmakers/betflag.svg"],
+  ["betsson",      "/bookmakers/betsson.svg"],
+  ["bwin",         "/bookmakers/bwin.svg"],
+  ["eurobet",      "/bookmakers/eurobet.svg"],
+  ["goldbet",      "/bookmakers/goldbet.svg"],
+  ["lottomatica",  "/bookmakers/lottomatica.svg"],
+  ["netwin",       "/bookmakers/netwin.svg"],
+  ["planetwin",    "/bookmakers/planetwin365.svg"],
+  ["sisal",        "/bookmakers/sisal.svg"],
+  ["snai",         "/bookmakers/snai.svg"],
+  ["william",      "/bookmakers/williamhill.svg"],
 ];
 
-function getBookLogoUrl(name: string): string | null {
+function getBookLocalLogo(name: string): string | null {
   const lower = name.toLowerCase();
-  for (const [key, domain] of BOOKMAKER_LOGO_DOMAINS) {
-    if (lower.includes(key)) return `https://logo.clearbit.com/${domain}`;
+  for (const [key, path] of BOOKMAKER_LOCAL_LOGOS) {
+    if (lower.includes(key)) return path;
   }
   return null;
 }
 
 function BookLogo({ bookmaker }: { bookmaker: string }) {
   const [failed, setFailed] = useState(false);
-  const logoUrl = getBookLogoUrl(bookmaker);
+  const logoPath = getBookLocalLogo(bookmaker);
   const c = getBookColor(bookmaker);
   const label = bookmaker.replace(/ bookmaker$/i, "").replace(/ exchange$/i, "");
-  if (!logoUrl || failed) {
+  if (!logoPath || failed) {
     return (
       <span
         className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap"
@@ -306,17 +296,12 @@ function BookLogo({ bookmaker }: { bookmaker: string }) {
     );
   }
   return (
-    <span
-      className="inline-flex items-center justify-center px-2 rounded h-7 min-w-[60px]"
-      style={{ backgroundColor: c.bg }}
-    >
-      <img
-        src={logoUrl}
-        alt={label}
-        className="h-5 max-w-[90px] object-contain"
-        onError={() => setFailed(true)}
-      />
-    </span>
+    <img
+      src={logoPath}
+      alt={label}
+      className="h-7 w-auto max-w-[110px] object-contain rounded"
+      onError={() => setFailed(true)}
+    />
   );
 }
 
