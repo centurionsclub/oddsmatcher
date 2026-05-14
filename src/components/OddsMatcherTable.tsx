@@ -975,18 +975,18 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
         <div className="text-right text-xs text-white px-4 py-2">{tvFiltered.length} eventi</div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
+          <table className="w-full min-w-[600px] text-sm border-collapse">
             <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
-                <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
-                <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
-                <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
-                <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
-                <th className="text-center py-2.5 px-3 font-semibold">#</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
-                {tvHasStake && <th className="text-center py-2.5 px-3 font-semibold text-[#c8922d]">Stake</th>}
+                <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
+                <th className="text-center py-2 px-2 font-semibold">Sport</th>
+                <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
+                <th className="text-center py-2 px-2 font-semibold">Nazione</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Rating</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">#</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Bookmaker</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#87c4e8]">Quota</th>
+                {tvHasStake && <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#c8922d]">Stake</th>}
               </tr>
             </thead>
             <tbody>
@@ -1092,20 +1092,20 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
           {filtered.length} risultati
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[700px] text-sm">
             <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
-                <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
-                <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
-                <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
-                <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Mercato</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Esito</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Miglior Book</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota Max</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Peggior Book</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota Min</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Diff</th>
+                <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
+                <th className="text-center py-2 px-2 font-semibold">Sport</th>
+                <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
+                <th className="text-center py-2 px-2 font-semibold">Nazione</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Mercato</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Esito</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Miglior Book</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#87c4e8]">Quota Max</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Peggior Book</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#f4a9ba]">Quota Min</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Diff</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
@@ -1149,20 +1149,20 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
           {filtered.length} risultati &middot; Margine pi&ugrave; basso = migliore opportunit&agrave;
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[700px] text-sm">
             <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
-                <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
-                <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
-                <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
-                <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Scommessa 2</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Margine</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota 1</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker 2</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota 2</th>
+                <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
+                <th className="text-center py-2 px-2 font-semibold">Sport</th>
+                <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
+                <th className="text-center py-2 px-2 font-semibold">Nazione</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Scommessa 1</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Scommessa 2</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Margine</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Bookmaker 1</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#87c4e8]">Quota 1</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Bookmaker 2</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#f4a9ba]">Quota 2</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
@@ -1393,21 +1393,21 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
         {/* ── Tabella ── */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[700px] text-sm">
             <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
-                <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
-                <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
-                <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
-                <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Competizione</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Scommessa</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Exchange</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Quota</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Liquidità</th>
+                <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
+                <th className="text-center py-2 px-2 font-semibold">Sport</th>
+                <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
+                <th className="text-center py-2 px-2 font-semibold">Nazione</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Competizione</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Scommessa</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Rating</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Bookmaker</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#87c4e8]">Quota</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Exchange</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#f4a9ba]">Quota</th>
+                <th className="hidden md:table-cell text-center py-2 px-2 md:px-3 font-semibold text-[#f4a9ba]">Liquidità</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
@@ -1463,7 +1463,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                     <td className="py-2 px-3 text-center font-mono text-sm text-[#2d0d1a] bg-[#f4a9ba]">
                       {opp.quotaExchange.toFixed(2).replace(".", ",")}
                     </td>
-                    <td className="py-2 px-3 text-center text-xs font-mono text-[#f4a9ba]">
+                    <td className="hidden md:table-cell py-2 px-3 text-center text-xs font-mono text-[#f4a9ba]">
                       {opp.volumeExchange != null ? formatVolume(opp.volumeExchange) : <span className="opacity-30">—</span>}
                     </td>
                   </tr>
@@ -1561,20 +1561,20 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
       <div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[700px] text-sm">
             <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
-                <th className="text-left py-2.5 px-3 font-semibold">Data/Ora</th>
-                <th className="text-center py-2.5 px-2 font-semibold">Sport</th>
-                <th className="text-left py-2.5 px-3 font-semibold">Partita</th>
-                <th className="text-center py-2.5 px-2 font-semibold">Nazione</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Scommessa</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Rating</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Bookmaker</th>
-                <th className="text-center py-2.5 px-3 font-semibold text-[#87c4e8]">Quota</th>
-                <th className="text-center py-2.5 px-3 font-semibold">Exchange</th>
-                <th className={`text-center py-2.5 px-3 font-semibold ${isBookVsBook ? "text-[#87c4e8]" : "text-[#f4a9ba]"}`}>Quota</th>
-                {showVolume && <th className="text-center py-2.5 px-3 font-semibold text-[#f4a9ba]">Liquidità</th>}
+                <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
+                <th className="text-center py-2 px-2 font-semibold">Sport</th>
+                <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
+                <th className="text-center py-2 px-2 font-semibold">Nazione</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Scommessa</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Rating</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Bookmaker</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold text-[#87c4e8]">Quota</th>
+                <th className="text-center py-2 px-2 md:px-3 font-semibold">Exchange</th>
+                <th className={`text-center py-2 px-2 md:px-3 font-semibold ${isBookVsBook ? "text-[#87c4e8]" : "text-[#f4a9ba]"}`}>Quota</th>
+                {showVolume && <th className="hidden md:table-cell text-center py-2 px-2 md:px-3 font-semibold text-[#f4a9ba]">Liquidità</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
@@ -1651,7 +1651,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                           {counterQuota}
                         </td>
                         {showVolume && (
-                          <td className="py-2 px-3 text-center text-xs font-mono text-[#f4a9ba]">
+                          <td className="hidden md:table-cell py-2 px-3 text-center text-xs font-mono text-[#f4a9ba]">
                             {opp.volumeExchange != null ? formatVolume(opp.volumeExchange) : <span className="text-white opacity-30">—</span>}
                           </td>
                         )}

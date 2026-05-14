@@ -279,23 +279,23 @@ const Index = () => {
           Le quote dei bookmaker possono differire rispetto a quelle mostrate nell'oddsmatcher. Questo accade quando si registrano flussi di denaro significativi su un evento.
         </div>
         {/* Action Buttons */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-4">
           <button
             onClick={() => setFiltersOpen(!filtersOpen)}
-            className="px-4 py-2 border border-[#c8922d] text-[#c8922d] bg-transparent rounded font-semibold text-sm hover:bg-[#c8922d] hover:text-white transition-colors"
+            className="px-4 py-2 border border-[#c8922d] text-[#c8922d] bg-transparent rounded font-semibold text-xs sm:text-sm hover:bg-[#c8922d] hover:text-white transition-colors"
           >
             FILTRA {filtersOpen ? "▼" : "▲"}
           </button>
           <button
             onClick={handleAggiorna}
             disabled={oddsLoading}
-            className="px-4 py-2 border border-[#c8922d] text-[#c8922d] bg-transparent rounded font-semibold text-sm hover:bg-[#c8922d] hover:text-white transition-colors disabled:opacity-50"
+            className="px-4 py-2 border border-[#c8922d] text-[#c8922d] bg-transparent rounded font-semibold text-xs sm:text-sm hover:bg-[#c8922d] hover:text-white transition-colors disabled:opacity-50"
           >
             {oddsLoading ? "CARICAMENTO..." : "AGGIORNA ↻"}
           </button>
           <button
             onClick={handlePulisci}
-            className="px-4 py-2 bg-red-600 text-white rounded font-semibold text-sm hover:bg-red-700 transition-colors"
+            className="px-4 py-2 bg-red-600 text-white rounded font-semibold text-xs sm:text-sm hover:bg-red-700 transition-colors"
           >
             PULISCI ✕
           </button>
@@ -306,7 +306,7 @@ const Index = () => {
               <button
                 disabled={!isReady}
                 onClick={() => setShowInviaModal(true)}
-                className={`px-4 py-2 rounded font-semibold text-sm transition-colors ${
+                className={`px-4 py-2 rounded font-semibold text-xs sm:text-sm transition-colors ${
                   isReady
                     ? "bg-green-600 text-white hover:bg-green-700 cursor-pointer"
                     : "bg-[#1a2535] text-slate-500 border border-[#253347] cursor-not-allowed"
@@ -339,8 +339,8 @@ const Index = () => {
             </div>
 
             {/* Sport */}
-            {activeSubTab !== "multipla" && <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Sport</span>
+            {activeSubTab !== "multipla" && <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Sport</span>
               <div className="flex gap-1">
                 {[
                   { value: "tutti", label: "Tutti" },
@@ -364,18 +364,18 @@ const Index = () => {
             </div>}
 
             {/* Mercati - nascosto per tre vie (sempre 1X2) */}
-            {activeSubTab !== "trevie" && <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Mercati</span>
-              <div className="relative">
+            {activeSubTab !== "trevie" && <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Mercati</span>
+              <div className="relative w-full sm:w-auto">
                 <button
                   onClick={() => { setMarketsOpen(!marketsOpen); setBookmakerOpen(false); setExchangeOpen(false); }}
-                  className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
+                  className="border border-[#253347] rounded px-3 py-1.5 text-sm w-full sm:min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                 >
                   <span className="text-white">{selectedMarkets.length === 0 ? "Tutti" : `${selectedMarkets.length} selezionati`}</span>
                   <span className="text-slate-500">▾</span>
                 </button>
                 {marketsOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[250px] max-h-[300px] overflow-y-auto">
+                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-full sm:w-[250px] max-h-[300px] overflow-y-auto">
                     <button
                       onClick={() => setSelectedMarkets([])}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#c8922d]"
@@ -399,18 +399,18 @@ const Index = () => {
             </div>}
 
             {/* Bookmaker — nascosto per tre vie (coperto da Book 1 / Book 2/3) */}
-            {activeSubTab !== "trevie" && <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Bookmaker</span>
-              <div className="relative">
+            {activeSubTab !== "trevie" && <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+              <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Bookmaker</span>
+              <div className="relative w-full sm:w-auto">
                 <button
                   onClick={() => { setBookmakerOpen(!bookmakerOpen); setMarketsOpen(false); setExchangeOpen(false); setBookmakerSearch(""); }}
-                  className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
+                  className="border border-[#253347] rounded px-3 py-1.5 text-sm w-full sm:min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                 >
                   <span className="text-white">{selectedBookmakers.length === 0 ? "Tutti" : `${selectedBookmakers.length} selezionati`}</span>
                   <span className="text-slate-500">▾</span>
                 </button>
                 {bookmakerOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[250px] flex flex-col max-h-[320px]">
+                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-full sm:w-[250px] flex flex-col max-h-[320px]">
                     {/* Search input sticky */}
                     <div className="p-2 border-b border-[#253347] shrink-0">
                       <input
@@ -468,18 +468,18 @@ const Index = () => {
                 }
               };
               return (
-            <div className="flex items-center gap-3 mb-3">
-              <span className={`text-sm font-semibold w-[110px] text-center px-3 py-1.5 rounded transition-all ${
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+              <span className={`text-sm font-semibold w-full sm:w-[110px] text-center px-3 py-1.5 rounded transition-all ${
                 hasBookInExchange
                   ? "text-[#0d2035] bg-[#87c4e8]"
                   : "text-[#2d0d1a] bg-[#f4a9ba]"
               }`}>
                 {hasBookInExchange ? "Bookmaker" : "Exchange"}
               </span>
-              <div className="relative">
+              <div className="relative w-full sm:w-auto">
                 <button
                   onClick={() => { setExchangeOpen(!exchangeOpen); setMarketsOpen(false); setBookmakerOpen(false); setExchangeSearch(""); }}
-                  className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
+                  className="border border-[#253347] rounded px-3 py-1.5 text-sm w-full sm:min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                 >
                   <span className="text-white">
                     {selectedExchanges.length === 0 ? "Nessuno" : `${selectedExchanges.length} selezionati`}
@@ -487,7 +487,7 @@ const Index = () => {
                   <span className="text-slate-500">▾</span>
                 </button>
                 {exchangeOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[280px] flex flex-col max-h-[360px]">
+                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-full sm:w-[280px] flex flex-col max-h-[360px]">
                     {/* Search input sticky */}
                     <div className="p-2 border-b border-[#253347] shrink-0">
                       <input
@@ -573,18 +573,18 @@ const Index = () => {
 
             {/* Tre Vie: Bookmaker Principale */}
             {activeSubTab === "trevie" && (
-              <div className="flex items-center gap-3 mb-3">
-                <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Book 1</span>
-                <div className="relative">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+                <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Book 1</span>
+                <div className="relative w-full sm:w-auto">
                   <button
                     onClick={() => { setTrevieMainOpen(!trevieMainOpen); setTrevieSecondaryOpen(false); }}
-                    className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
+                    className="border border-[#253347] rounded px-3 py-1.5 text-sm w-full sm:min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                   >
                     <span className="text-white">{trevieMain || "Tutti"}</span>
                     <span className="text-slate-500">▾</span>
                   </button>
                   {trevieMainOpen && (
-                    <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[250px] max-h-[300px] overflow-y-auto">
+                    <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-full sm:w-[250px] max-h-[300px] overflow-y-auto">
                       <button
                         onClick={() => { setTrevieMain(""); setTrevieMainOpen(false); }}
                         className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#c8922d]"
@@ -618,12 +618,12 @@ const Index = () => {
 
             {/* Tre Vie: Bookmakers Secondari */}
             {activeSubTab === "trevie" && (
-              <div className="flex items-center gap-3 mb-3">
-                <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-[110px] text-center">Book 2/3</span>
-                <div className="relative">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+                <span className="text-sm font-semibold text-[#0d2035] bg-[#87c4e8] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Book 2/3</span>
+                <div className="relative w-full sm:w-auto">
                   <button
                     onClick={() => { setTrevieSecondaryOpen(!trevieSecondaryOpen); setTrevieMainOpen(false); setTrevieSecondarySearch(""); }}
-                    className="border border-[#253347] rounded px-3 py-1.5 text-sm min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
+                    className="border border-[#253347] rounded px-3 py-1.5 text-sm w-full sm:min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                   >
                     <span className="text-white">
                       {trevieSecondary.length === 0 ? "Tutti" : `${trevieSecondary.length} selezionati`}
@@ -631,7 +631,7 @@ const Index = () => {
                     <span className="text-slate-500">▾</span>
                   </button>
                   {trevieSecondaryOpen && (
-                    <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-[280px] flex flex-col max-h-[360px]">
+                    <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-full sm:w-[280px] flex flex-col max-h-[360px]">
                       <div className="p-2 border-b border-[#253347] shrink-0">
                         <input
                           type="text"
@@ -681,8 +681,8 @@ const Index = () => {
             )}
 
             {/* Stake */}
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">
                 {activeSubTab === "multipla" ? "Stake Multipla" : "Stake Punta"}
               </span>
               <input
@@ -690,7 +690,7 @@ const Index = () => {
                 value={activeSubTab === "multipla" ? stakeMultipla : stakePunta}
                 onChange={(e) => { activeSubTab === "multipla" ? setStakeMultipla(e.target.value) : setStakePunta(e.target.value); setStakeError(null); }}
                 placeholder="0 €"
-                className={`border rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 bg-[#1a2535] text-white placeholder-slate-500 ${stakeError ? "border-red-500 focus:ring-red-500/30" : "border-[#253347] focus:ring-[#c8922d]/30"}`}
+                className={`border rounded px-3 py-1.5 text-sm w-full sm:w-[200px] focus:outline-none focus:ring-2 bg-[#1a2535] text-white placeholder-slate-500 ${stakeError ? "border-red-500 focus:ring-red-500/30" : "border-[#253347] focus:ring-[#c8922d]/30"}`}
               />
               <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#1e2d42] px-3 py-1 rounded cursor-pointer">
                 <input
@@ -704,15 +704,15 @@ const Index = () => {
             </div>
 
             {/* Bonus */}
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-semibold text-white bg-[#c8922d] px-3 py-1.5 rounded w-[110px] text-center">Bonus</span>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+              <span className="text-sm font-semibold text-white bg-[#c8922d] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Bonus</span>
               <input
                 type="text"
                 value={bonus}
                 onChange={(e) => { setBonus(e.target.value); setStakeError(null); }}
                 placeholder="0 €"
                 disabled={freeBet}
-                className={`border rounded px-3 py-1.5 text-sm w-[200px] focus:outline-none focus:ring-2 ${freeBet ? "border-[#253347] bg-[#0d1320] text-slate-600 cursor-not-allowed opacity-50" : stakeError ? "border-red-500 bg-[#1a2535] text-white placeholder-slate-500 focus:ring-red-500/30" : "border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 focus:ring-[#c8922d]/30"}`}
+                className={`border rounded px-3 py-1.5 text-sm w-full sm:w-[200px] focus:outline-none focus:ring-2 ${freeBet ? "border-[#253347] bg-[#0d1320] text-slate-600 cursor-not-allowed opacity-50" : stakeError ? "border-red-500 bg-[#1a2535] text-white placeholder-slate-500 focus:ring-red-500/30" : "border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 focus:ring-[#c8922d]/30"}`}
               />
               <label className="flex items-center gap-2 text-sm text-white font-medium bg-[#c8922d] px-3 py-1 rounded cursor-pointer">
                 <input type="checkbox" checked={rimborso} onChange={(e) => setRimborso(e.target.checked)} className="accent-white" />
@@ -732,7 +732,7 @@ const Index = () => {
             {activeSubTab === "multipla" ? (
               <>
                 {/* Quota Minima Multipla + N° Eventi */}
-                <div className="flex items-center gap-3 mb-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
                   <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded whitespace-nowrap text-center">Quota Minima Multipla</span>
                   <input
                     type="number"
@@ -741,7 +741,7 @@ const Index = () => {
                     step="0.01"
                     min="0"
                     placeholder="0,00"
-                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-full sm:w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
                   />
                   <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded text-center">N° Eventi</span>
                   <input
@@ -751,13 +751,13 @@ const Index = () => {
                     min="0"
                     step="1"
                     placeholder="0"
-                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[80px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-full sm:w-20 focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
                   />
                 </div>
 
                 {/* Quota Partita Minima / Massima */}
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Quota Partita</span>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+                  <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Quota Partita</span>
                   <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded">Minima</span>
                   <input
                     type="number"
@@ -766,7 +766,7 @@ const Index = () => {
                     step="0.01"
                     min="0"
                     placeholder="0,00"
-                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-full sm:w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
                   />
                   <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded">Massima</span>
                   <input
@@ -776,19 +776,19 @@ const Index = () => {
                     step="0.01"
                     min="0"
                     placeholder="0,00"
-                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                    className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-full sm:w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
                   />
                 </div>
               </>
             ) : (
-              <div className="flex items-center gap-3 mb-3">
-                <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Quota Minima</span>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+                <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Quota Minima</span>
                 <input
                   type="text"
                   value={quotaMinima}
                   onChange={(e) => setQuotaMinima(e.target.value)}
                   placeholder="0,00"
-                  className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                  className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-full sm:w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
                 />
                 <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded">Quota Massima</span>
                 <input
@@ -796,15 +796,15 @@ const Index = () => {
                   value={quotaMassima}
                   onChange={(e) => setQuotaMassima(e.target.value)}
                   placeholder="0,00"
-                  className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                  className="border border-[#253347] bg-[#1a2535] text-white placeholder-slate-500 rounded px-3 py-1.5 text-sm w-full sm:w-[100px] focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
                 />
               </div>
             )}
 
             {/* Partita */}
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Partita</span>
-              <div className="relative flex-1 max-w-[300px]">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3">
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Partita</span>
+              <div className="relative w-full sm:flex-1 sm:max-w-[300px]">
                 <input
                   type="text"
                   value={partita}
@@ -828,9 +828,9 @@ const Index = () => {
             </div>
 
             {/* Campionato */}
-            <div className={`flex items-center gap-3 ${activeSubTab === "multipla" ? "mb-3" : ""}`}>
-              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Campionato</span>
-              <div className="relative flex-1 max-w-[300px]">
+            <div className={`flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 ${activeSubTab === "multipla" ? "mb-3" : ""}`}>
+              <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Campionato</span>
+              <div className="relative w-full sm:flex-1 sm:max-w-[300px]">
                 <input
                   type="text"
                   value={campionato}
@@ -855,20 +855,20 @@ const Index = () => {
 
             {/* Da data / A data - multipla e tre vie */}
             {(activeSubTab === "multipla" || activeSubTab === "trevie") && (
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-[110px] text-center">Da data</span>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+                <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded w-full sm:w-[110px] text-center">Da data</span>
                 <input
                   type="date"
                   value={daData}
                   onChange={(e) => setDaData(e.target.value)}
-                  className="border border-[#253347] bg-[#1a2535] text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                  className="border border-[#253347] bg-[#1a2535] text-white rounded px-3 py-1.5 text-sm w-full sm:w-auto focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
                 />
                 <span className="text-sm font-medium text-white bg-[#1e2d42] px-3 py-1.5 rounded text-center">A data</span>
                 <input
                   type="date"
                   value={aData}
                   onChange={(e) => setAData(e.target.value)}
-                  className="border border-[#253347] bg-[#1a2535] text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
+                  className="border border-[#253347] bg-[#1a2535] text-white rounded px-3 py-1.5 text-sm w-full sm:w-auto focus:outline-none focus:ring-2 focus:ring-[#c8922d]/30"
                 />
               </div>
             )}
@@ -987,7 +987,7 @@ const Index = () => {
               style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
               onClick={e => { if (e.target === e.currentTarget) { setShowInviaModal(false); setInviaIntestatario(""); } }}
             >
-              <div className="bg-[#152033] border border-[#1e3050] rounded-xl shadow-2xl p-6 w-[380px] max-w-[90vw]">
+              <div className="bg-[#152033] border border-[#1e3050] rounded-xl shadow-2xl p-6 w-[90vw] max-w-[400px]">
                 <h2 className="text-white font-bold text-lg mb-4">Invia Multipla</h2>
 
                 {intestatariLoading ? (

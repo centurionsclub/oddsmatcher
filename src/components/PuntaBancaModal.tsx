@@ -222,7 +222,7 @@ export function PuntaBancaModal({
       style={{ backgroundColor: "rgba(0,0,0,0.75)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-lg shadow-2xl w-[90vw] max-w-[950px] max-h-[90vh] overflow-y-auto relative">
+      <div className="bg-white rounded-lg shadow-2xl w-[95vw] max-w-[950px] max-h-[90vh] overflow-y-auto relative">
 
         {/* Title bar */}
         <div className="flex items-center justify-between px-5 py-3 rounded-t-lg" style={{ backgroundColor: "#87c4e8" }}>
