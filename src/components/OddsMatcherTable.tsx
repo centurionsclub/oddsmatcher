@@ -303,7 +303,7 @@ function BookLogo({ bookmaker }: { bookmaker: string }) {
       <img
         src={logoPath}
         alt={label}
-        className={`${getBookLocalLogo(bookmaker)?.includes("netwin.png") ? "h-9" : "h-7"} w-auto max-w-[120px] object-contain`}
+        className={`${getBookLocalLogo(bookmaker)?.includes("netwin.png") ? "h-[42px]" : "h-7"} w-auto max-w-[120px] object-contain`}
         onError={() => setFailed(true)}
       />
     </div>
