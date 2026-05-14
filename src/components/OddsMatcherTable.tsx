@@ -268,7 +268,7 @@ const BOOKMAKER_LOCAL_LOGOS: Array<[string, string]> = [
   ["lottomatica",  "/bookmakers/lottomatica.svg"],
   ["lotto",        "/bookmakers/lottomatica.svg"],
   ["marathonbet",  "/bookmakers/marathonbet.svg"],
-  ["netwin",       "/bookmakers/netwin.svg"],
+  ["netwin",       "/bookmakers/netwin.png"],
   ["planetwin",    "/bookmakers/planetwin365.svg"],
   ["sisal",        "/bookmakers/sisal.svg"],
   ["snai",         "/bookmakers/snai.svg"],
