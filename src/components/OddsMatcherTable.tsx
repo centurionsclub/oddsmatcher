@@ -255,6 +255,71 @@ function getBookColor(name: string): { bg: string; text: string } {
   return { bg: "#2a3a50", text: "#fff" };
 }
 
+// Bookmaker logo URLs (Clearbit CDN)
+const BOOKMAKER_LOGO_DOMAINS: Array<[string, string]> = [
+  ["888sport",      "888sport.it"],
+  ["bet365",        "bet365.com"],
+  ["betflag",       "betflag.it"],
+  ["betsson",       "betsson.it"],
+  ["bwin",          "bwin.it"],
+  ["eurobet",       "eurobet.it"],
+  ["goldbet",       "goldbet.it"],
+  ["lottomatica",   "lottomatica.it"],
+  ["netwin",        "netwin.it"],
+  ["planetwin365",  "planetwin365.eu"],
+  ["sisal",         "sisal.it"],
+  ["snai",          "snai.it"],
+  ["william",       "williamhill.it"],
+  ["gioco digitale","giocodigitale.it"],
+  ["codere",        "codere.it"],
+  ["admiralbet",    "admiralbet.it"],
+  ["admiral",       "admiralbet.it"],
+  ["leovegas",      "leovegas.it"],
+  ["stanleybet",    "stanleybet.it"],
+  ["betway",        "betway.it"],
+  ["unibet",        "unibet.it"],
+  ["pokerstars",    "pokerstars.it"],
+  ["sportium",      "sportium.es"],
+];
+
+function getBookLogoUrl(name: string): string | null {
+  const lower = name.toLowerCase();
+  for (const [key, domain] of BOOKMAKER_LOGO_DOMAINS) {
+    if (lower.includes(key)) return `https://logo.clearbit.com/${domain}`;
+  }
+  return null;
+}
+
+function BookLogo({ bookmaker }: { bookmaker: string }) {
+  const [failed, setFailed] = useState(false);
+  const logoUrl = getBookLogoUrl(bookmaker);
+  const c = getBookColor(bookmaker);
+  const label = bookmaker.replace(/ bookmaker$/i, "").replace(/ exchange$/i, "");
+  if (!logoUrl || failed) {
+    return (
+      <span
+        className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap"
+        style={{ backgroundColor: c.bg, color: c.text }}
+      >
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center justify-center px-2 rounded h-7 min-w-[60px]"
+      style={{ backgroundColor: c.bg }}
+    >
+      <img
+        src={logoUrl}
+        alt={label}
+        className="h-5 max-w-[90px] object-contain"
+        onError={() => setFailed(true)}
+      />
+    </span>
+  );
+}
+
 function getOutcomes(event: OddsData): Array<{ key: string; label: string }> {
   const o = event.odds;
   if (event.market === "1X2" || event.market === "h2h") {
@@ -1141,31 +1206,22 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e3050]">
-              {displayRows.map((row, i) => {
-                const c = getBookColor(row.bookmaker);
-                const bmLabel = row.bookmaker.replace(/ bookmaker$/i, "").replace(/ exchange$/i, "");
-                return (
-                  <tr key={i} className={`transition-colors ${row.isFirst ? "bg-[#1a2a1a] hover:bg-[#1e3020]" : "hover:bg-[#1e2d42]"}`}>
-                    <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
-                    <td className="py-2 px-2 text-center text-base">{getSportIcon(row.sport)}</td>
-                    <td className="py-2 px-3 text-sm text-white font-medium max-w-[220px] truncate">{row.eventName}</td>
-                    <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(row.league)}</td>
-                    <td className="py-2 px-3 text-center text-xs text-slate-300 max-w-[120px] truncate">{row.league}</td>
-                    <td className="py-2 px-3 text-center text-sm font-bold text-white">{row.outcome}</td>
-                    <td className="py-2 px-3 text-center">
-                      <span
-                        className="inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap"
-                        style={{ backgroundColor: c.bg, color: c.text }}
-                      >
-                        {bmLabel}
-                      </span>
-                    </td>
-                    <td className={`py-2 px-3 text-center font-mono text-sm font-bold ${row.isFirst ? "text-[#0d2035] bg-[#87c4e8]" : "text-white bg-[#1e2d42]"}`}>
-                      {row.odds.toFixed(2).replace(".", ",")}
-                    </td>
-                  </tr>
-                );
-              })}
+              {displayRows.map((row, i) => (
+                <tr key={i} className={`transition-colors ${row.isFirst ? "bg-[#1a2a1a] hover:bg-[#1e3020]" : "hover:bg-[#1e2d42]"}`}>
+                  <td className="py-2 px-3 text-xs text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
+                  <td className="py-2 px-2 text-center text-base">{getSportIcon(row.sport)}</td>
+                  <td className="py-2 px-3 text-sm text-white font-medium max-w-[220px] truncate">{row.eventName}</td>
+                  <td className="py-2 px-2 text-center text-lg">{getLeagueFlag(row.league)}</td>
+                  <td className="py-2 px-3 text-center text-xs text-slate-300 max-w-[120px] truncate">{row.league}</td>
+                  <td className="py-2 px-3 text-center text-sm font-bold text-white">{row.outcome}</td>
+                  <td className="py-2 px-3 text-center">
+                    <BookLogo bookmaker={row.bookmaker} />
+                  </td>
+                  <td className={`py-2 px-3 text-center font-mono text-sm font-bold ${row.isFirst ? "text-[#0d2035] bg-[#87c4e8]" : "text-white bg-[#1e2d42]"}`}>
+                    {row.odds.toFixed(2).replace(".", ",")}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
