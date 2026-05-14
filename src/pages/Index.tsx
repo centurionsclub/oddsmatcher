@@ -156,6 +156,15 @@ const Index = () => {
         return;
       }
     }
+    // Tre Vie: richiede stake punta o bonus
+    if (activeSubTab === "trevie") {
+      const stakeVal = parseFloat(stakePunta.replace(",", ".") || "0");
+      const bonusVal = parseFloat(bonus.replace(",", ".") || "0");
+      if (!stakeVal && !bonusVal) {
+        setStakeError(`Inserisci un importo in "Stake Punta" oppure in "Bonus" per continuare.`);
+        return;
+      }
+    }
     setStakeError(null);
     setFiltersOpen(false); // nascondi i filtri subito
     setMultiplaResetKey(k => k + 1); // reset selezione multipla
