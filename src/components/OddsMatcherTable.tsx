@@ -1003,7 +1003,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
   // ═══ RENDER: MULTIPLA ═══
   if (activeTab === "multipla") {
-    let multiplaOpps = [...singolaOpps];
+    let multiplaOpps = singolaOpps.filter(o => o.sport === "calcio");
     const numEventiTarget = parseInt(filters.numEventi || "0") || 0;
 
     const qpMin = parseFloat((filters.quotaPartitaMinima || "0").replace(",", "."));
