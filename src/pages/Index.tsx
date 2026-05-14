@@ -133,18 +133,20 @@ const Index = () => {
         return;
       }
     }
-    // Multipla: avvisa se N° eventi < 2 (non blocca la ricerca)
+    // Multipla: richiede stake E N° eventi >= 2
     if (activeSubTab === "multipla") {
-      const n = parseInt(numEventi || "0");
-      if (n < 2) {
-        setStakeError(`Imposta "N° Eventi" ad almeno 2 per la multipla.`);
-        // NON fare return: la ricerca va comunque avanti
-      } else {
-        setStakeError(null);
+      const stakeVal = parseFloat((stakeMultipla || "0").replace(",", "."));
+      const bonusVal = parseFloat((bonus || "0").replace(",", "."));
+      const nEventi = parseInt(numEventi || "0");
+      if ((!stakeVal && !bonusVal) || nEventi < 2) {
+        const msgs = [];
+        if (!stakeVal && !bonusVal) msgs.push('"Stake Multipla" o "Bonus"');
+        if (nEventi < 2) msgs.push('"N° Eventi" (minimo 2)');
+        setStakeError(`Compila: ${msgs.join(" e ")}.`);
+        return;
       }
-    } else {
-      setStakeError(null);
     }
+    setStakeError(null);
     setFiltersOpen(false); // nascondi i filtri subito
     setMultiplaResetKey(k => k + 1); // reset selezione multipla
     searchOdds({
