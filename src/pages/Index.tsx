@@ -55,6 +55,7 @@ const Index = () => {
   const { session } = useAuth();
   const [showInviaModal, setShowInviaModal] = useState(false);
   const [inviaIntestatario, setInviaIntestatario] = useState("");
+  const [inviaIntestatarioBanca, setInviaIntestatarioBanca] = useState("");
   const [intestatariList, setIntestatariList] = useState<string[]>([]);
   const [intestatariLoading, setIntestatariLoading] = useState(false);
 
@@ -176,11 +177,15 @@ const Index = () => {
     if (!showInviaModal || !session) return;
     setIntestatariList([]);
     setInviaIntestatario("");
+    setInviaIntestatarioBanca("");
     setIntestatariLoading(true);
     supabase.functions.invoke("get-intestatari").then(({ data, error }) => {
       if (!error && Array.isArray(data)) {
         setIntestatariList(data);
-        if (data.length === 1) setInviaIntestatario(data[0]);
+        if (data.length === 1) {
+          setInviaIntestatario(data[0]);
+          setInviaIntestatarioBanca(data[0]);
+        }
       }
       setIntestatariLoading(false);
     });
@@ -904,7 +909,14 @@ const Index = () => {
           };
 
           const handleInvia = () => {
-            if (!inviaIntestatario.trim()) return;
+            if (!inviaIntestatario.trim() || !inviaIntestatarioBanca.trim()) return;
+
+            // Calcolo lay stake per ogni selezione
+            const effectiveStake = bonusVal > 0 ? bonusVal : stakeVal;
+            const quotaCombinata = multiplaSelected.reduce((acc, opp) => acc * opp.quotaBook, 1);
+            const potentialWin = effectiveStake * quotaCombinata;
+            const commRate = commission / 100;
+
             const savedState = {
               autoSave: true,
               selections: multiplaSelected.map(opp => ({
@@ -931,11 +943,24 @@ const Index = () => {
               selectedIntestatario: inviaIntestatario.trim(),
               selectedConto: "",
               tipoBonus: bonusVal > 0 ? "Bonus" : "Nessuno",
+              intestatarioBanca: inviaIntestatarioBanca.trim(),
+              bancate: multiplaSelected.map(opp => ({
+                evento: opp.eventName,
+                dataEvento: opp.eventTime,
+                mercato: toBetprofitMercato(opp.scommessa, opp.sport),
+                stake: potentialWin > 0
+                  ? Math.round((potentialWin / (opp.quotaExchange * (1 - commRate))) * 100) / 100
+                  : 0,
+                quotaBanca: opp.quotaExchange,
+                quotaPunta: opp.quotaBook,
+                tassePercentuale: commission,
+              })),
             };
             const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
             window.open(`https://betprofit.app/puntate?import=${encoded}`, "_blank");
             setShowInviaModal(false);
             setInviaIntestatario("");
+            setInviaIntestatarioBanca("");
           };
 
           return (
@@ -944,46 +969,62 @@ const Index = () => {
               style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
               onClick={e => { if (e.target === e.currentTarget) { setShowInviaModal(false); setInviaIntestatario(""); } }}
             >
-              <div className="bg-[#152033] border border-[#1e3050] rounded-xl shadow-2xl p-6 w-[360px] max-w-[90vw]">
-                <h2 className="text-white font-bold text-lg mb-1">Invia Multipla</h2>
-                <p className="text-slate-400 text-sm mb-4">Seleziona l'intestatario. La multipla verrà salvata automaticamente su BetProfit.</p>
+              <div className="bg-[#152033] border border-[#1e3050] rounded-xl shadow-2xl p-6 w-[380px] max-w-[90vw]">
+                <h2 className="text-white font-bold text-lg mb-4">Invia Multipla</h2>
 
-                <label className="block text-sm font-medium text-white mb-1">Intestatario</label>
                 {intestatariLoading ? (
-                  <div className="w-full bg-[#1a2535] border border-[#253347] text-slate-400 rounded px-3 py-2 text-sm mb-5">
-                    Caricamento…
-                  </div>
+                  <div className="text-slate-400 text-sm py-4 text-center">Caricamento intestatari…</div>
                 ) : intestatariList.length === 0 ? (
-                  <div className="w-full bg-[#1a2535] border border-red-500/40 text-red-400 rounded px-3 py-2 text-sm mb-5">
-                    Nessun intestatario abilitato trovato
-                  </div>
+                  <div className="text-red-400 text-sm py-4 text-center">Nessun intestatario abilitato trovato</div>
                 ) : (
-                  <select
-                    autoFocus
-                    value={inviaIntestatario}
-                    onChange={e => setInviaIntestatario(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Escape") { setShowInviaModal(false); setInviaIntestatario(""); } }}
-                    className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-green-500/40"
-                  >
-                    {intestatariList.length > 1 && (
-                      <option value="">— Seleziona intestatario —</option>
-                    )}
-                    {intestatariList.map(nome => (
-                      <option key={nome} value={nome}>{nome}</option>
-                    ))}
-                  </select>
+                  <>
+                    {/* Intestatario Punta */}
+                    <div className="mb-4">
+                      <label className="block text-xs font-semibold text-[#87c4e8] uppercase tracking-wide mb-1">
+                        Intestatario Punta
+                      </label>
+                      <select
+                        autoFocus
+                        value={inviaIntestatario}
+                        onChange={e => setInviaIntestatario(e.target.value)}
+                        className="w-full bg-[#1a2535] border border-[#87c4e8]/40 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#87c4e8]/40"
+                      >
+                        {intestatariList.length > 1 && <option value="">— Seleziona —</option>}
+                        {intestatariList.map(nome => (
+                          <option key={nome} value={nome}>{nome}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Intestatario Banca */}
+                    <div className="mb-6">
+                      <label className="block text-xs font-semibold text-[#f4a9ba] uppercase tracking-wide mb-1">
+                        Intestatario Banca
+                      </label>
+                      <select
+                        value={inviaIntestatarioBanca}
+                        onChange={e => setInviaIntestatarioBanca(e.target.value)}
+                        className="w-full bg-[#1a2535] border border-[#f4a9ba]/40 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#f4a9ba]/40"
+                      >
+                        {intestatariList.length > 1 && <option value="">— Seleziona —</option>}
+                        {intestatariList.map(nome => (
+                          <option key={nome} value={nome}>{nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
                 )}
 
                 <div className="flex gap-2 justify-end">
                   <button
-                    onClick={() => { setShowInviaModal(false); setInviaIntestatario(""); }}
+                    onClick={() => { setShowInviaModal(false); setInviaIntestatario(""); setInviaIntestatarioBanca(""); }}
                     className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-[#253347] rounded transition-colors"
                   >
                     Annulla
                   </button>
                   <button
                     onClick={handleInvia}
-                    disabled={!inviaIntestatario.trim()}
+                    disabled={!inviaIntestatario.trim() || !inviaIntestatarioBanca.trim()}
                     className="px-5 py-2 text-sm font-bold rounded transition-colors bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Invia ↗
