@@ -1254,8 +1254,15 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
     if (filtered.length === 0) {
       return (
-        <div className="text-center py-12 text-white">
-          Nessuna opportunità trovata con i filtri multipla impostati.
+        <div className="text-center py-12 text-white space-y-2">
+          <div>Nessuna opportunità trovata con i filtri multipla impostati.</div>
+          <div className="text-xs text-slate-400 font-mono">
+            data:{data?.data?.length ?? 0} singola:{singolaOpps.length} calcio:{singolaOpps.filter(o=>o.sport==="calcio").length} multiplaOpps:{multiplaOpps.length} filtered:{filtered.length}
+            {" | "} exchanges:{committedExchanges.join(",")}
+            {" | "} isPP:{isPuntaPuntaMode?"si":"no"}
+            {" | "} stake:"{committedFilters.stakeMultipla}"/"{committedFilters.stakePunta}"
+            {" | "} liq:{committedFilters.filtroLiquidita?"on":"off"}
+          </div>
         </div>
       );
     }
