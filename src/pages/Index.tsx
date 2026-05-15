@@ -963,7 +963,7 @@ const Index = () => {
               const key = comp.toLowerCase().replace(/\s*\(.*\)/, "").trim();
               if (lower.includes(key) || key.includes(lower)) return comp;
             }
-            return "Altro";
+            return league; // fallback: nome reale della lega
           };
 
           const handleInvia = () => {

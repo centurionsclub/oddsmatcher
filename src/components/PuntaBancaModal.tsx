@@ -285,7 +285,8 @@ export function PuntaBancaModal({
       const key = comp.toLowerCase().replace(/\s*\(.*\)/, "").trim();
       if (lower.includes(key) || key.includes(lower)) return comp;
     }
-    return "Altro";
+    // Fallback: restituisce il nome reale della lega invece di "Altro"
+    return league;
   };
 
   const handleInviaBP = () => {
@@ -294,6 +295,8 @@ export function PuntaBancaModal({
     const competizione = toBetprofitCompetizione(opp.league);
     const savedState = {
       autoSave: true,
+      tipo: "Singola",
+      isSingola: true,
       selections: [{
         evento: opp.eventName,
         competizione,
@@ -310,7 +313,7 @@ export function PuntaBancaModal({
         bonus: bonus > 0 ? bonus : 0,
         rimborso: rimborso ? 1 : 0,
         percentualeBonus: 0,
-        numeroMinimoSelezioni: 1,
+        numeroMinimoSelezioni: 0,
         urlEvento: opp.bookmakerUrl || getUrl(opp.bookmaker),
         note: "",
         tag: inviaTag,
