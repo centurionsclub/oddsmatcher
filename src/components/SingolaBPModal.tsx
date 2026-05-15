@@ -1,5 +1,15 @@
 import { useState, useEffect } from "react";
 import type { SingolaBPData } from "./PuntaBancaModal";
+import {
+  loginBetProfit,
+  fetchBPAccounts,
+  fetchBPTags,
+  createSingolaBet,
+  createLayBet,
+  restoreBPSession,
+  clearBPSession,
+  type BPAccount,
+} from "@/lib/betprofit-api";
 
 const TAG_PREDEFINITI = [
   "Bonus benvenuto",
@@ -10,14 +20,6 @@ const TAG_PREDEFINITI = [
   "Surebet a 2 vie",
   "Surebet a 3 vie",
 ];
-import {
-  loginBetProfit,
-  fetchBPAccounts,
-  fetchBPTags,
-  createSingolaBet,
-  createLayBet,
-  type BPAccount,
-} from "@/lib/betprofit-api";
 
 interface Props {
   data: SingolaBPData;
@@ -31,7 +33,9 @@ let _bpAccounts: BPAccount[] = [];
 let _bpTags: string[] = [];
 
 export function SingolaBPModal({ data, onClose }: Props) {
-  const [step, setStep] = useState<"login" | "form">(_bpToken ? "form" : "login");
+  const [step, setStep] = useState<"restoring" | "login" | "form">(
+    _bpToken ? "form" : "restoring"
+  );
 
   // Login state
   const [bpEmail, setBpEmail] = useState("");
@@ -51,16 +55,24 @@ export function SingolaBPModal({ data, onClose }: Props) {
   const [submitError, setSubmitError] = useState("");
   const [done, setDone] = useState(false);
 
-  // Se già autenticato, carica account
+  // Al mount: prova a ripristinare la sessione da localStorage
   useEffect(() => {
-    if (_bpToken && accounts.length === 0) {
-      loadAccounts(_bpToken);
+    if (_bpToken) {
+      // Già in memoria, carica account se necessario
+      if (accounts.length === 0) loadAccounts(_bpToken);
+      return;
     }
-    // Pre-seleziona se c'è un solo account per tipo
-    if (accounts.length === 1) {
-      setContoPunta(accounts[0].conto);
-      setContoBanca(accounts[0].conto);
-    }
+
+    restoreBPSession().then((session) => {
+      if (session) {
+        _bpToken = session.token;
+        _bpUserId = session.userId;
+        setStep("form");
+        loadAccounts(session.token);
+      } else {
+        setStep("login");
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -95,6 +107,7 @@ export function SingolaBPModal({ data, onClose }: Props) {
     } catch {
       setLoginError("Errore nel caricamento account. Effettua nuovamente il login.");
       _bpToken = null;
+      clearBPSession();
       setStep("login");
     } finally {
       setAccountsLoading(false);
@@ -163,6 +176,7 @@ export function SingolaBPModal({ data, onClose }: Props) {
       // Se token scaduto, forza re-login
       if (err.message?.includes("401") || err.message?.includes("JWT")) {
         _bpToken = null;
+        clearBPSession();
         setStep("login");
         setSubmitError("Sessione scaduta. Effettua nuovamente il login.");
       } else {
@@ -187,6 +201,8 @@ export function SingolaBPModal({ data, onClose }: Props) {
             <p className="text-white font-bold text-lg">Singola salvata in BetProfit!</p>
             <p className="text-slate-400 text-sm mt-1">{data.evento}</p>
           </div>
+        ) : step === "restoring" ? (
+          <div className="py-10 text-center text-slate-400 text-sm">Connessione a BetProfit…</div>
         ) : step === "login" ? (
           <>
             <h2 className="text-white font-bold text-lg mb-1">Accedi a BetProfit</h2>
@@ -303,7 +319,7 @@ export function SingolaBPModal({ data, onClose }: Props) {
 
                 <div className="flex gap-2 justify-end">
                   <button
-                    onClick={() => { _bpToken = null; setStep("login"); }}
+                    onClick={() => { _bpToken = null; clearBPSession(); setStep("login"); }}
                     className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
                   >
                     Cambia account

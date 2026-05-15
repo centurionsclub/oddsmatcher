@@ -1,5 +1,6 @@
 const BP_URL = "https://olmkgsvzpvyherlvokmz.supabase.co";
 const BP_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9sbWtnc3Z6cHZ5aGVybHZva216Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MDkxNzUsImV4cCI6MjA4ODI4NTE3NX0.MwS8rO67QvQGJr5221FbGgLRbEVWzusYzpEwlqJ5Cew";
+const BP_SESSION_KEY = "bp_session";
 
 export interface BPAccount {
   conto: string;
@@ -7,14 +8,77 @@ export interface BPAccount {
   saldoAttuale: number;
 }
 
-function decodeJwtUserId(token: string): string {
+interface BPSession {
+  token: string;
+  refreshToken: string;
+  userId: string;
+  expiresAt: number; // unix ms
+}
+
+function decodeJwtPayload(token: string): any {
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.sub as string;
+    return JSON.parse(atob(token.split(".")[1]));
   } catch {
-    return "";
+    return null;
   }
 }
+
+function decodeJwtUserId(token: string): string {
+  return decodeJwtPayload(token)?.sub ?? "";
+}
+
+// ── Session persistence ────────────────────────────────────────────────────
+
+export function saveBPSession(token: string, refreshToken: string): void {
+  const payload = decodeJwtPayload(token);
+  const expiresAt = payload?.exp ? payload.exp * 1000 : Date.now() + 3600_000;
+  const session: BPSession = { token, refreshToken, userId: payload?.sub ?? "", expiresAt };
+  localStorage.setItem(BP_SESSION_KEY, JSON.stringify(session));
+}
+
+export function loadBPSession(): BPSession | null {
+  try {
+    const raw = localStorage.getItem(BP_SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as BPSession;
+  } catch {
+    return null;
+  }
+}
+
+export function clearBPSession(): void {
+  localStorage.removeItem(BP_SESSION_KEY);
+}
+
+export async function restoreBPSession(): Promise<{ token: string; userId: string } | null> {
+  const session = loadBPSession();
+  if (!session) return null;
+
+  // Token still valid (with 60s margin)
+  if (session.expiresAt - Date.now() > 60_000) {
+    return { token: session.token, userId: session.userId };
+  }
+
+  // Try to refresh
+  try {
+    const res = await fetch(`${BP_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: BP_KEY },
+      body: JSON.stringify({ refresh_token: session.refreshToken }),
+    });
+    if (!res.ok) { clearBPSession(); return null; }
+    const data = await res.json();
+    const token = data.access_token as string;
+    const refreshToken = data.refresh_token as string;
+    saveBPSession(token, refreshToken);
+    return { token, userId: decodeJwtUserId(token) };
+  } catch {
+    clearBPSession();
+    return null;
+  }
+}
+
+// ── Auth ───────────────────────────────────────────────────────────────────
 
 export async function loginBetProfit(email: string, password: string): Promise<{ token: string; userId: string }> {
   const res = await fetch(`${BP_URL}/auth/v1/token?grant_type=password`, {
@@ -25,8 +89,12 @@ export async function loginBetProfit(email: string, password: string): Promise<{
   if (!res.ok) throw new Error("Email o password BetProfit errati.");
   const data = await res.json();
   const token = data.access_token as string;
+  const refreshToken = data.refresh_token as string;
+  saveBPSession(token, refreshToken);
   return { token, userId: decodeJwtUserId(token) };
 }
+
+// ── Data ───────────────────────────────────────────────────────────────────
 
 export async function fetchBPAccounts(token: string, userId: string): Promise<BPAccount[]> {
   const res = await fetch(
