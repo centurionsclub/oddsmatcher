@@ -443,167 +443,141 @@ function TreVieModal({ grp, initialStake, onClose }: { grp: TreVieGroup; initial
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-[#0d1829] border border-[#1e3050] rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
+      <div className="bg-[#0d1829] border border-[#1e3050] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+
+        {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#1e3050]">
           <span className="text-[#87c4e8] font-bold text-sm uppercase tracking-wider">PUNTA → TRE VIE</span>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">×</button>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-0">
-          {/* LEFT: Event info */}
-          <div className="md:w-5/12 border-b md:border-b-0 md:border-r border-[#1e3050] p-5 flex flex-col gap-4">
-            <div>
-              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Evento</div>
-              <div className="text-white font-semibold text-base leading-tight">{grp.eventName}</div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Sport</div>
-                <div className="text-white text-sm">{getSportIcon(grp.sport)} {grp.sport || "Calcio"}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Data/Ora</div>
-                <div className="text-white text-sm">{formatDate(grp.eventTime)}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Campionato</div>
-                <div className="text-white text-sm">{getLeagueFlag(grp.league)} {grp.league}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Rating</div>
-                <div className={`font-bold text-sm ${ratingColor}`}>{grp.rating.toFixed(2)}%</div>
-              </div>
-            </div>
+        <div className="p-5 flex flex-col gap-5">
 
-            {/* Legs */}
-            <div>
-              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Scommesse</div>
-              <div className="flex flex-col gap-2">
-                {grp.legs.map((leg, i) => (
-                  <div key={i} className="flex items-center justify-between bg-[#0a1220] border border-[#1e3050] rounded px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-500 w-16">ESITO {leg.outcome}</span>
-                      <BookLogo bookmaker={leg.bookmaker} />
-                    </div>
-                    <span className="font-mono font-bold text-[#87c4e8] text-sm">{leg.odds.toFixed(2).replace(".", ",")}</span>
-                  </div>
-                ))}
-              </div>
+          {/* ── Info evento ── */}
+          <div className="bg-[#0a1220] rounded-lg px-4 py-3 flex flex-col gap-1.5">
+            <div className="text-white font-semibold text-base leading-tight">{grp.eventName}</div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+              <span>{getSportIcon(grp.sport)} {grp.sport || "Calcio"}</span>
+              <span>📅 {formatDate(grp.eventTime)}</span>
+              <span>{getLeagueFlag(grp.league)} {grp.league}</span>
+              <span>Rating: <span className={`font-bold ${ratingColor}`}>{grp.rating.toFixed(2)}%</span></span>
             </div>
           </div>
 
-          {/* RIGHT: Calculator */}
-          <div className="md:w-7/12 p-5 flex flex-col gap-4">
-            <div className="text-[10px] text-slate-500 uppercase tracking-wider">Calcolatore</div>
+          {/* ── Tabella calcolatore ── */}
+          <div className="rounded-lg overflow-hidden border border-[#1e3050]">
+            {/* Header */}
+            <div
+              className="grid bg-[#0a1220] text-[11px] font-bold text-slate-400 uppercase tracking-wider"
+              style={{ gridTemplateColumns: "80px 1fr 90px 110px" + (results ? " 100px" : "") }}
+            >
+              <div className="px-3 py-2.5">Esito</div>
+              <div className="px-3 py-2.5 border-l border-[#1e3050]">Bookmaker</div>
+              <div className="px-3 py-2.5 text-center border-l border-[#1e3050]">Quota</div>
+              <div className="px-3 py-2.5 text-center border-l border-[#1e3050]">Stake</div>
+              {results && <div className="px-3 py-2.5 text-center border-l border-[#1e3050]">Se vince</div>}
+            </div>
 
-            {/* Table: Esito | Quota | Stake | Risultato */}
-            <div className="rounded-lg overflow-hidden border border-[#1e3050]">
-              {/* Header */}
-              <div className="grid bg-[#0a1220] text-[10px] font-bold text-slate-400 uppercase tracking-wider"
-                style={{ gridTemplateColumns: "1fr 72px 100px" + (results ? " 90px" : "") }}>
-                <div className="px-3 py-2">Esito / Book</div>
-                <div className="px-2 py-2 text-center border-l border-[#1e3050]">Quota</div>
-                <div className="px-2 py-2 text-center border-l border-[#1e3050]">Stake</div>
-                {results && <div className="px-2 py-2 text-center border-l border-[#1e3050]">Se vince</div>}
-              </div>
-
-              {grp.legs.map((leg, i) => (
-                <div
-                  key={i}
-                  className="grid border-t border-[#1e3050] bg-[#0d1829]"
-                  style={{ gridTemplateColumns: "1fr 72px 100px" + (results ? " 90px" : "") }}
-                >
-                  {/* Esito + bookmaker */}
-                  <div className="px-3 py-2.5 flex items-center gap-2 min-w-0">
-                    <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded bg-[#1e3050] text-white">
-                      {leg.outcome}
-                    </span>
-                    <BookLogo bookmaker={leg.bookmaker} />
-                  </div>
-                  {/* Quota */}
-                  <div className="px-2 py-2.5 text-center border-l border-[#1e3050] flex items-center justify-center">
-                    <span className="font-mono font-bold text-[#87c4e8] text-sm">{leg.odds.toFixed(2).replace(".", ",")}</span>
-                  </div>
-                  {/* Stake — editable */}
-                  <div className="px-2 py-1.5 border-l border-[#1e3050] flex items-center">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="0,00"
-                      value={stakes[i]}
-                      onChange={e => updateStake(i, e.target.value)}
-                      className="bg-[#1a2535] border border-[#253347] text-white rounded px-2 py-1.5 text-sm text-center font-mono w-full focus:outline-none focus:ring-1 focus:ring-[#87c4e8]/60"
-                    />
-                  </div>
-                  {/* Result per outcome */}
-                  {results && (
-                    <div className="px-2 py-2.5 border-l border-[#1e3050] flex items-center justify-center">
-                      <span className={`font-mono font-bold text-sm ${resultColor(results[i])}`}>
-                        {results[i] >= 0 ? "+" : ""}{results[i].toFixed(2).replace(".", ",")}€
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {/* Totale */}
+            {grp.legs.map((leg, i) => (
               <div
-                className="grid border-t-2 border-[#87c4e8]/30 bg-[#0a1220]"
-                style={{ gridTemplateColumns: "1fr 72px 100px" + (results ? " 90px" : "") }}
+                key={i}
+                className="grid border-t border-[#1e3050]"
+                style={{ gridTemplateColumns: "80px 1fr 90px 110px" + (results ? " 100px" : "") }}
               >
-                <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase flex items-center col-span-2">
-                  Totale stake
-                </div>
-                <div className="px-2 py-2 border-l border-[#1e3050] flex items-center justify-center">
-                  <span className="font-mono text-sm font-bold text-white">
-                    {(() => {
-                      const tot = stakes.reduce((a, v) => a + parseFloat(v.replace(",", ".") || "0"), 0);
-                      return tot > 0 ? tot.toFixed(2).replace(".", ",") + "€" : "—";
-                    })()}
+                {/* Esito */}
+                <div className="px-3 py-3 flex items-center">
+                  <span className="text-sm font-bold text-white bg-[#1e3050] px-2.5 py-1 rounded">
+                    {leg.outcome}
                   </span>
                 </div>
-                {results && <div />}
-              </div>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex gap-2">
-              <button
-                onClick={handleBilancia}
-                className="flex-1 py-2.5 rounded font-bold text-sm bg-[#1e3050] text-slate-200 hover:bg-[#2a4060] transition-colors border border-[#2a4060]"
-                title="Calcola gli stake di Book 2 e Book 3 in modo che la vincita sia identica per tutti gli esiti"
-              >
-                BILANCIA
-              </button>
-              <button
-                onClick={handleCalcola}
-                className="flex-1 py-2.5 rounded font-bold text-sm bg-[#87c4e8] text-[#0d2035] hover:bg-[#6ab0d8] transition-colors"
-              >
-                CALCOLA
-              </button>
-              <button
-                onClick={() => alert("Funzionalità BP non ancora disponibile")}
-                className="flex-1 py-2.5 rounded font-bold text-sm bg-[#c8922d] text-white hover:bg-[#b07a24] transition-colors"
-              >
-                INVIA AL BP
-              </button>
-            </div>
-
-            {/* Results summary */}
-            {results && (
-              <div className="flex gap-2">
-                {grp.legs.map((leg, i) => (
-                  <div key={i} className={`flex-1 rounded border px-3 py-3 text-center ${resultBg(results[i])}`}>
-                    <div className="text-[10px] text-slate-400 uppercase mb-1">Esito {leg.outcome}</div>
-                    <div className={`font-mono font-bold text-lg ${resultColor(results[i])}`}>
+                {/* Bookmaker */}
+                <div className="px-3 py-3 border-l border-[#1e3050] flex items-center">
+                  <BookLogo bookmaker={leg.bookmaker} />
+                </div>
+                {/* Quota */}
+                <div className="px-3 py-3 text-center border-l border-[#1e3050] flex items-center justify-center">
+                  <span className="font-mono font-bold text-[#87c4e8] text-base">
+                    {leg.odds.toFixed(2).replace(".", ",")}
+                  </span>
+                </div>
+                {/* Stake */}
+                <div className="px-2 py-2 border-l border-[#1e3050] flex items-center">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    value={stakes[i]}
+                    onChange={e => updateStake(i, e.target.value)}
+                    className="bg-[#1a2535] border border-[#253347] text-white rounded px-2 py-2 text-sm text-center font-mono w-full focus:outline-none focus:ring-1 focus:ring-[#87c4e8]/60"
+                  />
+                </div>
+                {/* Risultato */}
+                {results && (
+                  <div className="px-3 py-3 border-l border-[#1e3050] flex items-center justify-center">
+                    <span className={`font-mono font-bold text-base ${resultColor(results[i])}`}>
                       {results[i] >= 0 ? "+" : ""}{results[i].toFixed(2).replace(".", ",")}€
-                    </div>
+                    </span>
                   </div>
-                ))}
+                )}
               </div>
-            )}
+            ))}
+
+            {/* Totale */}
+            <div
+              className="grid border-t-2 border-[#87c4e8]/20 bg-[#0a1220]"
+              style={{ gridTemplateColumns: "80px 1fr 90px 110px" + (results ? " 100px" : "") }}
+            >
+              <div className="px-3 py-2.5 col-span-3 flex items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                Totale stake
+              </div>
+              <div className="px-2 py-2.5 border-l border-[#1e3050] flex items-center justify-center">
+                <span className="font-mono text-sm font-bold text-white">
+                  {(() => {
+                    const tot = stakes.reduce((a, v) => a + parseFloat(v.replace(",", ".") || "0"), 0);
+                    return tot > 0 ? tot.toFixed(2).replace(".", ",") + "€" : "—";
+                  })()}
+                </span>
+              </div>
+              {results && <div />}
+            </div>
           </div>
+
+          {/* ── Pulsanti ── */}
+          <div className="flex gap-3">
+            <button
+              onClick={handleBilancia}
+              className="flex-1 py-3 rounded-lg font-bold text-sm bg-[#1e3050] text-slate-200 hover:bg-[#2a4060] transition-colors border border-[#2a4060]"
+            >
+              BILANCIA
+            </button>
+            <button
+              onClick={handleCalcola}
+              className="flex-1 py-3 rounded-lg font-bold text-sm bg-[#87c4e8] text-[#0d2035] hover:bg-[#6ab0d8] transition-colors"
+            >
+              CALCOLA
+            </button>
+            <button
+              onClick={() => alert("Funzionalità BP non ancora disponibile")}
+              className="flex-1 py-3 rounded-lg font-bold text-sm bg-[#c8922d] text-white hover:bg-[#b07a24] transition-colors"
+            >
+              INVIA AL BP
+            </button>
+          </div>
+
+          {/* ── Risultati ── */}
+          {results && (
+            <div className="grid grid-cols-3 gap-3">
+              {grp.legs.map((leg, i) => (
+                <div key={i} className={`rounded-lg border px-4 py-4 text-center ${resultBg(results[i])}`}>
+                  <div className="text-[11px] text-slate-400 uppercase tracking-wider mb-2">Esito {leg.outcome}</div>
+                  <div className={`font-mono font-bold text-2xl ${resultColor(results[i])}`}>
+                    {results[i] >= 0 ? "+" : ""}{results[i].toFixed(2).replace(".", ",")}€
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
         </div>
       </div>
     </div>
