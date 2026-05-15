@@ -288,45 +288,32 @@ const Index = () => {
   const handleInviaSingola = () => {
     if (!singolaBPData || !singolaBPIntestatario.trim() || !singolaBPIntestatarioBanca.trim()) return;
     const d = singolaBPData;
+
+    // Struttura piatta per la form "Nuova Puntata Singola" di BetProfit
     const savedState = {
       autoSave: true,
-      tipo: "Singola",
-      isSingola: true,
-      selections: [{
+      tipo: "singola",
+      formValues: {
+        metodo: "punta",
         evento: d.evento,
+        dataEvento: d.dataEvento,
         competizione: singolaBPCompetizione || d.competizione,
         mercato: d.mercato,
-        quota: d.quota,
-        dataEvento: d.dataEvento,
-      }],
-      quotaInputs: [d.quota.toFixed(2).replace(".", ",")],
-      formValues: {
         intestatario: singolaBPIntestatario.trim(),
+        intestatarioBanca: singolaBPIntestatarioBanca.trim(),
         conto: "",
         stake: d.stake || 0,
+        quota: d.quota,
+        quotaBanca: d.quotaBanca,
+        layStake: d.layStake,
         tipoBonus: d.tipoBonus,
         bonus: d.bonus || 0,
         rimborso: d.rimborsoAmount || 0,
-        percentualeBonus: 0,
-        numeroMinimoSelezioni: 0,
+        tassePercentuale: d.commissionRate,
         urlEvento: d.bookmakerUrl || "",
         note: "",
-        tag: singolaBPTag,
+        tag: singolaBPTag !== "none" ? singolaBPTag : "",
       },
-      selectedIntestatario: singolaBPIntestatario.trim(),
-      selectedConto: "",
-      tipoBonus: d.tipoBonus,
-      bookmakerPunta: d.bookmakerPunta,
-      intestatarioBanca: singolaBPIntestatarioBanca.trim(),
-      bancate: [{
-        evento: d.evento,
-        dataEvento: d.dataEvento,
-        mercato: d.mercato,
-        stake: d.layStake,
-        quotaBanca: d.quotaBanca,
-        quotaPunta: d.quota,
-        tassePercentuale: d.commissionRate,
-      }],
     };
     const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
     window.open(`https://betprofit.app/puntate?import=${encoded}`, "_blank");
