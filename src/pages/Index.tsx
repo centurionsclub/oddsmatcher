@@ -190,6 +190,7 @@ const Index = () => {
       partita,
       campionato,
     });
+    setPartita(""); // resetta il campo partita dopo la ricerca
   };
 
   // Quando le quote arrivano, porta la tabella in cima alla viewport
@@ -350,7 +351,7 @@ const Index = () => {
               {subTabs.map(tab => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveSubTab(tab.id)}
+                  onClick={() => { setActiveSubTab(tab.id); setPartita(""); }}
                   className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${
                     activeSubTab === tab.id
                       ? "border-[#c8922d] text-[#c8922d]"
