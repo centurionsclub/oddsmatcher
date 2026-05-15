@@ -447,7 +447,7 @@ function TreVieModal({ grp, initialStake, onClose }: { grp: TreVieGroup; initial
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#1e3050]">
-          <span className="text-[#87c4e8] font-bold text-sm uppercase tracking-wider">PUNTA → TRE VIE</span>
+          <span className="text-[#87c4e8] font-bold text-[18px] uppercase tracking-wider">PUNTA → TRE VIE</span>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">×</button>
         </div>
 
