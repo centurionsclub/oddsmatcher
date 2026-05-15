@@ -281,15 +281,6 @@ export function SingolaBPModal({ data, onClose }: Props) {
                   </select>
                 </div>
 
-                {/* Riepilogo */}
-                <div className="mb-4 bg-[#0f1a2e] rounded-lg px-3 py-2 text-xs text-slate-400 space-y-0.5">
-                  <div className="flex justify-between"><span>Stake punta</span><span className="text-white">€{(data.stake || 0).toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span>Quota punta</span><span className="text-white">{data.quota.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span>Lay stake</span><span className="text-white">€{data.layStake.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span>Quota banca</span><span className="text-white">{data.quotaBanca.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span>Commissione</span><span className="text-white">{data.commissionRate}%</span></div>
-                </div>
-
                 {submitError && <p className="text-red-400 text-xs mb-3">{submitError}</p>}
 
                 <div className="flex gap-2 justify-end">
