@@ -647,8 +647,7 @@ function DateJumper({ days, idPrefix }: {
       <button
         onClick={() => setOpen(o => !o)}
         title={open ? "Chiudi date" : "Salta a una data"}
-        className={`w-10 h-10 rounded-full shadow-xl font-bold text-lg flex items-center justify-center transition-all select-none
-          ${open ? "bg-white text-[#0d2035]" : "bg-white text-[#0d2035] hover:bg-slate-100"}`}
+        className="w-10 h-10 rounded-full shadow-xl font-bold text-lg flex items-center justify-center transition-all select-none bg-[#87c4e8] text-[#0d2035] hover:bg-[#6ab0d8]"
       >
         📅
       </button>
