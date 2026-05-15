@@ -1241,22 +1241,24 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             onClose={() => setSelectedTreVie(null)}
           />
         )}
-        {/* Day selector strip — sticky sempre visibile */}
-        <div className="sticky top-[48px] z-30 flex flex-wrap gap-1.5 px-3 py-2 bg-[#080c17] border-b border-[#1e3050]">
-          {tvDayGroups.map(({ date, groups: dg }) => (
-            <button
-              key={date}
-              onClick={() => {
-                const el = document.getElementById(`tvday-${date}`);
-                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-              className="px-3 py-1 rounded text-xs font-semibold bg-[#1e2d42] text-white hover:bg-[#2a4060] transition-colors whitespace-nowrap border border-[#2a3f5c]"
-            >
-              {formatDayLabel(date)}
-              <span className="ml-1.5 text-[10px] opacity-60">({dg.length})</span>
-            </button>
-          ))}
-        </div>
+        {/* Day selector strip */}
+        {tvDayGroups.length > 1 && (
+          <div className="flex flex-wrap gap-1.5 px-3 py-2 bg-[#080c17] border-b border-[#1e3050]">
+            {tvDayGroups.map(({ date, groups: dg }) => (
+              <button
+                key={date}
+                onClick={() => {
+                  const el = document.getElementById(`tvday-${date}`);
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="px-3 py-1 rounded text-xs font-semibold bg-[#1e2d42] text-white hover:bg-[#2a4060] transition-colors whitespace-nowrap border border-[#2a3f5c]"
+              >
+                {formatDayLabel(date)}
+                <span className="ml-1.5 text-[10px] opacity-60">({dg.length})</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Back-to-top */}
         <button
@@ -1267,8 +1269,8 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
         <div className="text-right text-xs text-white px-4 py-2">{tvFiltered.length} eventi</div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-sm border-separate border-spacing-0">
-            <thead className="sticky top-[92px] z-10">
+          <table className="w-full min-w-[600px] text-sm border-collapse">
+            <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
@@ -1286,7 +1288,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 <>
                   {/* Day divider */}
                   <tr key={`tvdiv-${date}`} id={`tvday-${date}`}>
-                    <td colSpan={colCount} className="sticky top-[129px] z-20 bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
+                    <td colSpan={colCount} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
                       <span className="text-[#87c4e8] font-semibold text-xs uppercase tracking-wider">
                         📅 {formatDayLabel(date)}
                       </span>
@@ -1414,7 +1416,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[750px] text-sm">
-            <thead className="sticky top-[92px] z-10">
+            <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
@@ -1460,7 +1462,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
-            <thead className="sticky top-[92px] z-10">
+            <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
@@ -1704,7 +1706,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         {/* ── Tabella ── */}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
-            <thead className="sticky top-[92px] z-10">
+            <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
@@ -1837,22 +1839,24 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         />
       )}
 
-      {/* ── Day selector strip — sticky sempre visibile ── */}
-      <div className="sticky top-[48px] z-30 flex flex-wrap gap-1.5 px-3 py-2 bg-[#080c17] border-b border-[#1e3050]">
-        {dayGroups.map(({ date, opps: dayOpps }) => (
-          <button
-            key={date}
-            onClick={() => {
-              const el = document.getElementById(`day-${date}`);
-              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
-            className="px-3 py-1 rounded text-xs font-semibold bg-[#1e2d42] text-white hover:bg-[#2a4060] transition-colors whitespace-nowrap border border-[#2a3f5c]"
-          >
-            {formatDayLabel(date)}
-            <span className="ml-1.5 text-[10px] opacity-60">({dayOpps.length})</span>
-          </button>
-        ))}
-      </div>
+      {/* ── Day selector strip ── */}
+      {dayGroups.length > 1 && (
+        <div className="flex flex-wrap gap-1.5 px-3 py-2 bg-[#080c17] border-b border-[#1e3050]">
+          {dayGroups.map(({ date, opps: dayOpps }) => (
+            <button
+              key={date}
+              onClick={() => {
+                const el = document.getElementById(`day-${date}`);
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className="px-3 py-1 rounded text-xs font-semibold bg-[#1e2d42] text-white hover:bg-[#2a4060] transition-colors whitespace-nowrap border border-[#2a3f5c]"
+            >
+              {formatDayLabel(date)}
+              <span className="ml-1.5 text-[10px] opacity-60">({dayOpps.length})</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Back-to-top floating button ── */}
       <button
@@ -1866,7 +1870,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       <div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
-            <thead className="sticky top-[92px] z-10">
+            <thead>
               <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
@@ -1886,7 +1890,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 <>
                   {/* Day divider row */}
                   <tr key={`divider-${date}`} id={`day-${date}`}>
-                    <td colSpan={colSpan} className="sticky top-[129px] z-20 bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
+                    <td colSpan={colSpan} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
                       <span className="text-[#87c4e8] font-semibold text-xs uppercase tracking-wider">
                         📅 {formatDayLabel(date)}
                       </span>
