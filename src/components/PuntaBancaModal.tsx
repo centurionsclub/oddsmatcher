@@ -294,6 +294,7 @@ export function PuntaBancaModal({
       bookmakerUrl: opp.bookmakerUrl || getUrl(opp.bookmaker),
       exchange: opp.exchange,
     });
+    onClose(); // chiude il modal di calcolo, lascia visibile solo il popup intestatario
   };
 
   return (
