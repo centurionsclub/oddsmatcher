@@ -660,6 +660,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
   const [selectedTreVie, setSelectedTreVie] = useState<TreVieGroup | null>(null);
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
+  const [timeWarning, setTimeWarning] = useState(false);
 
   // Reset selezione multipla quando l'utente clicca Aggiorna o Pulisci
   useEffect(() => {
@@ -1617,14 +1618,24 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       filtered.some(f => oppKey(f) === oppKey(o))
     );
 
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
     const toggleMultipla = (opp: Opportunity) => {
       setMultiplaSelected(prev => {
         const key = oppKey(opp);
         const exists = prev.some(o => oppKey(o) === key);
         if (exists) return prev.filter(o => oppKey(o) !== key);
-        // Conta solo le selezioni visibili nella lista corrente (ignora i "fantasma")
+        // Conta solo le selezioni visibili nella lista corrente
         const visibleCount = prev.filter(o => filtered.some(f => oppKey(f) === oppKey(o))).length;
         if (numEventiTarget > 0 && visibleCount >= numEventiTarget) return prev;
+        // Controllo orari troppo vicini (< 2 ore)
+        const newTime = new Date(opp.eventTime).getTime();
+        const tooClose = prev.some(o => Math.abs(new Date(o.eventTime).getTime() - newTime) < TWO_HOURS_MS);
+        if (tooClose) {
+          setTimeWarning(true);
+          setTimeout(() => setTimeWarning(false), 4000);
+          return prev;
+        }
         return [...prev, opp];
       });
     };
@@ -1702,6 +1713,12 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
           idPrefix="mday-"
           days={multiDayGroups.map(g => ({ date: g.date, label: formatDayLabel(g.date), count: g.opps.length }))}
         />
+        {/* Avviso orari troppo vicini */}
+        {timeWarning && (
+          <div className="fixed top-[60px] left-1/2 -translate-x-1/2 z-50 bg-red-700 border border-red-400 text-white text-sm font-bold px-5 py-3 rounded-lg shadow-2xl flex items-center gap-2 animate-pulse">
+            ⚠️ ATTENZIONE! Sono presenti partite con data e ora di inizio troppo vicine
+          </div>
+        )}
         {/* ── Barra riepilogo ── */}
         {n > 0 && hasStake && (
           <div className="bg-[#0a0e1a] border-b border-[#1e3050] px-6 py-3 flex flex-wrap items-center gap-6 text-sm">
@@ -1799,6 +1816,10 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                     const key = oppKey(opp);
                     const isSelected = effectiveSelected.some(o => oppKey(o) === key);
                     const isFull = numEventiTarget > 0 && n >= numEventiTarget && !isSelected;
+                    const oppTime = new Date(opp.eventTime).getTime();
+                    const isTooClose = !isSelected && effectiveSelected.some(
+                      o => Math.abs(new Date(o.eventTime).getTime() - oppTime) < TWO_HOURS_MS
+                    );
                     const sc = opp.scommessa.split(" vs ")[0] ?? opp.scommessa;
                     const ratingColor = opp.rating >= 100
                       ? "text-green-400" : opp.rating >= 95 ? "text-[#c8922d]" : "text-slate-300";
@@ -1810,9 +1831,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                         className={`transition-colors ${
                           isSelected
                             ? "bg-[#193d1c] border-l-4 border-green-500 cursor-pointer"
-                            : isFull
-                              ? "opacity-40 cursor-not-allowed"
-                              : "hover:bg-[#1a2535] cursor-pointer border-l-4 border-transparent"
+                            : isTooClose
+                              ? "opacity-30 cursor-not-allowed bg-red-950/20"
+                              : isFull
+                                ? "opacity-40 cursor-not-allowed"
+                                : "hover:bg-[#1a2535] cursor-pointer border-l-4 border-transparent"
                         }`}
                       >
                         <td className="py-2 px-3 text-white text-xs whitespace-nowrap">
