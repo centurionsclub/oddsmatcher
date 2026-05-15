@@ -83,7 +83,7 @@ const Index = () => {
   const [multiplaOpposta, setMultiplaOpposta] = useState(false);
   const [stakeMultipla, setStakeMultipla] = useState("");
   const [quotaMinimaMultipla, setQuotaMinimaMultipla] = useState("");
-  const [numEventi, setNumEventi] = useState("0");
+  const [numEventi, setNumEventi] = useState("");
   const [quotaPartitaMinima, setQuotaPartitaMinima] = useState("");
   const [quotaPartitaMassima, setQuotaPartitaMassima] = useState("");
   const [daData, setDaData] = useState("");
