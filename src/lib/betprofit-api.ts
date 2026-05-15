@@ -44,12 +44,15 @@ export async function fetchBPAccounts(token: string, userId: string): Promise<BP
 
 export async function fetchBPTags(token: string): Promise<string[]> {
   const res = await fetch(
-    `${BP_URL}/rest/v1/tags?select=nome&order=nome.asc`,
+    `${BP_URL}/rest/v1/tags?select=*&order=nome.asc`,
     { headers: { apikey: BP_KEY, Authorization: `Bearer ${token}` } }
   );
   if (!res.ok) return [];
-  const data = await res.json();
-  return (data as any[]).map((t) => t.nome);
+  const data = await res.json() as any[];
+  if (!data.length) return [];
+  // Support different possible column names: nome, name, tag, label
+  const key = ["nome", "name", "tag", "label"].find(k => k in data[0]) ?? Object.keys(data[0])[0];
+  return data.map((t) => t[key]).filter(Boolean);
 }
 
 export async function createSingolaBet(

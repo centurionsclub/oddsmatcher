@@ -263,7 +263,7 @@ export function SingolaBPModal({ data, onClose }: Props) {
                     <option value="">— Seleziona —</option>
                     {accounts.map(a => (
                       <option key={a.conto} value={a.conto}>
-                        {a.conto} ({a.intestatario})
+                        {a.conto} ({a.intestatario}) — €{a.saldoAttuale.toFixed(2)}
                       </option>
                     ))}
                   </select>
