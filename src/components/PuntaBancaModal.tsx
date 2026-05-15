@@ -293,6 +293,11 @@ export function PuntaBancaModal({
     if (!result || !inviaIntestatario.trim() || !inviaIntestatarioBanca.trim()) return;
     const mercato = toBetprofitMercato(opp.scommessa, opp.sport);
     const competizione = toBetprofitCompetizione(opp.league);
+
+    // Determina tipoBonus in base ai checkbox del modal
+    const tipoBonus = rimborso ? "Rimborso" : freeBet ? "FreeBet" : bonus > 0 ? "Bonus" : "Nessuno";
+    const totalStake = result.totalStake;
+
     const savedState = {
       autoSave: true,
       tipo: "Singola",
@@ -303,15 +308,22 @@ export function PuntaBancaModal({
         mercato,
         quota: qPunta,
         dataEvento: opp.eventTime,
+        bookmaker: opp.bookmaker,
+        intestatario: inviaIntestatario.trim(),
+        stake: totalStake,
+        tipoBonus,
+        bonus: bonus > 0 ? bonus : 0,
+        rimborso: rimborso ? totalStake : 0,
+        urlEvento: opp.bookmakerUrl || getUrl(opp.bookmaker),
       }],
       quotaInputs: [qPunta.toFixed(2).replace(".", ",")],
       formValues: {
         intestatario: inviaIntestatario.trim(),
         conto: "",
         stake: stake || 0,
-        tipoBonus: bonus > 0 ? "Bonus" : "Nessuno",
+        tipoBonus,
         bonus: bonus > 0 ? bonus : 0,
-        rimborso: rimborso ? 1 : 0,
+        rimborso: rimborso ? totalStake : 0,
         percentualeBonus: 0,
         numeroMinimoSelezioni: 0,
         urlEvento: opp.bookmakerUrl || getUrl(opp.bookmaker),
@@ -320,17 +332,20 @@ export function PuntaBancaModal({
       },
       selectedIntestatario: inviaIntestatario.trim(),
       selectedConto: "",
-      tipoBonus: bonus > 0 ? "Bonus" : (freeBet ? "FreeBet" : "Nessuno"),
+      tipoBonus,
       bookmakerPunta: opp.bookmaker,
       intestatarioBanca: inviaIntestatarioBanca.trim(),
       bancate: [{
         evento: opp.eventName,
         dataEvento: opp.eventTime,
         mercato,
+        competizione,
         stake: Math.round(result.layStake * 100) / 100,
         quotaBanca: qBanca,
         quotaPunta: qPunta,
         tassePercentuale: commissionRate,
+        exchange: opp.exchange,
+        intestatario: inviaIntestatarioBanca.trim(),
       }],
     };
     const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
