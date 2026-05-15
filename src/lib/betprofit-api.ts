@@ -43,13 +43,23 @@ export async function fetchBPAccounts(token: string, userId: string): Promise<BP
 }
 
 export async function fetchBPTags(token: string, userId: string): Promise<string[]> {
+  // Try with user_id filter first (matches BetProfit's own query)
   const res = await fetch(
     `${BP_URL}/rest/v1/tags?select=nome&user_id=eq.${userId}&order=nome.asc`,
     { headers: { apikey: BP_KEY, Authorization: `Bearer ${token}` } }
   );
-  if (!res.ok) return [];
-  const data = await res.json() as any[];
-  return data.map((t) => t.nome).filter(Boolean);
+  if (res.ok) {
+    const data = await res.json() as any[];
+    if (data.length > 0) return data.map((t: any) => t.nome).filter(Boolean);
+  }
+  // Fallback: rely on RLS via Bearer token only
+  const res2 = await fetch(
+    `${BP_URL}/rest/v1/tags?select=nome&order=nome.asc`,
+    { headers: { apikey: BP_KEY, Authorization: `Bearer ${token}` } }
+  );
+  if (!res2.ok) return [];
+  const data2 = await res2.json() as any[];
+  return data2.map((t: any) => t.nome).filter(Boolean);
 }
 
 export async function createSingolaBet(
