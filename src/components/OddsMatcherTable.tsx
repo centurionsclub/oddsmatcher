@@ -1291,10 +1291,10 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                   {/* Day divider */}
                   <tr key={`tvdiv-${date}`} id={`tvday-${date}`}>
                     <td colSpan={colCount} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
-                      <span className="text-[#87c4e8] font-semibold text-xs uppercase tracking-wider">
+                      <span className="text-[#87c4e8] font-semibold text-[16px] uppercase tracking-wider">
                         📅 {formatDayLabel(date)}
                       </span>
-                      <span className="ml-2 text-[#4a6a8a] text-xs">
+                      <span className="ml-2 text-[#4a6a8a] text-[16px]">
                         {dg.length} {dg.length === 1 ? "evento" : "eventi"}
                       </span>
                     </td>
@@ -1766,10 +1766,10 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 <>
                   <tr key={`mday-div-${date}`} id={`mday-${date}`}>
                     <td colSpan={colSpanM} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
-                      <span className="text-[#87c4e8] font-semibold text-xs uppercase tracking-wider">
+                      <span className="text-[#87c4e8] font-semibold text-[16px] uppercase tracking-wider">
                         📅 {formatDayLabel(date)}
                       </span>
-                      <span className="ml-2 text-[#4a6a8a] text-xs">
+                      <span className="ml-2 text-[#4a6a8a] text-[16px]">
                         {dayOpps.length} {dayOpps.length === 1 ? "evento" : "eventi"}
                       </span>
                     </td>
@@ -1935,10 +1935,10 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                   {/* Day divider row */}
                   <tr key={`divider-${date}`} id={`day-${date}`}>
                     <td colSpan={colSpan} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
-                      <span className="text-[#87c4e8] font-semibold text-xs uppercase tracking-wider">
+                      <span className="text-[#87c4e8] font-semibold text-[16px] uppercase tracking-wider">
                         📅 {formatDayLabel(date)}
                       </span>
-                      <span className="ml-2 text-[#4a6a8a] text-xs">
+                      <span className="ml-2 text-[#4a6a8a] text-[16px]">
                         {dayOpps.length} {dayOpps.length === 1 ? "opportunità" : "opportunità"}
                       </span>
                     </td>
