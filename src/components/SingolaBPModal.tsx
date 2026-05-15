@@ -14,8 +14,9 @@ interface Props {
   onClose: () => void;
 }
 
-// Token in memoria — persiste per la sessione del browser (non su refresh)
+// Sessione in memoria — persiste per la sessione del browser (non su refresh)
 let _bpToken: string | null = null;
+let _bpUserId: string = "";
 let _bpAccounts: BPAccount[] = [];
 let _bpTags: string[] = [];
 
@@ -95,8 +96,9 @@ export function SingolaBPModal({ data, onClose }: Props) {
     setLoginError("");
     setLoginLoading(true);
     try {
-      const token = await loginBetProfit(bpEmail, bpPassword);
+      const { token, userId } = await loginBetProfit(bpEmail, bpPassword);
       _bpToken = token;
+      _bpUserId = userId;
       setStep("form");
       await loadAccounts(token);
     } catch (err: any) {
@@ -115,7 +117,7 @@ export function SingolaBPModal({ data, onClose }: Props) {
     const tagValue = tag !== "none" ? tag : "";
 
     try {
-      const betId = await createSingolaBet(_bpToken, {
+      const betId = await createSingolaBet(_bpToken, _bpUserId, {
         conto: contoPunta,
         intestatario: intestatarioPunta,
         stake: data.stake || 0,
@@ -132,7 +134,7 @@ export function SingolaBPModal({ data, onClose }: Props) {
         tag: tagValue,
       });
 
-      await createLayBet(_bpToken, betId, {
+      await createLayBet(_bpToken, _bpUserId, betId, {
         conto: contoBanca,
         stake: data.layStake,
         quotaBanca: data.quotaBanca,

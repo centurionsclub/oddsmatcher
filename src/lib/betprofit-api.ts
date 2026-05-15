@@ -7,7 +7,16 @@ export interface BPAccount {
   saldoAttuale: number;
 }
 
-export async function loginBetProfit(email: string, password: string): Promise<string> {
+function decodeJwtUserId(token: string): string {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.sub as string;
+  } catch {
+    return "";
+  }
+}
+
+export async function loginBetProfit(email: string, password: string): Promise<{ token: string; userId: string }> {
   const res = await fetch(`${BP_URL}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: BP_KEY },
@@ -15,7 +24,8 @@ export async function loginBetProfit(email: string, password: string): Promise<s
   });
   if (!res.ok) throw new Error("Email o password BetProfit errati.");
   const data = await res.json();
-  return data.access_token as string;
+  const token = data.access_token as string;
+  return { token, userId: decodeJwtUserId(token) };
 }
 
 export async function fetchBPAccounts(token: string): Promise<BPAccount[]> {
@@ -44,6 +54,7 @@ export async function fetchBPTags(token: string): Promise<string[]> {
 
 export async function createSingolaBet(
   token: string,
+  userId: string,
   bet: {
     conto: string;
     intestatario: string;
@@ -94,6 +105,7 @@ export async function createSingolaBet(
       numero_minimo_selezioni: null,
       quota_combinata: null,
       vincita_potenziale: Math.round(bet.stake * bet.quota * 100) / 100,
+      user_id: userId,
     }),
   });
   if (!res.ok) {
@@ -106,6 +118,7 @@ export async function createSingolaBet(
 
 export async function createLayBet(
   token: string,
+  userId: string,
   parentBetId: string,
   lay: {
     conto: string;
@@ -140,6 +153,7 @@ export async function createLayBet(
       attiva: true,
       stato: "In Corso",
       url_evento: null,
+      user_id: userId,
     }),
   });
   if (!res.ok) {
