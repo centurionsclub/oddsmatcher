@@ -1335,7 +1335,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                                 {getLeagueFlag(grp.league)}
                               </td>
                               <td rowSpan={3} className="py-2 px-3 text-center align-middle border-r border-[#1e3050]">
-                                <span className={`text-sm font-bold ${ratingColor}`}>
+                                <span className={`text-[16px] font-bold ${ratingColor}`}>
                                   {grp.rating.toFixed(2)}%
                                 </span>
                                 {tvHasStake && (
@@ -1812,7 +1812,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                           <span className="inline-block bg-[#87c4e8] text-[#0d2035] text-xs font-bold px-2 py-0.5 rounded">{sc}</span>
                         </td>
                         <td className="py-2 px-3 text-center">
-                          <span className={`text-sm font-bold ${ratingColor}`}>{opp.rating.toFixed(2)}%</span>
+                          <span className={`text-[16px] font-bold ${ratingColor}`}>{opp.rating.toFixed(2)}%</span>
                         </td>
                         <td className="py-2 px-3 text-center">
                           <BookLogo bookmaker={opp.bookmaker} />
@@ -1955,7 +1955,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                         <td className="py-2 px-2 text-center text-[36px]">{getLeagueFlag(opp.league)}</td>
                         <td className="py-2 px-3 text-center text-sm font-bold text-white">{opp.scommessa}</td>
                         <td className="py-2 px-3 text-center">
-                          <span className={`text-sm font-bold ${
+                          <span className={`text-[16px] font-bold ${
                             opp.rating >= 100 ? "text-green-400" :
                             opp.rating >= 98 ? "text-white" :
                             opp.rating >= 95 ? "text-[#c8922d]" :
