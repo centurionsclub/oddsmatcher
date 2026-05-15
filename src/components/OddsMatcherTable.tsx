@@ -454,9 +454,9 @@ function TreVieModal({ grp, initialStake, onClose }: { grp: TreVieGroup; initial
         <div className="p-5 flex flex-col gap-5">
 
           {/* ── Info evento ── */}
-          <div className="bg-[#0a1220] rounded-lg px-4 py-3 flex flex-col gap-1.5">
-            <div className="text-white font-semibold text-base leading-tight">{grp.eventName}</div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+          <div className="bg-[#0a1220] rounded-lg px-4 py-3 flex flex-col gap-2">
+            <div className="text-white font-semibold text-[21px] leading-tight">{grp.eventName}</div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[15px] text-slate-400">
               <span>{getSportIcon(grp.sport)} {grp.sport || "Calcio"}</span>
               <span>📅 {formatDate(grp.eventTime)}</span>
               <span>{getLeagueFlag(grp.league)} {grp.league}</span>
