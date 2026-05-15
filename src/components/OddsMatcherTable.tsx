@@ -1284,24 +1284,6 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             onClose={() => setSelectedTreVie(null)}
           />
         )}
-        {/* Day selector strip */}
-        {tvDayGroups.length > 1 && (
-          <div className="flex flex-wrap gap-1.5 px-3 py-2 bg-[#080c17] border-b border-[#1e3050]">
-            {tvDayGroups.map(({ date, groups: dg }) => (
-              <button
-                key={date}
-                onClick={() => {
-                  const el = document.getElementById(`tvday-${date}`);
-                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                className="px-3 py-1 rounded text-xs font-semibold bg-[#1e2d42] text-white hover:bg-[#2a4060] transition-colors whitespace-nowrap border border-[#2a3f5c]"
-              >
-                {formatDayLabel(date)}
-                <span className="ml-1.5 text-[10px] opacity-60">({dg.length})</span>
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Back-to-top */}
         <button
@@ -1887,24 +1869,6 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         />
       )}
 
-      {/* ── Day selector strip ── */}
-      {dayGroups.length > 1 && (
-        <div className="flex flex-wrap gap-1.5 px-3 py-2 bg-[#080c17] border-b border-[#1e3050]">
-          {dayGroups.map(({ date, opps: dayOpps }) => (
-            <button
-              key={date}
-              onClick={() => {
-                const el = document.getElementById(`day-${date}`);
-                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-              className="px-3 py-1 rounded text-xs font-semibold bg-[#1e2d42] text-white hover:bg-[#2a4060] transition-colors whitespace-nowrap border border-[#2a3f5c]"
-            >
-              {formatDayLabel(date)}
-              <span className="ml-1.5 text-[10px] opacity-60">({dayOpps.length})</span>
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* ── Back-to-top floating button ── */}
       <button
