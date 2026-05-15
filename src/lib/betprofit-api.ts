@@ -44,7 +44,7 @@ export async function fetchBPAccounts(token: string, userId: string): Promise<BP
 
 export async function fetchBPTags(token: string): Promise<string[]> {
   const res = await fetch(
-    `${BP_URL}/rest/v1/tags?select=*&order=nome.asc`,
+    `${BP_URL}/rest/v1/tags?select=*`,
     { headers: { apikey: BP_KEY, Authorization: `Bearer ${token}` } }
   );
   if (!res.ok) return [];
