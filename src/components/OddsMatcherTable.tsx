@@ -611,7 +611,51 @@ function TreVieModal({ grp, initialStake, onClose }: { grp: TreVieGroup; initial
     </div>
   );
 }
-// ──────────────────────────────────────────────────────────────────────────────
+// ─── Date Jumper floating button ─────────────────────────────────────────────
+function DateJumper({ days, idPrefix }: {
+  days: Array<{ date: string; label: string; count: number }>;
+  idPrefix: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (days.length <= 1) return null;
+
+  const jumpTo = (date: string) => {
+    setOpen(false);
+    const el = document.getElementById(`${idPrefix}${date}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return (
+    <div className="fixed bottom-[72px] right-6 z-50 flex flex-col items-center gap-2">
+      {/* Numbered day buttons — shown when open */}
+      {open && (
+        <div className="flex flex-col items-center gap-1.5">
+          {days.map((d, i) => (
+            <button
+              key={d.date}
+              onClick={() => jumpTo(d.date)}
+              title={d.label}
+              className="w-10 h-10 rounded-full bg-[#1e3050] border border-[#2a4060] text-white font-bold text-sm shadow-xl hover:bg-[#2a4878] hover:border-[#87c4e8] transition-all flex flex-col items-center justify-center leading-tight"
+            >
+              <span className="text-[13px] font-bold">{i + 1}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Toggle button */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        title={open ? "Chiudi date" : "Salta a una data"}
+        className={`w-10 h-10 rounded-full shadow-xl font-bold text-lg flex items-center justify-center transition-all select-none
+          ${open ? "bg-[#87c4e8] text-[#0d2035]" : "bg-[#1e3050] border border-[#2a4060] text-[#87c4e8] hover:bg-[#2a4878]"}`}
+      >
+        📅
+      </button>
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, filters, commission, multiplaResetKey, onMultiplaSelectedChange }: Props) {
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
@@ -1266,6 +1310,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
           className="fixed bottom-6 right-6 z-50 w-10 h-10 rounded-full bg-[#87c4e8] text-[#0d2035] flex items-center justify-center shadow-xl hover:bg-[#6ab0d8] transition-colors text-lg font-bold select-none"
           title="Torna in cima"
         >↑</button>
+        {/* Date jumper */}
+        <DateJumper
+          idPrefix="tvday-"
+          days={tvDayGroups.map((g, i) => ({ date: g.date, label: formatDayLabel(g.date), count: g.groups.length }))}
+        />
 
         <div className="text-right text-xs text-white px-4 py-2">{tvFiltered.length} eventi</div>
         <div className="overflow-x-auto">
@@ -1866,6 +1915,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       >
         ↑
       </button>
+      {/* Date jumper */}
+      <DateJumper
+        idPrefix="day-"
+        days={dayGroups.map(g => ({ date: g.date, label: formatDayLabel(g.date), count: g.opps.length }))}
+      />
 
       <div>
         <div className="overflow-x-auto">
