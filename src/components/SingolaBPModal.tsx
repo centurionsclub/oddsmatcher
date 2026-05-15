@@ -76,7 +76,7 @@ export function SingolaBPModal({ data, onClose }: Props) {
     try {
       const [accs, tgs] = await Promise.all([
         fetchBPAccounts(token, _bpUserId),
-        fetchBPTags(token),
+        fetchBPTags(token, _bpUserId),
       ]);
       _bpAccounts = accs;
       _bpTags = tgs;
