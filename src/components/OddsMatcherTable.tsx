@@ -573,10 +573,10 @@ function TreVieModal({ grp, initialStake, onClose }: { grp: TreVieGroup; initial
             <div className="flex gap-2">
               <button
                 onClick={handleBilancia}
-                className="px-4 py-2.5 rounded font-bold text-xs bg-[#1e3050] text-slate-200 hover:bg-[#2a4060] transition-colors border border-[#2a4060] whitespace-nowrap"
+                className="flex-1 py-2.5 rounded font-bold text-sm bg-[#1e3050] text-slate-200 hover:bg-[#2a4060] transition-colors border border-[#2a4060]"
                 title="Calcola gli stake di Book 2 e Book 3 in modo che la vincita sia identica per tutti gli esiti"
               >
-                ⚖ BILANCIA
+                BILANCIA
               </button>
               <button
                 onClick={handleCalcola}
@@ -585,10 +585,10 @@ function TreVieModal({ grp, initialStake, onClose }: { grp: TreVieGroup; initial
                 CALCOLA
               </button>
               <button
-                onClick={() => alert("Funzionalità PT non ancora disponibile")}
+                onClick={() => alert("Funzionalità BP non ancora disponibile")}
                 className="flex-1 py-2.5 rounded font-bold text-sm bg-[#c8922d] text-white hover:bg-[#b07a24] transition-colors"
               >
-                INVIA AL PT
+                INVIA AL BP
               </button>
             </div>
 
