@@ -226,12 +226,12 @@ export function PuntaBancaModal({
 
         {/* Title bar */}
         <div className="flex items-center justify-between px-5 py-3 rounded-t-lg" style={{ backgroundColor: "#87c4e8" }}>
-          <span className="font-black text-base tracking-widest uppercase text-white">
+          <span className="font-black text-base tracking-widest uppercase" style={{ color: "#0d2035" }}>
             {isBackLay ? "Punta Banca" : "Punta Punta"}
           </span>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-full text-white hover:bg-white/20 text-base transition-all"
+            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-black/10 text-base transition-all" style={{ color: "#0d2035" }}
           >✕</button>
         </div>
 
@@ -284,7 +284,7 @@ export function PuntaBancaModal({
 
             {/* Stake Book */}
             <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0 text-white" style={{ backgroundColor: "#1e2d42" }}>
+              <span className="px-3 py-2 text-sm font-medium rounded w-32 text-center shrink-0 text-white" style={{ backgroundColor: "#1e2d42" }}>
                 Stake Book
               </span>
               <div className="flex-1 flex items-stretch border border-blue-300 rounded overflow-hidden min-w-0 focus-within:ring-2 focus-within:ring-blue-200">
@@ -299,7 +299,7 @@ export function PuntaBancaModal({
                 />
                 <span className="px-2 flex items-center text-gray-500 text-sm border-l border-blue-300">€</span>
               </div>
-              <label className="flex items-center gap-1.5 text-sm font-medium shrink-0 cursor-pointer select-none px-3 py-2 rounded text-white" style={{ backgroundColor: "#1e2d42" }}>
+              <label className="flex items-center justify-center gap-1.5 text-sm font-medium shrink-0 cursor-pointer select-none px-3 py-2 rounded text-white w-32" style={{ backgroundColor: "#1e2d42" }}>
                 <input
                   type="checkbox"
                   checked={freeBet}
@@ -312,7 +312,7 @@ export function PuntaBancaModal({
 
             {/* Bonus Book */}
             <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-sm font-medium rounded w-28 text-center shrink-0 text-white" style={{ backgroundColor: "#c8922d" }}>
+              <span className="px-3 py-2 text-sm font-medium rounded w-32 text-center shrink-0 text-white" style={{ backgroundColor: "#c8922d" }}>
                 Bonus Book
               </span>
               <div className="flex-1 flex items-stretch border border-gray-300 rounded overflow-hidden min-w-0 focus-within:ring-2 focus-within:ring-amber-200">
@@ -327,7 +327,7 @@ export function PuntaBancaModal({
                 />
                 <span className="px-2 flex items-center text-gray-500 text-sm border-l border-gray-300">€</span>
               </div>
-              <label className="flex items-center gap-1.5 text-sm font-medium shrink-0 cursor-pointer select-none px-3 py-2 rounded text-white" style={{ backgroundColor: "#c8922d" }}>
+              <label className="flex items-center justify-center gap-1.5 text-sm font-medium shrink-0 cursor-pointer select-none px-3 py-2 rounded text-white w-32" style={{ backgroundColor: "#c8922d" }}>
                 <input
                   type="checkbox"
                   checked={rimborso}
@@ -394,9 +394,9 @@ export function PuntaBancaModal({
               </div>
             </div>
 
-            {/* Commissioni — solo in back-lay */}
+            {/* Commissioni + INVIA AL BP — solo in back-lay */}
             {isBackLay && <div className="flex items-center gap-2">
-              <span className="px-3 py-2 text-sm font-semibold rounded w-28 text-center shrink-0" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
+              <span className="px-3 py-2 text-sm font-semibold rounded w-32 text-center shrink-0" style={{ backgroundColor: "#f4a9ba", color: "#2d0d1a" }}>
                 Commissioni
               </span>
               <div className="flex items-stretch border border-gray-300 rounded overflow-hidden">
@@ -413,24 +413,19 @@ export function PuntaBancaModal({
                 />
                 <span className="px-2 flex items-center text-gray-500 text-sm border-l border-gray-300">%</span>
               </div>
-            </div>}
-
-            {/* Buttons */}
-            <div className="flex gap-2 pt-1">
               <button
-                className="px-5 py-2 text-sm font-bold rounded transition-colors text-white hover:opacity-90"
+                className="flex-1 py-2 text-sm font-bold rounded transition-colors text-white hover:opacity-90"
                 style={{ backgroundColor: copied ? "#16a34a" : "#1e2d42" }}
                 onClick={() => {
                   if (!result) return;
-                  const bookLabel = isBackLay ? "Banca" : "Punta 2";
                   const lines = [
-                    `📋 ${isBackLay ? "PUNTA-BANCA" : "PUNTA-PUNTA"}${flagLabels ? ` · ${flagLabels}` : ""}`,
+                    `📋 PUNTA-BANCA${flagLabels ? ` · ${flagLabels}` : ""}`,
                     `📅 ${formatDt(opp.eventTime)}`,
                     `⚽ ${opp.eventName} — ${opp.league}`,
                     `📌 Mercato: ${opp.market} | Esito: ${opp.scommessa}`,
                     ``,
                     `📗 Punta: ${opp.bookmaker} — ${fmtIt(result.totalStake)}€ @ ${fmt2(qPunta)}`,
-                    `📕 ${bookLabel}: ${opp.exchange} — ${fmtIt(result.layStake)}€ @ ${fmt2(qBanca)}${isBackLay ? ` (Rischio: ${fmtIt(Math.ceil(result.rischio * 100) / 100)}€)` : ""}`,
+                    `📕 Banca: ${opp.exchange} — ${fmtIt(result.layStake)}€ @ ${fmt2(qBanca)} (Rischio: ${fmtIt(Math.ceil(result.rischio * 100) / 100)}€)`,
                     ``,
                     `📊 Rating: ${fmt2(result.rating)}% | Profitto: ${result.worst >= 0 ? "+" : ""}${fmtIt(Math.floor(result.worst * 100) / 100)}€`,
                   ];
@@ -440,15 +435,43 @@ export function PuntaBancaModal({
                   }).catch(() => {});
                 }}
               >
-                {copied ? "✓ Copiato!" : "INVIA ↗"}
+                {copied ? "✓ Copiato!" : "INVIA AL BP"}
               </button>
-            </div>
+            </div>}
+
+            {/* INVIA AL BP — solo in punta-punta (nessuna riga commissioni) */}
+            {!isBackLay && <div className="flex gap-2 pt-1">
+              <button
+                className="px-5 py-2 text-sm font-bold rounded transition-colors text-white hover:opacity-90"
+                style={{ backgroundColor: copied ? "#16a34a" : "#1e2d42" }}
+                onClick={() => {
+                  if (!result) return;
+                  const lines = [
+                    `📋 PUNTA-PUNTA${flagLabels ? ` · ${flagLabels}` : ""}`,
+                    `📅 ${formatDt(opp.eventTime)}`,
+                    `⚽ ${opp.eventName} — ${opp.league}`,
+                    `📌 Mercato: ${opp.market} | Esito: ${opp.scommessa}`,
+                    ``,
+                    `📗 Punta 1: ${opp.bookmaker} — ${fmtIt(result.totalStake)}€ @ ${fmt2(qPunta)}`,
+                    `📕 Punta 2: ${opp.exchange} — ${fmtIt(result.layStake)}€ @ ${fmt2(qBanca)}`,
+                    ``,
+                    `📊 Rating: ${fmt2(result.rating)}% | Profitto: ${result.worst >= 0 ? "+" : ""}${fmtIt(Math.floor(result.worst * 100) / 100)}€`,
+                  ];
+                  navigator.clipboard.writeText(lines.join("\n")).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }).catch(() => {});
+                }}
+              >
+                {copied ? "✓ Copiato!" : "INVIA AL BP"}
+              </button>
+            </div>}
 
             {/* ── Results ── */}
             <div className="rounded overflow-hidden border border-gray-200 mt-1">
 
               {/* Header */}
-              <div className="px-4 py-2.5 text-sm font-bold tracking-wide text-white text-center" style={{ backgroundColor: "#1e2d42" }}>
+              <div className="px-4 py-2.5 text-sm font-bold tracking-wide text-center" style={{ backgroundColor: "#87c4e8", color: "#0d2035" }}>
                 {result ? `${headerLabel} • RATING ${fmt2(result.rating)}%` : `${headerLabel} • RATING —`}
               </div>
 
@@ -489,6 +512,9 @@ export function PuntaBancaModal({
                         {isBackLay && <>(<span className="font-bold">Rischio</span>{" "}
                         {fmtIt(Math.ceil(result.rischio * 100) / 100)}€)</>}
                       </a>
+                      <p className="mt-1 text-xs text-gray-400 italic">
+                        📋 Cliccando il link si aprirà direttamente la scommessa e l'importo verrà copiato automaticamente negli appunti.
+                      </p>
                     </div>
 
                     {/* Outcome */}

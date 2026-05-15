@@ -23,25 +23,34 @@ const EXCHANGE_OPTIONS = [
 ];
 
 const MARKETS = [
-  { value: "tutti", label: "Tutti" },
-  { value: "1", label: "1", group: "1X2" },
-  { value: "X", label: "X", group: "1X2" },
-  { value: "2", label: "2", group: "1X2" },
-  { value: "Goal", label: "Goal", group: "BTTS" },
-  { value: "No Goal", label: "No Goal", group: "BTTS" },
-  { value: "Over 0.5", label: "Over 0.5", group: "O/U" },
-  { value: "Under 0.5", label: "Under 0.5", group: "O/U" },
-  { value: "Over 1.5", label: "Over 1.5", group: "O/U" },
-  { value: "Under 1.5", label: "Under 1.5", group: "O/U" },
-  { value: "Over 2.5", label: "Over 2.5", group: "O/U" },
-  { value: "Under 2.5", label: "Under 2.5", group: "O/U" },
-  { value: "Over 3.5", label: "Over 3.5", group: "O/U" },
-  { value: "Under 3.5", label: "Under 3.5", group: "O/U" },
-  { value: "Over 4.5", label: "Over 4.5", group: "O/U" },
-  { value: "Under 4.5", label: "Under 4.5", group: "O/U" },
-  { value: "1X", label: "1X", group: "DC" },
-  { value: "X2", label: "X2", group: "DC" },
-  { value: "12", label: "12", group: "DC" },
+  // Calcio 1X2
+  { value: "1",        label: "1",        group: "⚽ Calcio 1X2" },
+  { value: "X",        label: "X",        group: "⚽ Calcio 1X2" },
+  { value: "2",        label: "2",        group: "⚽ Calcio 1X2" },
+  // Calcio BTTS
+  { value: "Goal",     label: "Goal",     group: "⚽ Calcio BTTS" },
+  { value: "No Goal",  label: "No Goal",  group: "⚽ Calcio BTTS" },
+  // Calcio O/U
+  { value: "Over 0.5",  label: "Over 0.5",  group: "⚽ Calcio O/U" },
+  { value: "Under 0.5", label: "Under 0.5", group: "⚽ Calcio O/U" },
+  { value: "Over 1.5",  label: "Over 1.5",  group: "⚽ Calcio O/U" },
+  { value: "Under 1.5", label: "Under 1.5", group: "⚽ Calcio O/U" },
+  { value: "Over 2.5",  label: "Over 2.5",  group: "⚽ Calcio O/U" },
+  { value: "Under 2.5", label: "Under 2.5", group: "⚽ Calcio O/U" },
+  { value: "Over 3.5",  label: "Over 3.5",  group: "⚽ Calcio O/U" },
+  { value: "Under 3.5", label: "Under 3.5", group: "⚽ Calcio O/U" },
+  { value: "Over 4.5",  label: "Over 4.5",  group: "⚽ Calcio O/U" },
+  { value: "Under 4.5", label: "Under 4.5", group: "⚽ Calcio O/U" },
+  // Calcio DC
+  { value: "1X", label: "1X", group: "⚽ Calcio DC" },
+  { value: "X2", label: "X2", group: "⚽ Calcio DC" },
+  { value: "12", label: "12", group: "⚽ Calcio DC" },
+  // Tennis
+  { value: "Tennis 1", label: "1", group: "🎾 Tennis" },
+  { value: "Tennis 2", label: "2", group: "🎾 Tennis" },
+  // Basket
+  { value: "Basket 1", label: "1", group: "🏀 Basket" },
+  { value: "Basket 2", label: "2", group: "🏀 Basket" },
 ];
 
 const Index = () => {
@@ -165,6 +174,13 @@ const Index = () => {
         return;
       }
     }
+    // Best Odds: richiede almeno Partita o Mercato
+    if (activeSubTab === "bestodds") {
+      if (!partita.trim() && selectedMarkets.length === 0) {
+        setStakeError(`Compila almeno "Partita" o "Mercato" per vedere i risultati.`);
+        return;
+      }
+    }
     setStakeError(null);
     setFiltersOpen(false); // nascondi i filtri subito
     setMultiplaResetKey(k => k + 1); // reset selezione multipla
@@ -245,7 +261,7 @@ const Index = () => {
   };
 
   const toggleMarket = (m: string) => {
-    setSelectedMarkets(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
+    setSelectedMarkets(prev => prev.includes(m) ? [] : [m]);
   };
 
   const toggleBookmaker = (b: string) => {
@@ -379,28 +395,45 @@ const Index = () => {
                   onClick={() => { setMarketsOpen(!marketsOpen); setBookmakerOpen(false); setExchangeOpen(false); }}
                   className="border border-[#253347] rounded px-3 py-1.5 text-sm w-full sm:min-w-[200px] text-left flex items-center justify-between bg-[#1a2535]"
                 >
-                  <span className="text-white">{selectedMarkets.length === 0 ? "Tutti" : `${selectedMarkets.length} selezionati`}</span>
+                  <span className="text-white">
+                    {selectedMarkets.length === 0
+                      ? "Tutti"
+                      : (() => {
+                          const m = MARKETS.find(x => x.value === selectedMarkets[0]);
+                          return m ? `${m.group} – ${m.label}` : selectedMarkets[0];
+                        })()}
+                  </span>
                   <span className="text-slate-500">▾</span>
                 </button>
                 {marketsOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-full sm:w-[250px] max-h-[300px] overflow-y-auto">
+                  <div className="absolute top-full left-0 mt-1 bg-[#1a2535] border border-[#253347] rounded shadow-lg z-50 w-full sm:w-[260px] max-h-[350px] overflow-y-auto">
                     <button
-                      onClick={() => setSelectedMarkets([])}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#c8922d]"
+                      onClick={() => { setSelectedMarkets([]); setMarketsOpen(false); }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-[#1e2d42] font-medium text-[#c8922d] border-b border-[#253347]"
                     >
                       Tutti (deseleziona)
                     </button>
-                    {MARKETS.filter(m => m.value !== "tutti").map(m => (
-                      <button
-                        key={m.value}
-                        onClick={() => toggleMarket(m.value)}
-                        className={`w-full text-left px-3 py-1.5 text-sm hover:bg-[#1e2d42] ${
-                          selectedMarkets.includes(m.value) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
-                        }`}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
+                    {(() => {
+                      const groups = Array.from(new Set(MARKETS.map(m => m.group)));
+                      return groups.map(group => (
+                        <div key={group}>
+                          <div className="px-3 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-[#0d1320] border-b border-[#253347]">
+                            {group}
+                          </div>
+                          {MARKETS.filter(m => m.group === group).map(m => (
+                            <button
+                              key={m.value}
+                              onClick={() => { toggleMarket(m.value); setMarketsOpen(false); }}
+                              className={`w-full text-left px-4 py-1.5 text-sm hover:bg-[#1e2d42] ${
+                                selectedMarkets.includes(m.value) ? "bg-[#1e2d42] text-[#c8922d] font-medium" : "text-white"
+                              }`}
+                            >
+                              {selectedMarkets.includes(m.value) ? "✓ " : ""}{m.label}
+                            </button>
+                          ))}
+                        </div>
+                      ));
+                    })()}
                   </div>
                 )}
               </div>

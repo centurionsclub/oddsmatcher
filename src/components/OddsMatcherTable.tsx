@@ -447,7 +447,7 @@ function TreVieModal({ grp, initialStake, onClose }: { grp: TreVieGroup; initial
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#1e3050]">
-          <span className="text-[#87c4e8] font-bold text-[18px] uppercase tracking-wider">PUNTA → TRE VIE</span>
+          <span className="text-[#87c4e8] font-bold text-[14px] uppercase tracking-wider">PUNTA → TRE VIE</span>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">×</button>
         </div>
 
@@ -455,8 +455,8 @@ function TreVieModal({ grp, initialStake, onClose }: { grp: TreVieGroup; initial
 
           {/* ── Info evento ── */}
           <div className="bg-[#0a1220] rounded-lg px-4 py-3 flex flex-col gap-2">
-            <div className="text-white font-semibold text-[21px] leading-tight">{grp.eventName}</div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[15px] text-slate-400">
+            <div className="text-white font-semibold text-[14px] leading-tight">{grp.eventName}</div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[14px] text-slate-400">
               <span>{getSportIcon(grp.sport)} {grp.sport || "Calcio"}</span>
               <span>📅 {formatDate(grp.eventTime)}</span>
               <span>{getLeagueFlag(grp.league)} {grp.league}</span>
@@ -1273,7 +1273,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[600px] text-sm border-collapse">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[16px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="bg-[#0a0e1a] text-white text-[14px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1291,10 +1291,10 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                   {/* Day divider */}
                   <tr key={`tvdiv-${date}`} id={`tvday-${date}`}>
                     <td colSpan={colCount} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
-                      <span className="text-[#87c4e8] font-semibold text-[16px] uppercase tracking-wider">
+                      <span className="text-[#87c4e8] font-semibold text-[14px] uppercase tracking-wider">
                         📅 {formatDayLabel(date)}
                       </span>
-                      <span className="ml-2 text-[#4a6a8a] text-[16px]">
+                      <span className="ml-2 text-[#4a6a8a] text-[14px]">
                         {dg.length} {dg.length === 1 ? "evento" : "eventi"}
                       </span>
                     </td>
@@ -1322,20 +1322,20 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                         >
                           {isFirst && (
                             <>
-                              <td rowSpan={3} className="py-2 px-3 text-[16px] text-white whitespace-nowrap align-middle border-r border-[#1e3050]">
+                              <td rowSpan={3} className="py-2 px-3 text-[14px] text-white whitespace-nowrap align-middle border-r border-[#1e3050]">
                                 {formatDate(grp.eventTime)}
                               </td>
                               <td rowSpan={3} className="py-2 px-2 text-center text-base align-middle border-r border-[#1e3050]">
                                 {getSportIcon(grp.sport)}
                               </td>
-                              <td rowSpan={3} className="py-2 px-3 text-[18px] text-white font-medium align-middle max-w-[200px] truncate border-r border-[#1e3050]">
+                              <td rowSpan={3} className="py-2 px-3 text-[14px] text-white font-medium align-middle max-w-[200px] truncate border-r border-[#1e3050]">
                                 {grp.eventName}
                               </td>
-                              <td rowSpan={3} className="py-2 px-2 text-center text-[36px] align-middle border-r border-[#1e3050]">
+                              <td rowSpan={3} className="py-2 px-2 text-center text-[29px] align-middle border-r border-[#1e3050]">
                                 {getLeagueFlag(grp.league)}
                               </td>
                               <td rowSpan={3} className="py-2 px-3 text-center align-middle border-r border-[#1e3050]">
-                                <span className={`text-[16px] font-bold ${ratingColor}`}>
+                                <span className={`text-[14px] font-bold ${ratingColor}`}>
                                   {grp.rating.toFixed(2)}%
                                 </span>
                                 {tvHasStake && (
@@ -1378,14 +1378,23 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   // ═══ RENDER: BEST ODDS ═══
   if (activeTab === "bestodds") {
     let filtered = bestOddsRows;
-    // Filter by selected markets
+    // Filter by selected market (single selection)
     const mf = committedFilters as any;
-    if (mf.selectedMarkets && mf.selectedMarkets.length > 0) {
-      filtered = filtered.filter(row =>
-        mf.selectedMarkets.some((m: string) =>
-          row.outcome.toLowerCase() === m.toLowerCase()
-        )
-      );
+    const selectedMarket: string = mf.selectedMarkets?.[0] ?? "";
+    if (selectedMarket === "Tennis 1") {
+      filtered = filtered.filter(r => r.sport === "tennis" && r.outcome === "1");
+    } else if (selectedMarket === "Tennis 2") {
+      filtered = filtered.filter(r => r.sport === "tennis" && r.outcome === "2");
+    } else if (selectedMarket === "Basket 1") {
+      filtered = filtered.filter(r => r.sport === "basket" && r.outcome === "1");
+    } else if (selectedMarket === "Basket 2") {
+      filtered = filtered.filter(r => r.sport === "basket" && r.outcome === "2");
+    } else if (selectedMarket) {
+      // Calcio market: filter by outcome and exclude other sports
+      filtered = filtered.filter(r => r.sport === "calcio" && r.outcome.toLowerCase() === selectedMarket.toLowerCase());
+    } else {
+      // No market selected: exclude tennis and basket
+      filtered = filtered.filter(r => r.sport === "calcio");
     }
     const filteredRows = applyFilters(filtered);
 
@@ -1419,7 +1428,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[750px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[16px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="bg-[#0a0e1a] text-white text-[14px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1433,11 +1442,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             <tbody className="divide-y divide-[#1e3050]">
               {displayRows.map((row, i) => (
                 <tr key={i} className={`transition-colors ${row.isFirst ? "bg-[#1a2a1a] hover:bg-[#1e3020]" : "hover:bg-[#1e2d42]"}`}>
-                  <td className="py-2 px-3 text-[16px] text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
+                  <td className="py-2 px-3 text-[14px] text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
                   <td className="py-2 px-2 text-center text-base">{getSportIcon(row.sport)}</td>
-                  <td className="py-2 px-3 text-[18px] text-white font-medium max-w-[220px] truncate">{row.eventName}</td>
-                  <td className="py-2 px-2 text-center text-[36px]">{getLeagueFlag(row.league)}</td>
-                  <td className="py-2 px-3 text-center text-xs text-slate-300 max-w-[120px] truncate">{row.league}</td>
+                  <td className="py-2 px-3 text-[14px] text-white font-medium max-w-[220px] truncate">{row.eventName}</td>
+                  <td className="py-2 px-2 text-center text-[29px]">{getLeagueFlag(row.league)}</td>
+                  <td className="py-2 px-3 text-center text-[14px] text-slate-300 max-w-[120px] truncate">{row.league}</td>
                   <td className="py-2 px-3 text-center text-sm font-bold text-white">{row.outcome}</td>
                   <td className="py-2 px-3 text-center">
                     <BookLogo bookmaker={row.bookmaker} />
@@ -1465,7 +1474,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[16px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="bg-[#0a0e1a] text-white text-[14px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1485,10 +1494,10 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 const c2 = getBookColor(row.book2);
                 return (
                   <tr key={i} className="hover:bg-[#1e2d42] transition-colors">
-                    <td className="py-2 px-3 text-[16px] text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
+                    <td className="py-2 px-3 text-[14px] text-white whitespace-nowrap">{formatDate(row.eventTime)}</td>
                     <td className="py-2 px-2 text-center text-base">{getSportIcon(row.sport)}</td>
-                    <td className="py-2 px-3 text-[18px] text-white font-medium max-w-[200px] truncate">{row.eventName}</td>
-                    <td className="py-2 px-2 text-center text-[36px]">{getLeagueFlag(row.league)}</td>
+                    <td className="py-2 px-3 text-[14px] text-white font-medium max-w-[200px] truncate">{row.eventName}</td>
+                    <td className="py-2 px-2 text-center text-[29px]">{getLeagueFlag(row.league)}</td>
                     <td className="py-2 px-3 text-center text-sm font-medium text-white">{row.outcome1}</td>
                     <td className="py-2 px-3 text-center text-sm font-medium text-white">{row.outcome2}</td>
                     <td className="py-2 px-3 text-center">
@@ -1746,7 +1755,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[16px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="bg-[#0a0e1a] text-white text-[14px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1766,10 +1775,10 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 <>
                   <tr key={`mday-div-${date}`} id={`mday-${date}`}>
                     <td colSpan={colSpanM} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
-                      <span className="text-[#87c4e8] font-semibold text-[16px] uppercase tracking-wider">
+                      <span className="text-[#87c4e8] font-semibold text-[14px] uppercase tracking-wider">
                         📅 {formatDayLabel(date)}
                       </span>
-                      <span className="ml-2 text-[#4a6a8a] text-[16px]">
+                      <span className="ml-2 text-[#4a6a8a] text-[14px]">
                         {dayOpps.length} {dayOpps.length === 1 ? "evento" : "eventi"}
                       </span>
                     </td>
@@ -1800,19 +1809,19 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                                 : "hover:bg-[#1a2535] cursor-pointer border-l-4 border-transparent"
                         }`}
                       >
-                        <td className="py-2 px-3 text-white text-[16px] whitespace-nowrap">
+                        <td className="py-2 px-3 text-white text-[14px] whitespace-nowrap">
                           <span className="mr-1">{isSelected ? "✅" : ""}</span>
                           {formatDate(opp.eventTime)}
                         </td>
                         <td className="py-2 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
-                        <td className="py-2 px-3 text-[18px] text-white font-medium max-w-[180px] truncate">{opp.eventName}</td>
-                        <td className="py-2 px-2 text-center text-[36px]">{getLeagueFlag(opp.league)}</td>
-                        <td className="py-2 px-3 text-center text-xs text-slate-300">{opp.league}</td>
+                        <td className="py-2 px-3 text-[14px] text-white font-medium max-w-[180px] truncate">{opp.eventName}</td>
+                        <td className="py-2 px-2 text-center text-[29px]">{getLeagueFlag(opp.league)}</td>
+                        <td className="py-2 px-3 text-center text-[14px] text-slate-300">{opp.league}</td>
                         <td className="py-2 px-3 text-center">
                           <span className="inline-block bg-[#87c4e8] text-[#0d2035] text-xs font-bold px-2 py-0.5 rounded">{sc}</span>
                         </td>
                         <td className="py-2 px-3 text-center">
-                          <span className={`text-[16px] font-bold ${ratingColor}`}>{opp.rating.toFixed(2)}%</span>
+                          <span className={`text-[14px] font-bold ${ratingColor}`}>{opp.rating.toFixed(2)}%</span>
                         </td>
                         <td className="py-2 px-3 text-center">
                           <BookLogo bookmaker={opp.bookmaker} />
@@ -1915,7 +1924,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[16px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="bg-[#0a0e1a] text-white text-[14px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1935,10 +1944,10 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                   {/* Day divider row */}
                   <tr key={`divider-${date}`} id={`day-${date}`}>
                     <td colSpan={colSpan} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
-                      <span className="text-[#87c4e8] font-semibold text-[16px] uppercase tracking-wider">
+                      <span className="text-[#87c4e8] font-semibold text-[14px] uppercase tracking-wider">
                         📅 {formatDayLabel(date)}
                       </span>
-                      <span className="ml-2 text-[#4a6a8a] text-[16px]">
+                      <span className="ml-2 text-[#4a6a8a] text-[14px]">
                         {dayOpps.length} {dayOpps.length === 1 ? "opportunità" : "opportunità"}
                       </span>
                     </td>
@@ -1949,13 +1958,13 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                     const counterQuota = opp.quotaExchange > 0 ? opp.quotaExchange.toFixed(2).replace(".", ",") : "—";
                     return (
                       <tr key={`${date}-${i}`} className="hover:bg-[#1e2d42] transition-colors cursor-pointer" onClick={() => setSelectedOpp(opp)}>
-                        <td className="py-2 px-3 text-[16px] text-white whitespace-nowrap">{formatDate(opp.eventTime)}</td>
+                        <td className="py-2 px-3 text-[14px] text-white whitespace-nowrap">{formatDate(opp.eventTime)}</td>
                         <td className="py-2 px-2 text-center text-base">{getSportIcon(opp.sport)}</td>
-                        <td className="py-2 px-3 text-[18px] text-white font-medium max-w-[220px] truncate">{opp.eventName}</td>
-                        <td className="py-2 px-2 text-center text-[36px]">{getLeagueFlag(opp.league)}</td>
+                        <td className="py-2 px-3 text-[14px] text-white font-medium max-w-[220px] truncate">{opp.eventName}</td>
+                        <td className="py-2 px-2 text-center text-[29px]">{getLeagueFlag(opp.league)}</td>
                         <td className="py-2 px-3 text-center text-sm font-bold text-white">{opp.scommessa}</td>
                         <td className="py-2 px-3 text-center">
-                          <span className={`text-[16px] font-bold ${
+                          <span className={`text-[14px] font-bold ${
                             opp.rating >= 100 ? "text-green-400" :
                             opp.rating >= 98 ? "text-white" :
                             opp.rating >= 95 ? "text-[#c8922d]" :
