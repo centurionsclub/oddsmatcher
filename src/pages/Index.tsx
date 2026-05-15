@@ -1026,6 +1026,10 @@ const Index = () => {
                 quotaBanca: opp.quotaExchange,
                 quotaPunta: opp.quotaBook,
                 tassePercentuale: inviaCommission,
+                urlEvento: opp.eventId
+                  ? `https://www.betfair.it/exchange/plus/it/${opp.sport ?? 'calcio'}/${opp.eventId}`
+                  : undefined,
+                competizione: opp.league || undefined,
               })),
             };
             const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
