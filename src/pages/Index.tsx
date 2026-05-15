@@ -1028,6 +1028,8 @@ const Index = () => {
                 tassePercentuale: inviaCommission,
                 urlEvento: opp.eventId
                   ? `https://www.betfair.it/exchange/plus/it/${opp.sport ?? 'calcio'}/${opp.eventId}`
+                  : opp.marketId
+                  ? `https://www.betfair.it/exchange/plus/it/${opp.sport ?? 'calcio'}/market/${opp.marketId}`
                   : undefined,
                 competizione: opp.league || undefined,
               })),

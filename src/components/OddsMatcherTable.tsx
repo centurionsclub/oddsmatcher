@@ -860,6 +860,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             let bestVolume: number | undefined;
             let bestMarketId: string | undefined;
             let bestEventId: string | undefined;
+            let bestExLeague: string | undefined;
             matchingExchanges.forEach(exEvent => {
               const layOdds = exEvent.odds[outcome.key];
               if (layOdds && layOdds > 1 && layOdds < bestLayOdds) {
@@ -868,6 +869,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 bestVolume = exEvent.volume?.[outcome.key];
                 bestMarketId = exEvent.marketId;
                 bestEventId = exEvent.eventId;
+                bestExLeague = exEvent.league;
               }
             });
             if (bestLayOdds === Infinity) return;
@@ -888,7 +890,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 eventTime: bmEvent.eventTime,
                 sport: bmEvent.sport || "calcio",
                 eventName: cleanEventName(bmEvent.eventName),
-                league: bmEvent.league,
+                league: bmEvent.league || bestExLeague || "",
                 market: bmEvent.market,
                 scommessa: outcome.label,
                 rating,
