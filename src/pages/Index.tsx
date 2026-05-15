@@ -68,6 +68,7 @@ const Index = () => {
   const [showInviaModal, setShowInviaModal] = useState(false);
   const [inviaIntestatario, setInviaIntestatario] = useState("");
   const [inviaIntestatarioBanca, setInviaIntestatarioBanca] = useState("");
+  const [inviaCommission, setInviaCommission] = useState(4.5);
   const [intestatariList, setIntestatariList] = useState<string[]>([]);
   const [intestatariLoading, setIntestatariLoading] = useState(false);
   const [inviaTag, setInviaTag] = useState("none");
@@ -1024,7 +1025,7 @@ const Index = () => {
                   : 0,
                 quotaBanca: opp.quotaExchange,
                 quotaPunta: opp.quotaBook,
-                tassePercentuale: commission,
+                tassePercentuale: inviaCommission,
               })),
             };
             const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
@@ -1033,13 +1034,14 @@ const Index = () => {
             setInviaIntestatario("");
             setInviaIntestatarioBanca("");
             setInviaTag("none");
+            setInviaCommission(4.5);
           };
 
           return (
             <div
               className="fixed inset-0 z-50 flex items-center justify-center"
               style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
-              onClick={e => { if (e.target === e.currentTarget) { setShowInviaModal(false); setInviaIntestatario(""); } }}
+              onClick={e => { if (e.target === e.currentTarget) { setShowInviaModal(false); setInviaIntestatario(""); setInviaIntestatarioBanca(""); setInviaTag("none"); setInviaCommission(4.5); } }}
             >
               <div className="bg-[#152033] border border-[#1e3050] rounded-xl shadow-2xl p-6 w-[90vw] max-w-[400px]">
                 <h2 className="text-white font-bold text-lg mb-4">Invia Multipla</h2>
@@ -1085,6 +1087,22 @@ const Index = () => {
                       </select>
                     </div>
 
+                    {/* Commissione */}
+                    <div className="mb-4">
+                      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                        Commissione Exchange (%)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={inviaCommission}
+                        onChange={e => setInviaCommission(parseFloat(e.target.value) || 0)}
+                        className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/40"
+                      />
+                    </div>
+
                     {/* Tag */}
                     <div className="mb-6">
                       <label className="block text-xs font-semibold text-[#c8922d] uppercase tracking-wide mb-1">
@@ -1106,7 +1124,7 @@ const Index = () => {
 
                 <div className="flex gap-2 justify-end">
                   <button
-                    onClick={() => { setShowInviaModal(false); setInviaIntestatario(""); setInviaIntestatarioBanca(""); setInviaTag("none"); }}
+                    onClick={() => { setShowInviaModal(false); setInviaIntestatario(""); setInviaIntestatarioBanca(""); setInviaTag("none"); setInviaCommission(4.5); }}
                     className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-[#253347] rounded transition-colors"
                   >
                     Annulla
