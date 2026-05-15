@@ -519,9 +519,7 @@ function TreVieModal({ grp, initialStake, onClose }: { grp: TreVieGroup; initial
                     <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded bg-[#1e3050] text-white">
                       {leg.outcome}
                     </span>
-                    <span className="text-[10px] text-slate-400 truncate">
-                      {leg.bookmaker.replace(/ bookmaker$/i, "").replace(/ exchange$/i, "")}
-                    </span>
+                    <BookLogo bookmaker={leg.bookmaker} />
                   </div>
                   {/* Quota */}
                   <div className="px-2 py-2.5 text-center border-l border-[#1e3050] flex items-center justify-center">
