@@ -761,7 +761,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
               const profitIf1 = (backOdds - 1) - stake2;
               const profitIf2 = stake2 * (counterOdds - 1) - 1;
               const rating = 100 + Math.min(profitIf1, profitIf2) * 100;
-              if (rating > 75 && rating < 120) {
+              if (rating >= 80 && rating < 120) {
                 opps.push({
                   eventTime: bmEvent.eventTime, sport: bmEvent.sport || "calcio",
                   eventName: cleanEventName(bmEvent.eventName), league: bmEvent.league,
@@ -788,7 +788,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                 const profitIf1 = (backOdds - 1) - stake2;
                 const profitIf2 = stake2 * (effectiveCounterOdds - 1) - 1;
                 const rating = 100 + Math.min(profitIf1, profitIf2) * 100;
-                if (rating > 75 && rating < 120) {
+                if (rating >= 80 && rating < 120) {
                   const compLabel = compOutcomes.map(o => o.label).join("+");
                   opps.push({
                     eventTime: bmEvent.eventTime, sport: bmEvent.sport || "calcio",
@@ -841,7 +841,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             const worstProfit = Math.min(profitIf1, profitIf2);
             const rating = 100 + worstProfit * 100;
 
-            if (rating > 75 && rating < 105) {
+            if (rating >= 80 && rating < 105) {
               opps.push({
                 eventTime: bmEvent.eventTime,
                 sport: bmEvent.sport || "calcio",
@@ -910,7 +910,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             const worstProfit = Math.min(profitIfWin, profitIfLose);
             const rating = 100 + worstProfit * 100;
 
-            if (rating > 70 && rating < 120) {
+            if (rating >= 80 && rating < 120) {
               opps.push({
                 eventTime: bmEvent.eventTime,
                 sport: bmEvent.sport || "calcio",
