@@ -112,6 +112,26 @@ function fmtIt(n: number, decimals = 2): string {
   return n.toLocaleString("it-IT", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
+const BETPROFIT_COMPETITIONS = [
+  "Serie A (Italia)", "Premier League (Inghilterra)", "La Liga (Spagna)",
+  "Bundesliga (Germania)", "Ligue 1 (Francia)", "UEFA Champions League",
+  "UEFA Europa League", "UEFA Conference League", "Coppa Italia",
+  "FA Cup (Inghilterra)", "Copa del Rey (Spagna)", "DFB-Pokal (Germania)",
+  "Coupe de France", "Eredivisie (Olanda)", "Primeira Liga (Portogallo)",
+  "Brasileirão", "Liga MX (Messico)", "MLS (USA)", "FIFA World Cup",
+  "Africa Cup of Nations", "Amichevoli internazionali", "Supercoppe nazionali",
+  "Qualificazioni Mondiali 2026", "Play-off Mondiali",
+];
+
+function matchCompetizione(league: string): string {
+  const lower = league.toLowerCase();
+  for (const comp of BETPROFIT_COMPETITIONS) {
+    const key = comp.toLowerCase().replace(/\s*\(.*\)/, "").trim();
+    if (lower.includes(key) || key.includes(lower)) return comp;
+  }
+  return league; // fallback: nome reale della lega
+}
+
 export function PuntaBancaModal({
   opp, commission, onClose,
   initialBonus = 0, initialStake = 0, initialFreeBet = false, initialRimborso = false,
@@ -129,6 +149,7 @@ export function PuntaBancaModal({
   const [inviaIntestatario, setInviaIntestatario] = useState("");
   const [inviaIntestatarioBanca, setInviaIntestatarioBanca] = useState("");
   const [inviaTag, setInviaTag] = useState("none");
+  const [inviaCompetizione, setInviaCompetizione] = useState("");
   const [intestatariList, setIntestatariList] = useState<string[]>([]);
   const [intestatariLoading, setIntestatariLoading] = useState(false);
   const [tagList, setTagList] = useState<string[]>([]);
@@ -160,6 +181,7 @@ export function PuntaBancaModal({
     setInviaIntestatario("");
     setInviaIntestatarioBanca("");
     setInviaTag("none");
+    setInviaCompetizione(matchCompetizione(opp.league));
     setTagList([]);
     setIntestatariLoading(true);
     const PREDEFINED_TAGS = [
@@ -269,30 +291,10 @@ export function PuntaBancaModal({
     return map[sc] ?? "Altro Calcio";
   };
 
-  const toBetprofitCompetizione = (league: string): string => {
-    const BETPROFIT_COMPETITIONS = [
-      "Serie A (Italia)", "Premier League (Inghilterra)", "La Liga (Spagna)",
-      "Bundesliga (Germania)", "Ligue 1 (Francia)", "UEFA Champions League",
-      "UEFA Europa League", "UEFA Conference League", "Coppa Italia",
-      "FA Cup (Inghilterra)", "Copa del Rey (Spagna)", "DFB-Pokal (Germania)",
-      "Coupe de France", "Eredivisie (Olanda)", "Primeira Liga (Portogallo)",
-      "Brasileirão", "Liga MX (Messico)", "MLS (USA)", "FIFA World Cup",
-      "Africa Cup of Nations", "Amichevoli internazionali", "Supercoppe nazionali",
-      "Qualificazioni Mondiali 2026", "Play-off Mondiali",
-    ];
-    const lower = league.toLowerCase();
-    for (const comp of BETPROFIT_COMPETITIONS) {
-      const key = comp.toLowerCase().replace(/\s*\(.*\)/, "").trim();
-      if (lower.includes(key) || key.includes(lower)) return comp;
-    }
-    // Fallback: restituisce il nome reale della lega invece di "Altro"
-    return league;
-  };
-
   const handleInviaBP = () => {
     if (!result || !inviaIntestatario.trim() || !inviaIntestatarioBanca.trim()) return;
     const mercato = toBetprofitMercato(opp.scommessa, opp.sport);
-    const competizione = toBetprofitCompetizione(opp.league);
+    const competizione = inviaCompetizione.trim() || matchCompetizione(opp.league);
 
     // Determina tipoBonus in base ai checkbox del modal
     const tipoBonus = rimborso ? "Rimborso" : freeBet ? "FreeBet" : bonus > 0 ? "Bonus" : "Nessuno";
@@ -659,6 +661,17 @@ export function PuntaBancaModal({
               <div className="text-red-400 text-sm py-4 text-center">Nessun intestatario abilitato trovato</div>
             ) : (
               <>
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Competizione</label>
+                  <input
+                    type="text"
+                    value={inviaCompetizione}
+                    onChange={e => setInviaCompetizione(e.target.value)}
+                    placeholder="Es. Serie A (Italia)"
+                    className="w-full bg-[#1a2535] border border-slate-600 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/40 placeholder-slate-500"
+                  />
+                </div>
+
                 <div className="mb-4">
                   <label className="block text-xs font-semibold text-[#87c4e8] uppercase tracking-wide mb-1">Intestatario Punta</label>
                   <select
