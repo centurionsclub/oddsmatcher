@@ -1271,7 +1271,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[600px] text-sm border-collapse">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="sticky top-[48px] z-10 bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1287,7 +1287,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
               {tvDayGroups.map(({ date, groups: dg }) => (
                 <>
                   {/* Day divider */}
-                  <tr key={`tvdiv-${date}`} id={`tvday-${date}`}>
+                  <tr key={`tvdiv-${date}`} id={`tvday-${date}`} className="sticky top-[48px] z-20">
                     <td colSpan={colCount} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
                       <span className="text-[#87c4e8] font-semibold text-xs uppercase tracking-wider">
                         📅 {formatDayLabel(date)}
@@ -1417,7 +1417,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[750px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="sticky top-[48px] z-10 bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1463,7 +1463,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="sticky top-[48px] z-10 bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1707,7 +1707,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="sticky top-[48px] z-10 bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1871,7 +1871,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="sticky top-[48px] z-10 bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1889,7 +1889,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
               {dayGroups.map(({ date, opps: dayOpps }) => (
                 <>
                   {/* Day divider row */}
-                  <tr key={`divider-${date}`} id={`day-${date}`}>
+                  <tr key={`divider-${date}`} id={`day-${date}`} className="sticky top-[48px] z-20">
                     <td colSpan={colSpan} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
                       <span className="text-[#87c4e8] font-semibold text-xs uppercase tracking-wider">
                         📅 {formatDayLabel(date)}
