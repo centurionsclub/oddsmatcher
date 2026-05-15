@@ -75,8 +75,8 @@ export function SingolaBPModal({ data, onClose }: Props) {
     setAccountsLoading(true);
     try {
       const [accs, tgs] = await Promise.all([
-        fetchBPAccounts(token),
-        fetchBPTags(token),
+        fetchBPAccounts(token, _bpUserId),
+        fetchBPTags(token, _bpUserId),
       ]);
       _bpAccounts = accs;
       _bpTags = tgs;

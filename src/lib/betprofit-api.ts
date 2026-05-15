@@ -28,9 +28,9 @@ export async function loginBetProfit(email: string, password: string): Promise<{
   return { token, userId: decodeJwtUserId(token) };
 }
 
-export async function fetchBPAccounts(token: string): Promise<BPAccount[]> {
+export async function fetchBPAccounts(token: string, userId: string): Promise<BPAccount[]> {
   const res = await fetch(
-    `${BP_URL}/rest/v1/accounts?select=conto,intestatario,saldo_attuale&stato=eq.Abilitato&order=conto.asc`,
+    `${BP_URL}/rest/v1/accounts?select=conto,intestatario,saldo_attuale&stato=eq.Abilitato&user_id=eq.${userId}&order=conto.asc`,
     { headers: { apikey: BP_KEY, Authorization: `Bearer ${token}` } }
   );
   if (!res.ok) throw new Error("Errore nel caricamento account BetProfit.");
@@ -42,9 +42,9 @@ export async function fetchBPAccounts(token: string): Promise<BPAccount[]> {
   }));
 }
 
-export async function fetchBPTags(token: string): Promise<string[]> {
+export async function fetchBPTags(token: string, userId: string): Promise<string[]> {
   const res = await fetch(
-    `${BP_URL}/rest/v1/tags?select=nome&order=nome.asc`,
+    `${BP_URL}/rest/v1/tags?select=nome&user_id=eq.${userId}&order=nome.asc`,
     { headers: { apikey: BP_KEY, Authorization: `Bearer ${token}` } }
   );
   if (!res.ok) return [];
