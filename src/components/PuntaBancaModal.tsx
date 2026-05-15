@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 interface ModalOpportunity {
   eventTime: string;
@@ -19,10 +18,30 @@ interface ModalOpportunity {
   bookmakerUrl?: string;
 }
 
+export interface SingolaBPData {
+  mercato: string;
+  competizione: string;
+  evento: string;
+  dataEvento: string;
+  quota: number;
+  quotaBanca: number;
+  layStake: number;
+  totalStake: number;
+  stake: number;
+  commissionRate: number;
+  tipoBonus: string;
+  bonus: number;
+  rimborsoAmount: number;
+  bookmakerPunta: string;
+  bookmakerUrl: string;
+  exchange: string;
+}
+
 interface Props {
   opp: ModalOpportunity;
   commission: number;
   onClose: () => void;
+  onInviaBP?: (data: SingolaBPData) => void;
   initialBonus?: number;
   initialStake?: number;
   initialFreeBet?: boolean;
@@ -133,7 +152,7 @@ function matchCompetizione(league: string): string {
 }
 
 export function PuntaBancaModal({
-  opp, commission, onClose,
+  opp, commission, onClose, onInviaBP,
   initialBonus = 0, initialStake = 0, initialFreeBet = false, initialRimborso = false,
 }: Props) {
   const [stake, setStake] = useState(initialStake);
@@ -145,14 +164,6 @@ export function PuntaBancaModal({
   const [qBanca, setQBanca] = useState(opp.quotaExchange);
   const [rawQPunta, setRawQPunta] = useState(opp.quotaBook.toFixed(2));
   const [rawQBanca, setRawQBanca] = useState(opp.quotaExchange.toFixed(2));
-  const [showInviaModal, setShowInviaModal] = useState(false);
-  const [inviaIntestatario, setInviaIntestatario] = useState("");
-  const [inviaIntestatarioBanca, setInviaIntestatarioBanca] = useState("");
-  const [inviaTag, setInviaTag] = useState("none");
-  const [inviaCompetizione, setInviaCompetizione] = useState("");
-  const [intestatariList, setIntestatariList] = useState<string[]>([]);
-  const [intestatariLoading, setIntestatariLoading] = useState(false);
-  const [tagList, setTagList] = useState<string[]>([]);
 
   useEffect(() => {
     setQPunta(opp.quotaBook);
@@ -175,35 +186,6 @@ export function PuntaBancaModal({
     return () => window.removeEventListener("keydown", fn);
   }, [onClose]);
 
-  useEffect(() => {
-    if (!showInviaModal) return;
-    setIntestatariList([]);
-    setInviaIntestatario("");
-    setInviaIntestatarioBanca("");
-    setInviaTag("none");
-    setInviaCompetizione(matchCompetizione(opp.league));
-    setTagList([]);
-    setIntestatariLoading(true);
-    const PREDEFINED_TAGS = [
-      "Bonus benvenuto", "Bonus personale", "Bonus ricorrente",
-      "Dividi Payout", "Scommessa personale", "Surebet a 2 vie", "Surebet a 3 vie",
-    ];
-    Promise.all([
-      supabase.functions.invoke("get-intestatari"),
-      supabase.from("tags").select("nome").order("nome"),
-    ]).then(([intRes, tagRes]) => {
-      if (!intRes.error && Array.isArray(intRes.data)) {
-        setIntestatariList(intRes.data);
-        if (intRes.data.length === 1) {
-          setInviaIntestatario(intRes.data[0]);
-          setInviaIntestatarioBanca(intRes.data[0]);
-        }
-      }
-      const customTags: string[] = (tagRes.data ?? []).map((t: { nome: string }) => t.nome);
-      setTagList([...new Set([...PREDEFINED_TAGS, ...customTags])]);
-      setIntestatariLoading(false);
-    });
-  }, [showInviaModal]);
 
   const c = opp.isBookVsBook ? 0 : commissionRate / 100;
 
@@ -291,62 +273,27 @@ export function PuntaBancaModal({
     return map[sc] ?? "Altro Calcio";
   };
 
-  const handleInviaBP = () => {
-    if (!result || !inviaIntestatario.trim() || !inviaIntestatarioBanca.trim()) return;
-    const mercato = toBetprofitMercato(opp.scommessa, opp.sport);
-    const competizione = inviaCompetizione.trim() || matchCompetizione(opp.league);
-
-    // Determina tipoBonus in base ai checkbox del modal
+  const handleInviaBPClick = () => {
+    if (!result || !onInviaBP) return;
     const tipoBonus = rimborso ? "Rimborso" : freeBet ? "FreeBet" : bonus > 0 ? "Bonus" : "Nessuno";
-    const totalStake = result.totalStake;
-
-    const savedState = {
-      autoSave: true,
-      // selections: stesso formato esatto della multipla (BetProfit legge competizione da qui)
-      selections: [{
-        evento: opp.eventName,
-        competizione,
-        mercato,
-        quota: qPunta,
-        dataEvento: opp.eventTime,
-      }],
-      quotaInputs: [qPunta.toFixed(2).replace(".", ",")],
-      formValues: {
-        intestatario: inviaIntestatario.trim(),
-        conto: "",
-        stake: stake || 0,
-        tipoBonus,
-        bonus: bonus > 0 ? bonus : 0,
-        rimborso: rimborso ? totalStake : 0,
-        percentualeBonus: 0,
-        numeroMinimoSelezioni: 0,
-        urlEvento: opp.bookmakerUrl || getUrl(opp.bookmaker),
-        note: "",
-        tag: inviaTag,
-      },
-      selectedIntestatario: inviaIntestatario.trim(),
-      selectedConto: "",
+    onInviaBP({
+      mercato: toBetprofitMercato(opp.scommessa, opp.sport),
+      competizione: matchCompetizione(opp.league),
+      evento: opp.eventName,
+      dataEvento: opp.eventTime,
+      quota: qPunta,
+      quotaBanca: qBanca,
+      layStake: Math.round(result.layStake * 100) / 100,
+      totalStake: result.totalStake,
+      stake: stake || 0,
+      commissionRate,
       tipoBonus,
+      bonus: bonus > 0 ? bonus : 0,
+      rimborsoAmount: rimborso ? result.totalStake : 0,
       bookmakerPunta: opp.bookmaker,
-      intestatarioBanca: inviaIntestatarioBanca.trim(),
-      bancate: [{
-        evento: opp.eventName,
-        dataEvento: opp.eventTime,
-        mercato,
-        stake: Math.round(result.layStake * 100) / 100,
-        quotaBanca: qBanca,
-        quotaPunta: qPunta,
-        tassePercentuale: commissionRate,
-        exchange: opp.exchange,
-        intestatario: inviaIntestatarioBanca.trim(),
-      }],
-    };
-    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
-    window.open(`https://betprofit.app/puntate?import=${encoded}`, "_blank");
-    setShowInviaModal(false);
-    setInviaIntestatario("");
-    setInviaIntestatarioBanca("");
-    setInviaTag("none");
+      bookmakerUrl: opp.bookmakerUrl || getUrl(opp.bookmaker),
+      exchange: opp.exchange,
+    });
   };
 
   return (
@@ -549,7 +496,7 @@ export function PuntaBancaModal({
               <button
                 className="flex-1 py-2 text-sm font-bold rounded transition-colors text-white hover:opacity-90"
                 style={{ backgroundColor: "#1e2d42" }}
-                onClick={() => { if (result) setShowInviaModal(true); }}
+                onClick={handleInviaBPClick}
               >
                 INVIA AL BP
               </button>
@@ -560,7 +507,7 @@ export function PuntaBancaModal({
               <button
                 className="flex-1 py-2 text-sm font-bold rounded transition-colors text-white hover:opacity-90"
                 style={{ backgroundColor: "#1e2d42" }}
-                onClick={() => { if (result) setShowInviaModal(true); }}
+                onClick={handleInviaBPClick}
               >
                 INVIA AL BP
               </button>
@@ -636,90 +583,6 @@ export function PuntaBancaModal({
         </div>
       </div>
 
-      {/* ── Modal intestatario per invio a BetProfit ── */}
-      {showInviaModal && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
-          onClick={e => { if (e.target === e.currentTarget) setShowInviaModal(false); }}
-        >
-          <div className="bg-[#152033] border border-[#1e3050] rounded-xl shadow-2xl p-6 w-[90vw] max-w-[400px]">
-            <h2 className="text-white font-bold text-lg mb-4">Invia Singola</h2>
-
-            {intestatariLoading ? (
-              <div className="text-slate-400 text-sm py-4 text-center">Caricamento intestatari…</div>
-            ) : intestatariList.length === 0 ? (
-              <div className="text-red-400 text-sm py-4 text-center">Nessun intestatario abilitato trovato</div>
-            ) : (
-              <>
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Competizione</label>
-                  <input
-                    type="text"
-                    value={inviaCompetizione}
-                    onChange={e => setInviaCompetizione(e.target.value)}
-                    placeholder="Es. Serie A (Italia)"
-                    className="w-full bg-[#1a2535] border border-slate-600 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/40 placeholder-slate-500"
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-[#87c4e8] uppercase tracking-wide mb-1">Intestatario Punta</label>
-                  <select
-                    autoFocus
-                    value={inviaIntestatario}
-                    onChange={e => setInviaIntestatario(e.target.value)}
-                    className="w-full bg-[#1a2535] border border-[#87c4e8]/40 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#87c4e8]/40"
-                  >
-                    {intestatariList.length > 1 && <option value="">— Seleziona —</option>}
-                    {intestatariList.map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-[#f4a9ba] uppercase tracking-wide mb-1">Intestatario Banca</label>
-                  <select
-                    value={inviaIntestatarioBanca}
-                    onChange={e => setInviaIntestatarioBanca(e.target.value)}
-                    className="w-full bg-[#1a2535] border border-[#f4a9ba]/40 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#f4a9ba]/40"
-                  >
-                    {intestatariList.length > 1 && <option value="">— Seleziona —</option>}
-                    {intestatariList.map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-
-                <div className="mb-6">
-                  <label className="block text-xs font-semibold text-[#c8922d] uppercase tracking-wide mb-1">Tag</label>
-                  <select
-                    value={inviaTag}
-                    onChange={e => setInviaTag(e.target.value)}
-                    className="w-full bg-[#1a2535] border border-[#c8922d]/40 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/40"
-                  >
-                    <option value="none">— Nessun tag —</option>
-                    {tagList.map(tag => <option key={tag} value={tag}>{tag}</option>)}
-                  </select>
-                </div>
-              </>
-            )}
-
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setShowInviaModal(false)}
-                className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-[#253347] rounded transition-colors"
-              >
-                Annulla
-              </button>
-              <button
-                onClick={handleInviaBP}
-                disabled={!inviaIntestatario.trim() || !inviaIntestatarioBanca.trim()}
-                className="px-5 py-2 text-sm font-bold rounded transition-colors bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Invia ↗
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

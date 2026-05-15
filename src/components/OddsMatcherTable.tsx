@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { PuntaBancaModal } from "./PuntaBancaModal";
+import { PuntaBancaModal, type SingolaBPData } from "./PuntaBancaModal";
 
 interface OddsData {
   bookmaker: string;
@@ -98,6 +98,7 @@ interface Props {
   commission: number;
   multiplaResetKey?: number;
   onMultiplaSelectedChange?: (selected: Opportunity[]) => void;
+  onInviaBP?: (data: SingolaBPData) => void;
 }
 
 const EXCHANGE_NAMES = [
@@ -628,7 +629,7 @@ function DateJumper({ days, idPrefix }: {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, filters, commission, multiplaResetKey, onMultiplaSelectedChange }: Props) {
+export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, filters, commission, multiplaResetKey, onMultiplaSelectedChange, onInviaBP }: Props) {
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
   const [selectedTreVie, setSelectedTreVie] = useState<TreVieGroup | null>(null);
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
@@ -1898,6 +1899,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
           opp={selectedOpp}
           commission={commission}
           onClose={() => setSelectedOpp(null)}
+          onInviaBP={onInviaBP}
           initialBonus={parseFloat(filters.bonus) || 0}
           initialStake={filters.stakePunta === "" ? 0 : (parseFloat(filters.stakePunta) || 0)}
           initialFreeBet={filters.freebet}

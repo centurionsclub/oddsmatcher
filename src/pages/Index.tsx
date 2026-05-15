@@ -3,6 +3,7 @@ import { Navbar } from "@/components/Navbar";
 import { useToast } from "@/hooks/use-toast";
 import { useOddsSearch } from "@/hooks/use-odds-search";
 import { OddsMatcherTable, type Opportunity } from "@/components/OddsMatcherTable";
+import type { SingolaBPData } from "@/components/PuntaBancaModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -62,6 +63,7 @@ const Index = () => {
   const [activeSubTab, setActiveSubTab] = useState("singola");
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
   const { session } = useAuth();
+  // Multipla BP modal state
   const [showInviaModal, setShowInviaModal] = useState(false);
   const [inviaIntestatario, setInviaIntestatario] = useState("");
   const [inviaIntestatarioBanca, setInviaIntestatarioBanca] = useState("");
@@ -69,6 +71,17 @@ const Index = () => {
   const [intestatariLoading, setIntestatariLoading] = useState(false);
   const [inviaTag, setInviaTag] = useState("none");
   const [tagList, setTagList] = useState<string[]>([]);
+
+  // Singola BP modal state
+  const [showSingolaBPModal, setShowSingolaBPModal] = useState(false);
+  const [singolaBPData, setSingolaBPData] = useState<SingolaBPData | null>(null);
+  const [singolaBPIntestatario, setSingolaBPIntestatario] = useState("");
+  const [singolaBPIntestatarioBanca, setSingolaBPIntestatarioBanca] = useState("");
+  const [singolaBPTag, setSingolaBPTag] = useState("none");
+  const [singolaBPCompetizione, setSingolaBPCompetizione] = useState("");
+  const [singolaBPIntestatariList, setSingolaBPIntestatariList] = useState<string[]>([]);
+  const [singolaBPTagList, setSingolaBPTagList] = useState<string[]>([]);
+  const [singolaBPLoading, setSingolaBPLoading] = useState(false);
 
   // Filter states
   const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
@@ -232,6 +245,98 @@ const Index = () => {
       setIntestatariLoading(false);
     });
   }, [showInviaModal, session]);
+
+  // Carica intestatari e tag per singola BP modal
+  useEffect(() => {
+    if (!showSingolaBPModal || !session) return;
+    setSingolaBPIntestatariList([]);
+    setSingolaBPIntestatario("");
+    setSingolaBPIntestatarioBanca("");
+    setSingolaBPTag("none");
+    setSingolaBPTagList([]);
+    setSingolaBPLoading(true);
+
+    const PREDEFINED_TAGS = [
+      "Bonus benvenuto", "Bonus personale", "Bonus ricorrente",
+      "Dividi Payout", "Scommessa personale", "Surebet a 2 vie", "Surebet a 3 vie",
+    ];
+
+    Promise.all([
+      supabase.functions.invoke("get-intestatari"),
+      supabase.from("tags").select("nome").order("nome"),
+    ]).then(([intRes, tagRes]) => {
+      if (!intRes.error && Array.isArray(intRes.data)) {
+        setSingolaBPIntestatariList(intRes.data);
+        if (intRes.data.length === 1) {
+          setSingolaBPIntestatario(intRes.data[0]);
+          setSingolaBPIntestatarioBanca(intRes.data[0]);
+        }
+      }
+      const customTags: string[] = (tagRes.data ?? []).map((t: { nome: string }) => t.nome);
+      const allTags = [...new Set([...PREDEFINED_TAGS, ...customTags])];
+      setSingolaBPTagList(allTags);
+      setSingolaBPLoading(false);
+    });
+  }, [showSingolaBPModal, session]);
+
+  const handleSingolaBP = (data: SingolaBPData) => {
+    setSingolaBPData(data);
+    setSingolaBPCompetizione(data.competizione);
+    setShowSingolaBPModal(true);
+  };
+
+  const handleInviaSingola = () => {
+    if (!singolaBPData || !singolaBPIntestatario.trim() || !singolaBPIntestatarioBanca.trim()) return;
+    const d = singolaBPData;
+    const savedState = {
+      autoSave: true,
+      tipo: "Singola",
+      isSingola: true,
+      selections: [{
+        evento: d.evento,
+        competizione: singolaBPCompetizione || d.competizione,
+        mercato: d.mercato,
+        quota: d.quota,
+        dataEvento: d.dataEvento,
+      }],
+      quotaInputs: [d.quota.toFixed(2).replace(".", ",")],
+      formValues: {
+        intestatario: singolaBPIntestatario.trim(),
+        conto: "",
+        stake: d.stake || 0,
+        tipoBonus: d.tipoBonus,
+        bonus: d.bonus || 0,
+        rimborso: d.rimborsoAmount || 0,
+        percentualeBonus: 0,
+        numeroMinimoSelezioni: 0,
+        urlEvento: d.bookmakerUrl || "",
+        note: "",
+        tag: singolaBPTag,
+      },
+      selectedIntestatario: singolaBPIntestatario.trim(),
+      selectedConto: "",
+      tipoBonus: d.tipoBonus,
+      bookmakerPunta: d.bookmakerPunta,
+      intestatarioBanca: singolaBPIntestatarioBanca.trim(),
+      bancate: [{
+        evento: d.evento,
+        dataEvento: d.dataEvento,
+        mercato: d.mercato,
+        stake: d.layStake,
+        quotaBanca: d.quotaBanca,
+        quotaPunta: d.quota,
+        tassePercentuale: d.commissionRate,
+      }],
+    };
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(savedState))));
+    window.open(`https://betprofit.app/puntate?import=${encoded}`, "_blank");
+    setShowSingolaBPModal(false);
+    setSingolaBPData(null);
+    setSingolaBPIntestatario("");
+    setSingolaBPIntestatarioBanca("");
+    setSingolaBPTag("none");
+    setSingolaBPCompetizione("");
+  };
 
   const handlePulisci = () => {
     setStakeError(null);
@@ -1112,6 +1217,91 @@ const Index = () => {
           );
         })()}
 
+        {/* Singola BP Modal */}
+        {showSingolaBPModal && singolaBPData && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
+            onClick={e => { if (e.target === e.currentTarget) { setShowSingolaBPModal(false); setSingolaBPData(null); } }}
+          >
+            <div className="bg-[#152033] border border-[#1e3050] rounded-xl shadow-2xl p-6 w-[90vw] max-w-[400px]">
+              <h2 className="text-white font-bold text-lg mb-4">Invia Singola</h2>
+
+              {singolaBPLoading ? (
+                <div className="text-slate-400 text-sm py-4 text-center">Caricamento intestatari…</div>
+              ) : singolaBPIntestatariList.length === 0 ? (
+                <div className="text-red-400 text-sm py-4 text-center">Nessun intestatario abilitato trovato</div>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Competizione</label>
+                    <input
+                      type="text"
+                      value={singolaBPCompetizione}
+                      onChange={e => setSingolaBPCompetizione(e.target.value)}
+                      placeholder="Es. Serie A (Italia)"
+                      className="w-full bg-[#1a2535] border border-slate-600 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500/40 placeholder-slate-500"
+                    />
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-xs font-semibold text-[#87c4e8] uppercase tracking-wide mb-1">Intestatario Punta</label>
+                    <select
+                      autoFocus
+                      value={singolaBPIntestatario}
+                      onChange={e => setSingolaBPIntestatario(e.target.value)}
+                      className="w-full bg-[#1a2535] border border-[#87c4e8]/40 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#87c4e8]/40"
+                    >
+                      {singolaBPIntestatariList.length > 1 && <option value="">— Seleziona —</option>}
+                      {singolaBPIntestatariList.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-xs font-semibold text-[#f4a9ba] uppercase tracking-wide mb-1">Intestatario Banca</label>
+                    <select
+                      value={singolaBPIntestatarioBanca}
+                      onChange={e => setSingolaBPIntestatarioBanca(e.target.value)}
+                      className="w-full bg-[#1a2535] border border-[#f4a9ba]/40 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#f4a9ba]/40"
+                    >
+                      {singolaBPIntestatariList.length > 1 && <option value="">— Seleziona —</option>}
+                      {singolaBPIntestatariList.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="mb-6">
+                    <label className="block text-xs font-semibold text-[#c8922d] uppercase tracking-wide mb-1">Tag</label>
+                    <select
+                      value={singolaBPTag}
+                      onChange={e => setSingolaBPTag(e.target.value)}
+                      className="w-full bg-[#1a2535] border border-[#c8922d]/40 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/40"
+                    >
+                      <option value="none">— Nessun tag —</option>
+                      {singolaBPTagList.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => { setShowSingolaBPModal(false); setSingolaBPData(null); setSingolaBPIntestatario(""); setSingolaBPIntestatarioBanca(""); setSingolaBPTag("none"); setSingolaBPCompetizione(""); }}
+                  className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-[#253347] rounded transition-colors"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleInviaSingola}
+                  disabled={!singolaBPIntestatario.trim() || !singolaBPIntestatarioBanca.trim()}
+                  className="px-5 py-2 text-sm font-bold rounded transition-colors bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Invia ↗
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Results Table */}
         <div ref={resultsRef} className="bg-[#152033] rounded-lg border border-[#1e3050] overflow-hidden">
           {oddsError && (
@@ -1148,6 +1338,7 @@ const Index = () => {
             commission={commission}
             multiplaResetKey={multiplaResetKey}
             onMultiplaSelectedChange={setMultiplaSelected}
+            onInviaBP={handleSingolaBP}
           />
         </div>
       </div>
