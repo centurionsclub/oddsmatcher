@@ -1,5 +1,15 @@
 import { useState, useEffect } from "react";
 import type { SingolaBPData } from "./PuntaBancaModal";
+
+const TAG_PREDEFINITI = [
+  "Bonus benvenuto",
+  "Bonus personale",
+  "Bonus ricorrente",
+  "Dividi Payout",
+  "Scommessa personale",
+  "Surebet a 2 vie",
+  "Surebet a 3 vie",
+];
 import {
   loginBetProfit,
   fetchBPAccounts,
@@ -277,7 +287,14 @@ export function SingolaBPModal({ data, onClose }: Props) {
                     className="w-full bg-[#1a2535] border border-[#c8922d]/40 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/40"
                   >
                     <option value="none">— Nessun tag —</option>
-                    {tags.map(t => <option key={t} value={t}>{t}</option>)}
+                    <optgroup label="Predefinito">
+                      {TAG_PREDEFINITI.map(t => <option key={t} value={t}>{t}</option>)}
+                    </optgroup>
+                    {tags.length > 0 && (
+                      <optgroup label="Tag Personali">
+                        {tags.map(t => <option key={t} value={t}>{t}</option>)}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
 
