@@ -139,6 +139,7 @@ export async function createLayBet(
     evento: string;
     dataEvento: string;
     mercato: string;
+    competizione: string;
   }
 ): Promise<void> {
   const res = await fetch(`${BP_URL}/rest/v1/lay_bets`, {
@@ -155,6 +156,7 @@ export async function createLayBet(
       evento: lay.evento,
       data_evento: lay.dataEvento,
       mercato: lay.mercato,
+      competizione: lay.competizione || null,
       conto: lay.conto,
       stake: lay.stake,
       quota_banca: lay.quotaBanca,
