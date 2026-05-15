@@ -660,7 +660,6 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
   const [selectedTreVie, setSelectedTreVie] = useState<TreVieGroup | null>(null);
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
-  const [timeWarning, setTimeWarning] = useState(false);
 
   // Reset selezione multipla quando l'utente clicca Aggiorna o Pulisci
   useEffect(() => {
@@ -1631,11 +1630,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         // Controllo orari troppo vicini (< 2 ore)
         const newTime = new Date(opp.eventTime).getTime();
         const tooClose = prev.some(o => Math.abs(new Date(o.eventTime).getTime() - newTime) < TWO_HOURS_MS);
-        if (tooClose) {
-          setTimeWarning(true);
-          setTimeout(() => setTimeWarning(false), 4000);
-          return prev;
-        }
+        if (tooClose) return prev;
         return [...prev, opp];
       });
     };
@@ -1713,12 +1708,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
           idPrefix="mday-"
           days={multiDayGroups.map(g => ({ date: g.date, label: formatDayLabel(g.date), count: g.opps.length }))}
         />
-        {/* Avviso orari troppo vicini */}
-        {timeWarning && (
-          <div className="fixed top-[60px] left-1/2 -translate-x-1/2 z-50 bg-red-700 border border-red-400 text-white text-sm font-bold px-5 py-3 rounded-lg shadow-2xl flex items-center gap-2 animate-pulse">
-            ⚠️ ATTENZIONE! Sono presenti partite con data e ora di inizio troppo vicine
-          </div>
-        )}
+
         {/* ── Barra riepilogo ── */}
         {n > 0 && hasStake && (
           <div className="bg-[#0a0e1a] border-b border-[#1e3050] px-6 py-3 flex flex-wrap items-center gap-6 text-sm">
