@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { getBetfairUrl } from "@/lib/utils";
 
 interface ModalOpportunity {
   eventTime: string;
@@ -34,6 +35,7 @@ export interface SingolaBPData {
   rimborsoAmount: number;
   bookmakerPunta: string;
   bookmakerUrl: string;
+  exchangeUrl: string;
   exchange: string;
 }
 
@@ -85,28 +87,6 @@ function getDisplayDomain(name: string): string {
   return domain.charAt(0).toUpperCase() + domain.slice(1);
 }
 
-function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/\s+v\s+|\s+vs\.?\s+|\s+-\s+/g, "-")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-const BF_SPORT_IT: Record<string, string> = {
-  calcio: "calcio",
-  tennis: "tennis",
-  basket: "basket",
-};
-
-function getBetfairUrl(sport: string, _market: string, marketId?: string, eventId?: string, eventName?: string, league?: string): string {
-  if (!eventId) return "https://www.betfair.it/exchange/plus/";
-  const sportSlug = BF_SPORT_IT[sport] ?? "calcio";
-  const leagueSlug = slugify(league ?? "");
-  const teamsSlug = slugify(eventName ?? "");
-  return `https://www.betfair.it/exchange/plus/it/${sportSlug}/${leagueSlug}/${teamsSlug}-scommesse-${eventId}`;
-}
 
 function formatDt(iso: string) {
   try {
@@ -233,7 +213,7 @@ export function PuntaBancaModal({
   const isBackLay = !opp.isBookVsBook;
 
   const exchangeUrl = isBackLay
-    ? getBetfairUrl(opp.sport, opp.market, opp.marketId, opp.eventId, opp.eventName, opp.league)
+    ? getBetfairUrl(opp.sport, opp.marketId, opp.eventId, opp.eventName, opp.league)
     : getUrl(opp.exchange);
 
   const minutesUntilMatch = (new Date(opp.eventTime).getTime() - Date.now()) / 60000;
@@ -292,6 +272,7 @@ export function PuntaBancaModal({
       rimborsoAmount: rimborso ? result.totalStake : 0,
       bookmakerPunta: opp.bookmaker,
       bookmakerUrl: opp.bookmakerUrl || getUrl(opp.bookmaker),
+      exchangeUrl,
       exchange: opp.exchange,
     });
     onClose(); // chiude il modal di calcolo, lascia visibile solo il popup intestatario

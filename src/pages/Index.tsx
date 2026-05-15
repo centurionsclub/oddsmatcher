@@ -7,6 +7,7 @@ import type { SingolaBPData } from "@/components/PuntaBancaModal";
 import { SingolaBPModal } from "@/components/SingolaBPModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { getBetfairUrl } from "@/lib/utils";
 
 const BOOKMAKERS = [
   "888sport", "Bet365", "BetFlag Bookmaker", "Betsson", "Bwin",
@@ -1026,10 +1027,8 @@ const Index = () => {
                 quotaBanca: opp.quotaExchange,
                 quotaPunta: opp.quotaBook,
                 tassePercentuale: inviaCommission,
-                urlEvento: opp.eventId
-                  ? `https://www.betfair.it/exchange/plus/it/${opp.sport ?? 'calcio'}/${opp.eventId}`
-                  : opp.marketId
-                  ? `https://www.betfair.it/exchange/plus/it/${opp.sport ?? 'calcio'}/market/${opp.marketId}`
+                urlEvento: (opp.eventId || opp.marketId)
+                  ? getBetfairUrl(opp.sport, opp.marketId, opp.eventId, opp.eventName, opp.league)
                   : undefined,
                 competizione: opp.league || undefined,
               })),

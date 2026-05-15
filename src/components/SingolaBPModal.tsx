@@ -167,6 +167,7 @@ export function SingolaBPModal({ data, onClose }: Props) {
         dataEvento: data.dataEvento,
         mercato: data.mercato,
         competizione: competizione || data.competizione,
+        urlEvento: data.exchangeUrl || undefined,
       });
 
       setDone(true);
