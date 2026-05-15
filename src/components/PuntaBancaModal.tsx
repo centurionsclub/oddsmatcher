@@ -302,21 +302,13 @@ export function PuntaBancaModal({
 
     const savedState = {
       autoSave: true,
-      tipo: "Singola",
-      isSingola: true,
+      // selections: stesso formato esatto della multipla (BetProfit legge competizione da qui)
       selections: [{
         evento: opp.eventName,
         competizione,
         mercato,
         quota: qPunta,
         dataEvento: opp.eventTime,
-        bookmaker: opp.bookmaker,
-        intestatario: inviaIntestatario.trim(),
-        stake: totalStake,
-        tipoBonus,
-        bonus: bonus > 0 ? bonus : 0,
-        rimborso: rimborso ? totalStake : 0,
-        urlEvento: opp.bookmakerUrl || getUrl(opp.bookmaker),
       }],
       quotaInputs: [qPunta.toFixed(2).replace(".", ",")],
       formValues: {
@@ -341,7 +333,6 @@ export function PuntaBancaModal({
         evento: opp.eventName,
         dataEvento: opp.eventTime,
         mercato,
-        competizione,
         stake: Math.round(result.layStake * 100) / 100,
         quotaBanca: qBanca,
         quotaPunta: qPunta,
