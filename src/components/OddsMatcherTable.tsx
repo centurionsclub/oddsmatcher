@@ -1273,7 +1273,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[600px] text-sm border-collapse">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="bg-[#0a0e1a] text-white text-[16px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1419,7 +1419,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[750px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="bg-[#0a0e1a] text-white text-[16px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1465,7 +1465,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="bg-[#0a0e1a] text-white text-[16px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1746,7 +1746,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="bg-[#0a0e1a] text-white text-[16px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
@@ -1915,7 +1915,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-sm">
             <thead>
-              <tr className="bg-[#0a0e1a] text-white text-[12px] uppercase tracking-wide border-b border-[#1e3050]">
+              <tr className="bg-[#0a0e1a] text-white text-[16px] uppercase tracking-wide border-b border-[#1e3050]">
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Data/Ora</th>
                 <th className="text-center py-2 px-2 font-semibold">Sport</th>
                 <th className="text-left py-2 px-2 md:px-3 font-semibold">Partita</th>
