@@ -146,6 +146,7 @@ export function SingolaBPModal({ data, onClose }: Props) {
       });
 
       setDone(true);
+      window.open("https://betprofit.app/puntate", "_blank");
       setTimeout(onClose, 1800);
     } catch (err: any) {
       // Se token scaduto, forza re-login
