@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 class BrowserManager:
     """Manages a single Playwright browser instance and context."""
 
+    headless_override: bool | None = field(default=None)  # None = use settings
     _playwright: Playwright | None = field(default=None, repr=False)
     _browser: Browser | None = field(default=None, repr=False)
     _context: BrowserContext | None = field(default=None, repr=False)
@@ -34,11 +35,12 @@ class BrowserManager:
     async def start(self) -> Page:
         """Launch browser and return the main page."""
         cfg = settings.scraper
-        logger.info("Launching Playwright (headless=%s)", cfg.headless)
+        headless = self.headless_override if self.headless_override is not None else cfg.headless
+        logger.info("Launching Playwright (headless=%s)", headless)
 
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
-            headless=cfg.headless,
+            headless=headless,
             args=["--no-sandbox", "--disable-dev-shm-usage"],
         )
         self._context = await self._browser.new_context(

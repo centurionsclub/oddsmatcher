@@ -9,6 +9,7 @@ from oddsmatcher_backend.db.pipeline import OddsPipeline
 from oddsmatcher_backend.db.supabase_client import SupabaseWriter
 from oddsmatcher_backend.scraper.browser import BrowserManager
 from oddsmatcher_backend.scraper.centroquote import CentroQuoteScraper
+from oddsmatcher_backend.scraper.lottomatica import LottomaticaScraper
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ async def run_scrape_cycle(sport: str | None = None) -> dict:
     start = datetime.now(timezone.utc)
     logger.info("Starting scrape cycle at %s (sport=%s)", start.isoformat(), sport or "all")
 
+    # CentroQuote scraping
     async with BrowserManager() as browser:
         scraper = CentroQuoteScraper(browser)
 
@@ -33,7 +35,22 @@ async def run_scrape_cycle(sport: str | None = None) -> dict:
         else:
             results = await scraper.scrape_all()
 
-        logger.info("Scrape phase done: %d match-market results", len(results))
+    logger.info("CentroQuote done: %d match-market results", len(results))
+
+    # Lottomatica scraping (separate browser, headless=False to bypass Akamai detection)
+    try:
+        async with BrowserManager(headless_override=False) as lotto_browser:
+            lotto_scraper = LottomaticaScraper(lotto_browser)
+            if sport:
+                lotto_results = await lotto_scraper.scrape_sport(sport)
+            else:
+                lotto_results = await lotto_scraper.scrape_all()
+        results.extend(lotto_results)
+        logger.info("Lottomatica done: %d match-market results", len(lotto_results))
+    except Exception as exc:
+        logger.error("Lottomatica scrape cycle failed: %s", exc, exc_info=True)
+
+    logger.info("Scrape phase done: %d match-market results total", len(results))
 
     # Pipeline: write to Supabase
     writer = SupabaseWriter()
