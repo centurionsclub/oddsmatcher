@@ -29,6 +29,12 @@ def main():
         default=None,
         help="Scrape only this sport (default: all)",
     )
+    scrape_parser.add_argument(
+        "--bookmaker",
+        choices=["centroquote", "lottomatica"],
+        default=None,
+        help="Scrape only this bookmaker (default: all)",
+    )
     scrape_parser.add_argument("--verbose", "-v", action="store_true")
 
     # ── scheduler ───────────────────────────────────────────────────
@@ -45,7 +51,7 @@ def main():
 
     if args.command == "scrape":
         from oddsmatcher_backend.scheduler.runner import run_scrape_cycle
-        stats = asyncio.run(run_scrape_cycle(sport=args.sport))
+        stats = asyncio.run(run_scrape_cycle(sport=args.sport, bookmaker=args.bookmaker))
         print(f"\nScrape complete: {stats}")
 
     elif args.command == "scheduler":

@@ -14,41 +14,39 @@ from oddsmatcher_backend.scraper.lottomatica import LottomaticaScraper
 logger = logging.getLogger(__name__)
 
 
-async def run_scrape_cycle(sport: str | None = None) -> dict:
+async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = None) -> dict:
     """Execute a single scrape cycle: scrape → pipeline → cleanup.
 
     Args:
-        sport: Scrape only this sport, or all if None.
+        sport:      Scrape only this sport, or all if None.
+        bookmaker:  'centroquote' | 'lottomatica' | None (= entrambi)
 
     Returns:
         Stats from the pipeline.
     """
     start = datetime.now(timezone.utc)
-    logger.info("Starting scrape cycle at %s (sport=%s)", start.isoformat(), sport or "all")
+    logger.info("Starting scrape cycle at %s (sport=%s, bookmaker=%s)", start.isoformat(), sport or "all", bookmaker or "all")
+
+    results: list = []
 
     # CentroQuote scraping
-    async with BrowserManager() as browser:
-        scraper = CentroQuoteScraper(browser)
-
-        if sport:
-            results = await scraper.scrape_sport(sport)
-        else:
-            results = await scraper.scrape_all()
-
-    logger.info("CentroQuote done: %d match-market results", len(results))
+    if bookmaker in (None, "centroquote"):
+        async with BrowserManager() as browser:
+            scraper = CentroQuoteScraper(browser)
+            cq_results = await (scraper.scrape_sport(sport) if sport else scraper.scrape_all())
+        results.extend(cq_results)
+        logger.info("CentroQuote done: %d match-market results", len(cq_results))
 
     # Lottomatica scraping (separate browser, headless=False to bypass Akamai detection)
-    try:
-        async with BrowserManager(headless_override=False) as lotto_browser:
-            lotto_scraper = LottomaticaScraper(lotto_browser)
-            if sport:
-                lotto_results = await lotto_scraper.scrape_sport(sport)
-            else:
-                lotto_results = await lotto_scraper.scrape_all()
-        results.extend(lotto_results)
-        logger.info("Lottomatica done: %d match-market results", len(lotto_results))
-    except Exception as exc:
-        logger.error("Lottomatica scrape cycle failed: %s", exc, exc_info=True)
+    if bookmaker in (None, "lottomatica"):
+        try:
+            async with BrowserManager(headless_override=False) as lotto_browser:
+                lotto_scraper = LottomaticaScraper(lotto_browser)
+                lotto_results = await (lotto_scraper.scrape_sport(sport) if sport else lotto_scraper.scrape_all())
+            results.extend(lotto_results)
+            logger.info("Lottomatica done: %d match-market results", len(lotto_results))
+        except Exception as exc:
+            logger.error("Lottomatica scrape cycle failed: %s", exc, exc_info=True)
 
     logger.info("Scrape phase done: %d match-market results total", len(results))
 
