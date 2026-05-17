@@ -81,10 +81,8 @@ function getUrl(name: string) {
 }
 
 function getDisplayDomain(name: string): string {
-  const url = getUrl(name);
-  if (url === "#") return name;
-  const domain = url.replace("https://www.", "").replace("https://", "").replace("http://", "");
-  return domain.charAt(0).toUpperCase() + domain.slice(1);
+  // Show only the bookmaker name, not the full URL
+  return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 
