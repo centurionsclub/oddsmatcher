@@ -249,10 +249,19 @@ class CentroQuoteScraper:
 
                 if (heading) {
                     const text = heading.textContent.trim();
-                    const parts = text.split(/\\s*[-–]\\s*/);
-                    if (parts.length >= 2) {
-                        home = parts[0].trim();
-                        away = parts[1].trim();
+                    // CentroQuote h1 format: "Team A vs Team B - Quote, Pronostici..."
+                    // Split on " vs " first (most reliable), then fall back to " - "
+                    if (text.includes(' vs ')) {
+                        const vsParts = text.split(' vs ');
+                        home = vsParts[0].trim();
+                        // Away team might be "Team B - Quote..." — strip the subtitle
+                        away = vsParts[1].split(/\s*[-–]\s*/)[0].trim();
+                    } else {
+                        const parts = text.split(/\\s*[-–]\\s*/);
+                        if (parts.length >= 2) {
+                            home = parts[0].trim();
+                            away = parts[1].trim();
+                        }
                     }
                 }
 
