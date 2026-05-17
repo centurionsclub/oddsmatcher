@@ -45,7 +45,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python -m oddsmatcher_backend.main scrape --bookmaker lottomatica
+        run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape --bookmaker lottomatica
 
       # CentroQuote dopo — browser headful via Xvfb, può essere lento
       - name: Scrape CentroQuote

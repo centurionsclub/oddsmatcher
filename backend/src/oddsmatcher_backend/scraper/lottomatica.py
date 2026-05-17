@@ -1,12 +1,14 @@
 """Lottomatica pregame odds scraper.
 
-Strategy: direct async HTTP calls to Lottomatica's internal JSON API using
-httpx (no browser needed). The pregame API endpoints don't require Akamai
-session cookies — only the main SPA does.
+Strategy: Playwright browser + page.request.get() for API calls.
+We navigate to the Lottomatica homepage once to get Akamai session cookies,
+then use the browser's request context (which carries those cookies) to call
+the internal pregame JSON API.  httpx alone gets 403 from Akamai-protected IPs.
 
 Flow per tournament:
-  1. getOverviewEventsAams → list of events with IDs (tai, ti, pi, ei)
-  2. getDetailsEventAams per event → full market/odds data
+  1. Navigate to homepage once → Akamai sets cookies/fingerprint
+  2. getOverviewEventsAams → list of events with IDs (tai, ti, pi, ei)
+  3. getDetailsEventAams per event → full market/odds data
 """
 
 import asyncio
@@ -14,7 +16,7 @@ import logging
 import re
 import unicodedata
 
-import httpx
+from playwright.async_api import async_playwright, Browser, BrowserContext, Page, Playwright
 
 from oddsmatcher_backend.scraper.centroquote import MatchOdds
 
@@ -27,15 +29,15 @@ API_BASE = f"{BASE_URL}/api/sport/pregame"
 # (id_sport, id_tournament, id_aams_tournament, league_name, sport_key, league_slug, country_slug)
 TOURNAMENTS: list[tuple[int, int, int, str, str, str, str]] = [
     # Calcio — leghe nazionali
-    (1,  93,      21,   "Serie A",           "calcio", "serie-a",              "italia"),
-    (1,  97,      34,   "Serie B",           "calcio", "serie-b",              "italia"),
-    (1,  26604,   86,   "Premier League",    "calcio", "premier-league",       "inghilterra"),
-    (1,  95,      79,   "La Liga",           "calcio", "la-liga",              "spagna"),
-    (1,  94,      20,   "Bundesliga",        "calcio", "bundesliga",           "germania"),
-    (1,  96,      23,   "Ligue 1",           "calcio", "ligue-1",              "francia"),
+    (1,  93,      21,   "Serie A",           "calcio", "serie-a",               "italia"),
+    (1,  97,      34,   "Serie B",           "calcio", "serie-b",               "italia"),
+    (1,  26604,   86,   "Premier League",    "calcio", "premier-league",        "inghilterra"),
+    (1,  95,      79,   "La Liga",           "calcio", "la-liga",               "spagna"),
+    (1,  94,      20,   "Bundesliga",        "calcio", "bundesliga",            "germania"),
+    (1,  96,      23,   "Ligue 1",           "calcio", "ligue-1",               "francia"),
     # Calcio — coppe europee
-    (1,  26534,   18,   "Champions League",  "calcio", "champions-league-uefa","europa"),
-    (1,  247944,  153,  "Europa League",     "calcio", "europa-league-uefa",   "europa"),
+    (1,  26534,   18,   "Champions League",  "calcio", "champions-league-uefa", "europa"),
+    (1,  247944,  153,  "Europa League",     "calcio", "europa-league-uefa",    "europa"),
     (1,  5675488, 2474, "Conference League", "calcio", "conference-league-uefa","europa"),
 ]
 # fmt: on
@@ -51,19 +53,20 @@ UO_SPREADS_WANTED: set[str] = {"1.5", "2.5", "3.5"}
 
 BOOKMAKER = "lottomatica"
 
-_HEADERS = {
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
+
+_API_HEADERS = {
     "accept": "application/json, text/plain, */*",
     "accept-language": "it-IT,it;q=0.9,en;q=0.8",
     "x-brand": "2",
     "x-idcanale": "13",
     "x-verticale": "1",
-    "referer": "https://www.lottomatica.it/scommesse/sport/",
-    "origin": "https://www.lottomatica.it",
-    "user-agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
+    "referer": f"{BASE_URL}/scommesse/sport/",
+    "origin": BASE_URL,
 }
 
 
@@ -72,46 +75,77 @@ def _slugify_team(name: str) -> str:
 
     Example: "Atlético Madrid" → "atletico-madrid"
     """
-    # Normalize unicode (decompose accented chars) then strip combining chars
     nfkd = unicodedata.normalize("NFKD", name)
     ascii_str = nfkd.encode("ascii", "ignore").decode("ascii")
-    # Lowercase, replace non-alphanumeric runs with a single hyphen
     slug = re.sub(r"[^a-z0-9]+", "-", ascii_str.lower()).strip("-")
     return slug
 
 
 class LottomaticaScraper:
-    """Scrapes pregame odds from Lottomatica via its internal JSON API."""
+    """Scrapes pregame odds from Lottomatica using Playwright browser context.
 
-    def __init__(self, browser=None):  # browser kept for API compat but not used
-        self._client: httpx.AsyncClient | None = None
+    Uses the browser's request context (which carries Akamai session cookies
+    obtained by navigating to the homepage) to call the internal pregame API.
+    """
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                headers=_HEADERS,
-                timeout=20.0,
-                follow_redirects=True,
+    def __init__(self, browser=None):  # browser param kept for API compat but not used
+        self._playwright: Playwright | None = None
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
+        self._page: Page | None = None
+
+    async def _start(self) -> None:
+        """Launch browser and warm up Akamai session."""
+        self._playwright = await async_playwright().start()
+        self._browser = await self._playwright.chromium.launch(
+            headless=False,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
+        self._context = await self._browser.new_context(
+            user_agent=_USER_AGENT,
+            locale="it-IT",
+            timezone_id="Europe/Rome",
+            viewport={"width": 1280, "height": 800},
+        )
+        self._page = await self._context.new_page()
+
+        logger.info("[Lottomatica] Navigating to homepage to get Akamai cookies...")
+        try:
+            await self._page.goto(
+                f"{BASE_URL}/scommesse/sport/",
+                wait_until="domcontentloaded",
+                timeout=30_000,
             )
-        return self._client
+            await self._page.wait_for_timeout(3000)  # let Akamai set cookies
+            logger.info("[Lottomatica] Homepage loaded — browser ready")
+        except Exception as e:
+            logger.warning("[Lottomatica] Homepage navigation failed: %s", e)
 
-    async def _close(self) -> None:
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
+    async def _stop(self) -> None:
+        if self._browser:
+            await self._browser.close()
+        if self._playwright:
+            await self._playwright.stop()
+        self._page = None
+        self._context = None
+        self._browser = None
+        self._playwright = None
 
     async def scrape_all(self) -> list[MatchOdds]:
         """Scrape all configured tournaments."""
+        await self._start()
         try:
             return await self._scrape_tournaments(None)
         finally:
-            await self._close()
+            await self._stop()
 
     async def scrape_sport(self, sport: str) -> list[MatchOdds]:
         """Scrape only tournaments for the given sport key."""
+        await self._start()
         try:
             return await self._scrape_tournaments(sport)
         finally:
-            await self._close()
+            await self._stop()
 
     # ── internals ────────────────────────────────────────────────────
 
@@ -138,17 +172,19 @@ class LottomaticaScraper:
         return all_results
 
     async def _api_get(self, url: str) -> dict | None:
-        client = await self._get_client()
+        """Make an API GET using the browser's request context (carries Akamai cookies)."""
+        assert self._page is not None, "Browser not started"
         try:
-            resp = await client.get(url)
-            logger.debug("[Lottomatica] GET %s → %s", url, resp.status_code)
-            if resp.status_code != 200:
+            response = await self._page.request.get(url, headers=_API_HEADERS, timeout=15_000)
+            logger.debug("[Lottomatica] GET %s → %s", url, response.status)
+            if response.status != 200:
+                body = await response.text()
                 logger.warning(
-                    "[Lottomatica] HTTP %s for %s — body: %s",
-                    resp.status_code, url, resp.text[:300],
+                    "[Lottomatica] HTTP %s for %s — body: %.300s",
+                    response.status, url, body,
                 )
                 return None
-            return resp.json()
+            return await response.json()
         except Exception as e:
             logger.error("[Lottomatica] Request failed for %s: %s", url, e)
             return None
