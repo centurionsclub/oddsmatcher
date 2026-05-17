@@ -34,8 +34,24 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
         async with BrowserManager() as browser:
             scraper = CentroQuoteScraper(browser)
             cq_results = await (scraper.scrape_sport(sport) if sport else scraper.scrape_all())
-        results.extend(cq_results)
-        logger.info("CentroQuote done: %d match-market results", len(cq_results))
+
+        # Rimuovi eventuali quote Lottomatica da CentroQuote:
+        # Lottomatica viene solo dal nostro scraper diretto su lottomatica.it
+        DIRECT_ONLY = {"lottomatica"}
+        cq_filtered = []
+        for r in cq_results:
+            r.bookmaker_odds = [
+                bm for bm in r.bookmaker_odds
+                if bm["bookmaker"].lower() not in DIRECT_ONLY
+            ]
+            if r.bookmaker_odds:
+                cq_filtered.append(r)
+
+        dropped = len(cq_results) - len(cq_filtered)
+        if dropped:
+            logger.info("CentroQuote: rimossi %d risultati Lottomatica (verranno da scraper diretto)", dropped)
+        results.extend(cq_filtered)
+        logger.info("CentroQuote done: %d match-market results", len(cq_filtered))
 
     # Lottomatica scraping (separate browser, headless=False to bypass Akamai detection)
     if bookmaker in (None, "lottomatica"):
