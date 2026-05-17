@@ -59,7 +59,7 @@ const BOOKMAKER_URLS: Record<string, string> = {
   "888sport": "https://www.888sport.it",
   "eurobet": "https://www.eurobet.it",
   "goldbet": "https://www.goldbet.it",
-  "lottomatica": "https://sport.lottomatica.it",
+  "lottomatica": "https://www.lottomatica.it/scommesse/sport/",
   "netwin": "https://www.netwin.it",
   "planetwin365": "https://www.planetwin365.it",
   "sisal": "https://www.sisal.it",
@@ -322,7 +322,7 @@ export function PuntaBancaModal({
               <div className="border-b border-gray-200 px-4 py-3 text-sm">
                 Bookmaker -{" "}
                 <a href={opp.bookmakerUrl || getUrl(opp.bookmaker)} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
-                  {opp.bookmakerUrl ? "centroquote.it ↗" : getDisplayDomain(opp.bookmaker)}
+                  {getDisplayDomain(opp.bookmaker)} ↗
                 </a>{" "}→ {sc1}
               </div>
 

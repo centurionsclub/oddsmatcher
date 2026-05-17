@@ -52,7 +52,7 @@ serve(async (req) => {
     while (true) {
       let query = supabase
         .from("live_odds")
-        .select("bookmaker, sport, league, event_name, event_time, market, outcome, odds, volume, market_id, event_id, centroquote_url")
+        .select("bookmaker, sport, league, event_name, event_time, market, outcome, odds, volume, market_id, event_id, match_url")
         .gt("event_time", cutoff)
         .order("event_time", { ascending: true })
         .range(offset, offset + PAGE_SIZE - 1);
@@ -123,7 +123,7 @@ serve(async (req) => {
           volume: {},
           marketId: row.market_id ?? undefined,
           eventId: row.event_id ?? undefined,
-          centroquoteUrl: row.centroquote_url ?? undefined,
+          centroquoteUrl: row.match_url ?? undefined,
         });
       }
       const entry = grouped.get(key)!;
