@@ -2,13 +2,13 @@ name: Scrape odds
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # ogni 10 minuti
+    - cron: "*/15 * * * *"   # ogni 15 minuti (ciclo completo dura ~11 min + setup)
   workflow_dispatch:          # lancio manuale dal sito GitHub
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 9        # killato se supera 9 min, evita overlap
+    timeout-minutes: 14       # killato a 14 min per evitare overlap
 
     steps:
       - uses: actions/checkout@v4
@@ -18,9 +18,18 @@ jobs:
           python-version: "3.11"
           cache: pip
 
+      - name: Install Xvfb
+        run: sudo apt-get install -y xvfb
+
       - name: Install dependencies
         working-directory: backend
         run: pip install -e .
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('backend/pyproject.toml') }}
 
       - name: Install Playwright browsers
         run: playwright install chromium --with-deps
@@ -30,8 +39,4 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          SCRAPE_INTERVAL_MINUTES: "10"
-        run: |
-          # Xvfb = display virtuale per Playwright headless=False (bypass Akamai)
-          sudo apt-get install -y xvfb -q
-          xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape
+        run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape
