@@ -2,8 +2,8 @@ name: Scrape odds
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # ogni 15 minuti (ciclo completo dura ~11 min + setup)
-  workflow_dispatch:          # lancio manuale dal sito GitHub
+    - cron: "*/15 * * * *"   # ogni 15 minuti
+  workflow_dispatch:
 
 jobs:
   scrape:
@@ -38,9 +38,19 @@ jobs:
       - name: Install Playwright browsers
         run: playwright install chromium --with-deps
 
-      - name: Run scrape cycle
+      # Lottomatica prima — httpx puro, niente browser, finisce in <30s
+      # Se CentroQuote va in timeout dopo, Lottomatica è già salvata
+      - name: Scrape Lottomatica
         working-directory: backend
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape
+        run: python -m oddsmatcher_backend.main scrape --bookmaker lottomatica
+
+      # CentroQuote dopo — browser headful via Xvfb, può essere lento
+      - name: Scrape CentroQuote
+        working-directory: backend
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape --bookmaker centroquote
