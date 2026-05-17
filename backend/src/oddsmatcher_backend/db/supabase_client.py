@@ -139,6 +139,7 @@ class SupabaseWriter:
                         "outcome": outcome_norm,
                         "odds": float(odds_val),
                         "expires_at": expires_at,
+                        "match_url": match.match_url,
                     }
                     if match.event_time:
                         row["event_time"] = match.event_time
