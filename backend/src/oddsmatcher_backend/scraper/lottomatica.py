@@ -58,7 +58,7 @@ UO_SPREADS_WANTED: set[str] = {"1.5", "2.5", "3.5"}
 
 BOOKMAKER = "lottomatica"
 
-# JS snippet reused for all API fetches
+# JS snippet reused for all API fetches — returns {data, status, error} for diagnostics
 _FETCH_JS = """
 async (url) => {
     try {
@@ -71,10 +71,15 @@ async (url) => {
                 'referer': 'https://www.lottomatica.it/scommesse/sport/'
             }
         });
-        if (!r.ok) return null;
-        return await r.json();
+        if (!r.ok) {
+            let body = '';
+            try { body = await r.text(); } catch(_) {}
+            return { __status: r.status, __error: body.slice(0, 200) };
+        }
+        const data = await r.json();
+        return { __status: r.status, __data: data };
     } catch(e) {
-        return null;
+        return { __status: 0, __error: e.toString() };
     }
 }
 """
@@ -132,18 +137,38 @@ class LottomaticaScraper:
     async def _warm_up_session(self, page: Page) -> None:
         """Navigate to Lottomatica so Akamai sets valid session cookies."""
         logger.info("[Lottomatica] Warming up session...")
-        await page.goto(
-            f"{BASE_URL}/scommesse/sport/",
-            wait_until="domcontentloaded",
-            timeout=30_000,
-        )
+        try:
+            resp = await page.goto(
+                f"{BASE_URL}/scommesse/sport/",
+                wait_until="domcontentloaded",
+                timeout=30_000,
+            )
+            logger.info("[Lottomatica] Page load status: %s", resp.status if resp else "no response")
+        except Exception as e:
+            logger.error("[Lottomatica] Warm-up page load failed: %s", e)
+
         # Give Akamai JS fingerprinting time to run and set bm_sv / ak_bmsc
-        await page.wait_for_timeout(4_000)
-        logger.info("[Lottomatica] Session ready")
+        await page.wait_for_timeout(6_000)
+
+        # Log which Akamai cookies were set
+        cookies = await page.context.cookies()
+        akamai_cookies = [c["name"] for c in cookies if "ak" in c["name"].lower() or "bm" in c["name"].lower()]
+        logger.info("[Lottomatica] Akamai cookies present: %s", akamai_cookies or "NONE — may be blocked")
+
+        title = await page.title()
+        logger.info("[Lottomatica] Page title: %r", title)
 
     async def _api_fetch(self, page: Page, url: str) -> dict | None:
         """Make an authenticated API call from within the browser context."""
-        return await page.evaluate(_FETCH_JS, url)
+        raw = await page.evaluate(_FETCH_JS, url)
+        if raw is None:
+            logger.warning("[Lottomatica] API fetch returned None for %s", url)
+            return None
+        status = raw.get("__status", 0)
+        if "__error" in raw or status != 200:
+            logger.warning("[Lottomatica] API %s → HTTP %s | %s", url, status, raw.get("__error", ""))
+            return None
+        return raw.get("__data")
 
     async def _scrape_tournament(
         self,
