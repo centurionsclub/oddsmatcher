@@ -54,22 +54,30 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
         logger.info("CentroQuote done: %d match-market results", len(cq_filtered))
 
     # Lottomatica scraping (separate browser, headless=False to bypass Akamai detection)
+    lotto_live_inserted = 0
     if bookmaker in (None, "lottomatica"):
         try:
             async with BrowserManager(headless_override=False) as lotto_browser:
                 lotto_scraper = LottomaticaScraper(lotto_browser)
                 lotto_results = await (lotto_scraper.scrape_sport(sport) if sport else lotto_scraper.scrape_all())
-            results.extend(lotto_results)
-            logger.info("Lottomatica done: %d match-market results", len(lotto_results))
+
+            # Write Lottomatica directly to live_odds (the table the frontend reads)
+            lotto_writer = SupabaseWriter()
+            lotto_live_inserted = lotto_writer.write_lottomatica_live_odds(lotto_results)
+            logger.info(
+                "Lottomatica done: %d match-market results → %d live_odds rows",
+                len(lotto_results), lotto_live_inserted,
+            )
         except Exception as exc:
             logger.error("Lottomatica scrape cycle failed: %s", exc, exc_info=True)
 
-    logger.info("Scrape phase done: %d match-market results total", len(results))
+    logger.info("Scrape phase done: %d CentroQuote match-market results", len(results))
 
-    # Pipeline: write to Supabase
+    # Pipeline: write CentroQuote results to odds_events + odds_data
     writer = SupabaseWriter()
     pipeline = OddsPipeline(writer)
     stats = pipeline.process(results)
+    stats["lotto_live_rows"] = lotto_live_inserted
 
     # Cleanup stale data
     cleaned = writer.cleanup_stale_odds(hours=48)
