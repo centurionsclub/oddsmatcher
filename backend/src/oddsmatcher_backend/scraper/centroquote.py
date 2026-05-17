@@ -23,7 +23,11 @@ from oddsmatcher_backend.config.markets import MARKETS_BY_SPORT, DEFAULT_MARKET,
 from oddsmatcher_backend.config.settings import settings
 from oddsmatcher_backend.scraper.browser import BrowserManager
 from oddsmatcher_backend.scraper.page_helpers import prepare_page, scroll_to_load_all
-from oddsmatcher_backend.scraper.parsers import extract_match_links, parse_bookmaker_odds
+from oddsmatcher_backend.scraper.parsers import (
+    extract_match_links,
+    parse_bookmaker_odds,
+    parse_bookmaker_odds_from_text,
+)
 from oddsmatcher_backend.scraper.selectors import Selectors
 
 logger = logging.getLogger(__name__)
@@ -215,10 +219,20 @@ class CentroQuoteScraper:
                     if not clicked:
                         logger.debug("Could not switch to market tab: %s", market.tab_label)
                         continue
-                    await tab.wait_for_timeout(1000)
+                    await tab.wait_for_timeout(1500)
 
-                html = await tab.content()
-                bookmaker_odds = parse_bookmaker_odds(html, market.outcomes)
+                # Try innerText-based parser first (new React SPA structure)
+                bookmaker_odds = []
+                try:
+                    page_text = await tab.inner_text("body")
+                    bookmaker_odds = parse_bookmaker_odds_from_text(page_text)
+                except Exception as e:
+                    logger.debug("innerText parse failed, falling back to HTML: %s", e)
+
+                # Fallback to BeautifulSoup HTML parser
+                if not bookmaker_odds:
+                    html = await tab.content()
+                    bookmaker_odds = parse_bookmaker_odds(html, market.outcomes)
 
                 if bookmaker_odds:
                     self.stats.total_odds_rows += len(bookmaker_odds)
@@ -287,12 +301,20 @@ class CentroQuoteScraper:
             return {}
 
     async def _click_market_tab(self, page: Page, tab_label: str) -> bool:
-        """Click a market tab by its label text."""
+        """Click a market tab by its label text (works with both old and new React SPA)."""
         try:
-            # Try the primary tab selector
+            # Primary: exact text match on any link/button in the market tab area
+            # The new React SPA renders tabs as <a> elements with exact text
+            candidates = page.locator(
+                f"a:text-is('{tab_label}'), button:text-is('{tab_label}')"
+            )
+            if await candidates.count() > 0:
+                await candidates.first.click()
+                return True
+
+            # Secondary: old CSS selector (legacy structure)
             tabs = page.locator(Selectors.MARKET_TABS)
             count = await tabs.count()
-
             for i in range(count):
                 tab = tabs.nth(i)
                 text = (await tab.inner_text()).strip()
@@ -300,14 +322,14 @@ class CentroQuoteScraper:
                     await tab.click()
                     return True
 
-            # Fallback: check "More" dropdown
+            # Fallback: dropdown "More"
             more_btn = page.locator(Selectors.MORE_BUTTON)
             if await more_btn.count() > 0:
                 await more_btn.first.click()
                 await page.wait_for_timeout(500)
-
-                # Look for the market in the dropdown
-                dropdown_item = page.locator(f"li:has-text('{tab_label}'), a:has-text('{tab_label}')")
+                dropdown_item = page.locator(
+                    f"li:has-text('{tab_label}'), a:has-text('{tab_label}')"
+                )
                 if await dropdown_item.count() > 0:
                     await dropdown_item.first.click()
                     return True

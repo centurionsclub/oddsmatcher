@@ -31,7 +31,7 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
 
     # CentroQuote scraping
     if bookmaker in (None, "centroquote"):
-        async with BrowserManager() as browser:
+        async with BrowserManager(headless_override=False) as browser:
             scraper = CentroQuoteScraper(browser)
             cq_results = await (scraper.scrape_sport(sport) if sport else scraper.scrape_all())
 

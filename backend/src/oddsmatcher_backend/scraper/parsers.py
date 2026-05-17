@@ -70,6 +70,116 @@ def extract_bookmaker_name(block: Tag) -> str | None:
     return None
 
 
+def parse_bookmaker_odds_from_text(page_text: str) -> list[dict[str, Any]]:
+    """Parse bookmaker odds from page innerText (new CentroQuote React SPA).
+
+    The React page renders this structure in innerText:
+        Bookmaker
+        1               ← outcome column label
+        X
+        2
+        Payout
+        888sport        ← bookmaker name
+        RICHIEDI BONUS
+        4.80            ← odds[0]
+        3.50            ← odds[1]
+        1.67            ← odds[2]
+        91.5%           ← payout (skipped)
+        bet365.it
+        …
+
+    Works for any market (1X2, Over/Under, Double Chance, BTTS) because the
+    column labels come from the page itself rather than a hardcoded config.
+    """
+    lines = [l.strip() for l in page_text.split("\n") if l.strip()]
+
+    # Locate the "Bookmaker" table header
+    try:
+        bm_idx = lines.index("Bookmaker")
+    except ValueError:
+        logger.warning("No bookmaker rows found in HTML")
+        return []
+
+    # Outcome labels sit between "Bookmaker" and "Payout"
+    try:
+        payout_idx = lines.index("Payout", bm_idx)
+    except ValueError:
+        logger.warning("No 'Payout' header found after 'Bookmaker'")
+        return []
+
+    col_labels = lines[bm_idx + 1 : payout_idx]
+    if not col_labels:
+        logger.warning("No outcome labels found in odds table")
+        return []
+
+    n = len(col_labels)
+
+    # Lines to skip when scanning for bookmaker names
+    _SKIP = {
+        "Bookmaker", "Payout",
+        "RICHIEDI BONUS", "Claim Bonus", "Get Bonus",
+        "1X2", "Over/Under", "Asian Handicap", "Both Teams to Score",
+        "Double Chance", "European Handicap", "Finale",
+        "1° Tempo", "2° Tempo", "Tutti i bonus", "Di più",
+        "Matches", "Dropping Odds", "Sure Bets",
+    }
+
+    results: list[dict[str, Any]] = []
+    i = payout_idx + 1
+
+    while i < len(lines):
+        line = lines[i]
+
+        # Skip known non-bookmaker tokens, percentages, or pure numbers
+        if (not line
+                or line in _SKIP
+                or line.endswith("%")
+                or _is_number(line)):
+            i += 1
+            continue
+
+        bm_name = line
+        i += 1
+
+        # Skip optional bonus call-to-action text
+        if i < len(lines) and lines[i].upper() in (
+            "RICHIEDI BONUS", "CLAIM BONUS", "GET BONUS"
+        ):
+            i += 1
+
+        # Read exactly n numeric odds values
+        odds_vals: list[float] = []
+        while i < len(lines) and len(odds_vals) < n:
+            val = parse_odds_value(lines[i])
+            if val is not None:
+                odds_vals.append(val)
+                i += 1
+            else:
+                break
+
+        # Skip trailing payout percentage
+        if i < len(lines) and lines[i].endswith("%"):
+            i += 1
+
+        if len(odds_vals) == n:
+            results.append({
+                "bookmaker": bm_name,
+                "odds": dict(zip(col_labels, odds_vals)),
+            })
+
+    logger.info("Parsed odds for %d bookmakers", len(results))
+    return results
+
+
+def _is_number(s: str) -> bool:
+    """Return True if *s* looks like a standalone number."""
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
+
 def parse_bookmaker_odds(html: str, outcomes: list[str]) -> list[dict[str, Any]]:
     """Parse all bookmaker rows from a match detail page HTML.
 
