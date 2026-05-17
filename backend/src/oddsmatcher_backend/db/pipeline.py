@@ -32,14 +32,16 @@ class OddsPipeline:
 
                 # Upsert event if not already done
                 if event_key not in events_seen:
-                    event_id = self.writer.upsert_event({
+                    row = {
                         "sport": match.sport,
                         "league": match.league,
                         "home_team": match.home_team,
                         "away_team": match.away_team,
                         "event_name": match.event_name,
-                        "event_time": match.event_time or datetime.now(timezone.utc).isoformat(),
-                    })
+                    }
+                    if match.event_time:
+                        row["event_time"] = match.event_time
+                    event_id = self.writer.upsert_event(row)
 
                     if event_id is None:
                         stats["errors"] += 1

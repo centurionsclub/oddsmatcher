@@ -31,6 +31,24 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://www.centroquote.it"
 
 
+def _teams_from_url(url: str) -> tuple[str, str]:
+    """Estrae i nomi delle squadre dall'URL CentroQuote.
+
+    URL example: https://www.centroquote.it/calcio/serie-a/elche-vs-getafe/
+    Returns: ("Elche", "Getafe")
+    """
+    import re
+    # Prendi l'ultimo segmento non vuoto del path
+    segment = [s for s in url.rstrip("/").split("/") if s][-1]
+    # Cerca il pattern "home-vs-away"
+    m = re.match(r"^(.+?)-vs-(.+)$", segment)
+    if m:
+        def _fmt(slug: str) -> str:
+            return " ".join(w.capitalize() for w in slug.replace("-", " ").split())
+        return _fmt(m.group(1)), _fmt(m.group(2))
+    return "", ""
+
+
 @dataclass
 class MatchOdds:
     """Structured result for a single match."""
@@ -178,12 +196,15 @@ class CentroQuoteScraper:
             await tab.goto(full_url, timeout=self.cfg.page_load_timeout_ms, wait_until="domcontentloaded")
             await tab.wait_for_timeout(1500)
 
-            # Extract match info (teams, time) from the page
-            match_info = await self._extract_match_info(tab)
-            home = match_info.get("home", "")
-            away = match_info.get("away", "")
-            event_time = match_info.get("time")
-            event_name = f"{home} v {away}" if home and away else match_url.split("/")[-2].replace("-", " ")
+            # Extract team names from URL (reliable: /sport/league/home-vs-away/)
+            home, away = _teams_from_url(full_url)
+            # Fallback: try page if URL parsing failed
+            if not home:
+                match_info = await self._extract_match_info(tab)
+                home = match_info.get("home", "")
+                away = match_info.get("away", "")
+            event_time = None  # CentroQuote non espone orario preciso via scraping
+            event_name = f"{home} - {away}" if home and away else match_url.split("/")[-2].replace("-", " ")
 
             results: list[MatchOdds] = []
 

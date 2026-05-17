@@ -32,7 +32,7 @@ class SupabaseWriter:
         try:
             result = (
                 self.client.table("odds_events")
-                .upsert(event, on_conflict="home_team,away_team,event_time")
+                .upsert(event, on_conflict="home_team,away_team")
                 .execute()
             )
             if result.data:
