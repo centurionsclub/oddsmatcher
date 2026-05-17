@@ -38,8 +38,15 @@ jobs:
       - name: Install Playwright browsers
         run: playwright install chromium --with-deps
 
-      # Lottomatica prima — httpx puro, niente browser, finisce in <30s
-      # Se CentroQuote va in timeout dopo, Lottomatica è già salvata
+      # Sisal — browser headful + intercettazione JSON, ~2 min
+      - name: Scrape Sisal
+        working-directory: backend
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape --bookmaker sisal
+
+      # Lottomatica — browser headful + page.request.get()
       - name: Scrape Lottomatica
         working-directory: backend
         env:

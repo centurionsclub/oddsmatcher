@@ -107,6 +107,64 @@ class SupabaseWriter:
             logger.error("Failed to upsert %d odds rows: %s", len(odds_rows), e)
             return 0
 
+    def write_direct_live_odds(self, bookmaker_name: str, results: "list[MatchOdds]") -> int:
+        """Generic writer for directly-scraped bookmakers (Sisal, Snai, etc.).
+
+        Deletes existing rows for affected events and inserts fresh ones.
+        """
+        if not results:
+            return 0
+
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
+        rows: list[dict[str, Any]] = []
+
+        for match in results:
+            for bm in match.bookmaker_odds:
+                for outcome_raw, odds_val in bm["odds"].items():
+                    market_norm, outcome_norm = _normalize_market_outcome(match.market, outcome_raw)
+                    row: dict[str, Any] = {
+                        "bookmaker": bookmaker_name,
+                        "sport": match.sport,
+                        "league": match.league,
+                        "event_name": match.event_name,
+                        "market": market_norm,
+                        "outcome": outcome_norm,
+                        "odds": float(odds_val),
+                        "expires_at": expires_at,
+                        "match_url": match.match_url,
+                    }
+                    if match.event_time:
+                        row["event_time"] = match.event_time
+                    rows.append(row)
+
+        if not rows:
+            return 0
+
+        event_names = list({r["event_name"] for r in rows})
+
+        try:
+            (
+                self.client.table("live_odds")
+                .delete()
+                .eq("bookmaker", bookmaker_name)
+                .in_("event_name", event_names)
+                .execute()
+            )
+        except Exception as e:
+            logger.error("Failed to delete stale %s live_odds: %s", bookmaker_name, e)
+
+        BATCH = 500
+        inserted = 0
+        for i in range(0, len(rows), BATCH):
+            try:
+                result = self.client.table("live_odds").insert(rows[i : i + BATCH]).execute()
+                inserted += len(result.data) if result.data else 0
+            except Exception as e:
+                logger.error("Failed to insert %s live_odds batch %d: %s", bookmaker_name, i // BATCH, e)
+
+        logger.info("%s live_odds: %d rows for %d events", bookmaker_name, inserted, len(event_names))
+        return inserted
+
     def write_lottomatica_live_odds(self, results: "list[MatchOdds]") -> int:
         """Replace Lottomatica/GoldBet/PlanetWin365 rows in live_odds with freshly scraped data.
 

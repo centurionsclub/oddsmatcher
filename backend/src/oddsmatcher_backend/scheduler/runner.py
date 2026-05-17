@@ -10,6 +10,7 @@ from oddsmatcher_backend.db.supabase_client import SupabaseWriter
 from oddsmatcher_backend.scraper.browser import BrowserManager
 from oddsmatcher_backend.scraper.centroquote import CentroQuoteScraper
 from oddsmatcher_backend.scraper.lottomatica import LottomaticaScraper
+from oddsmatcher_backend.scraper.sisal import SisalScraper
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,19 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
         results.extend(cq_filtered)
         logger.info("CentroQuote done: %d match-market results", len(cq_filtered))
 
-    # Lottomatica scraping — direct HTTP (no browser needed)
+    # Sisal scraping — Playwright browser + network interception
+    sisal_live_inserted = 0
+    if bookmaker in (None, "sisal"):
+        try:
+            sisal_scraper = SisalScraper()
+            sisal_results = await (sisal_scraper.scrape_sport(sport) if sport else sisal_scraper.scrape_all())
+            sisal_writer = SupabaseWriter()
+            sisal_live_inserted = sisal_writer.write_direct_live_odds("Sisal", sisal_results)
+            logger.info("Sisal done: %d match-market results → %d live_odds rows", len(sisal_results), sisal_live_inserted)
+        except Exception as exc:
+            logger.error("Sisal scrape cycle failed: %s", exc, exc_info=True)
+
+    # Lottomatica scraping — Playwright browser + page.request.get()
     lotto_live_inserted = 0
     if bookmaker in (None, "lottomatica"):
         try:
