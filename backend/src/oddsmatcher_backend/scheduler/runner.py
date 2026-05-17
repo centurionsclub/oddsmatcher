@@ -53,13 +53,12 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
         results.extend(cq_filtered)
         logger.info("CentroQuote done: %d match-market results", len(cq_filtered))
 
-    # Lottomatica scraping (separate browser, headless=False to bypass Akamai detection)
+    # Lottomatica scraping — direct HTTP (no browser needed)
     lotto_live_inserted = 0
     if bookmaker in (None, "lottomatica"):
         try:
-            async with BrowserManager(headless_override=False) as lotto_browser:
-                lotto_scraper = LottomaticaScraper(lotto_browser)
-                lotto_results = await (lotto_scraper.scrape_sport(sport) if sport else lotto_scraper.scrape_all())
+            lotto_scraper = LottomaticaScraper()
+            lotto_results = await (lotto_scraper.scrape_sport(sport) if sport else lotto_scraper.scrape_all())
 
             # Write Lottomatica directly to live_odds (the table the frontend reads)
             lotto_writer = SupabaseWriter()

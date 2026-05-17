@@ -1,9 +1,8 @@
 """Lottomatica pregame odds scraper.
 
-Strategy: navigate to lottomatica.it to get valid Akamai session cookies
-(requires headless=False — Akamai blocks headless browsers), then use
-page.evaluate(fetch(...)) so the browser context (with its cookies) makes
-the API calls — no manual cookie management needed.
+Strategy: direct async HTTP calls to Lottomatica's internal JSON API using
+httpx (no browser needed). The pregame API endpoints don't require Akamai
+session cookies — only the main SPA does.
 
 Flow per tournament:
   1. getOverviewEventsAams → list of events with IDs (tai, ti, pi, ei)
@@ -13,9 +12,8 @@ Flow per tournament:
 import asyncio
 import logging
 
-from playwright.async_api import Page
+import httpx
 
-from oddsmatcher_backend.scraper.browser import BrowserManager
 from oddsmatcher_backend.scraper.centroquote import MatchOdds
 
 logger = logging.getLogger(__name__)
@@ -25,7 +23,6 @@ API_BASE = f"{BASE_URL}/api/sport/pregame"
 
 # fmt: off
 # (id_sport, id_tournament, id_aams_tournament, league_name, sport_key)
-# id_aams comes from the "tai" field in getProgram/ response
 TOURNAMENTS: list[tuple[int, int, int, str, str]] = [
     # Calcio
     (1,  93,      21,   "Serie A",           "calcio"),
@@ -37,154 +34,122 @@ TOURNAMENTS: list[tuple[int, int, int, str, str]] = [
     (1,  95,      79,   "La Liga",           "calcio"),
     (1,  94,      20,   "Bundesliga",        "calcio"),
     (1,  96,      23,   "Ligue 1",           "calcio"),
-    # Tennis / Basket — populated dynamically from getProgram (future)
-    # (4, None, None, None, "tennis"),
-    # (5, None, None, None, "basket"),
 ]
 # fmt: on
 
-# Markets from getDetailsEventAams → canonical name
-# " U/O" markets are handled specially: spread_label (1.5/2.5/3.5) →
-# "Over/Under 1.5" / "Over/Under 2.5" / "Over/Under 3.5"
 SIMPLE_MARKET_MAP: dict[str, str] = {
     "1X2": "1X2",
     "DC": "Doppia Chance",
     "GG/NG": "Goal No Goal",
-    "Esito Finale": "1X2",   # alias used in some sports
+    "Esito Finale": "1X2",
 }
 
-# Spread labels we want for U/O markets
 UO_SPREADS_WANTED: set[str] = {"1.5", "2.5", "3.5"}
 
 BOOKMAKER = "lottomatica"
 
-# JS snippet reused for all API fetches — returns {data, status, error} for diagnostics
-_FETCH_JS = """
-async (url) => {
-    try {
-        const r = await fetch(url, {
-            headers: {
-                'accept': 'application/json, text/plain, */*',
-                'x-brand': '2',
-                'x-idcanale': '13',
-                'x-verticale': '1',
-                'referer': 'https://www.lottomatica.it/scommesse/sport/'
-            }
-        });
-        if (!r.ok) {
-            let body = '';
-            try { body = await r.text(); } catch(_) {}
-            return { __status: r.status, __error: body.slice(0, 200) };
-        }
-        const data = await r.json();
-        return { __status: r.status, __data: data };
-    } catch(e) {
-        return { __status: 0, __error: e.toString() };
-    }
+_HEADERS = {
+    "accept": "application/json, text/plain, */*",
+    "accept-language": "it-IT,it;q=0.9,en;q=0.8",
+    "x-brand": "2",
+    "x-idcanale": "13",
+    "x-verticale": "1",
+    "referer": "https://www.lottomatica.it/scommesse/sport/",
+    "origin": "https://www.lottomatica.it",
+    "user-agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
 }
-"""
 
 
 class LottomaticaScraper:
     """Scrapes pregame odds from Lottomatica via its internal JSON API."""
 
-    def __init__(self, browser: BrowserManager):
-        self.browser = browser
+    def __init__(self, browser=None):  # browser kept for API compat but not used
+        self._client: httpx.AsyncClient | None = None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                headers=_HEADERS,
+                timeout=20.0,
+                follow_redirects=True,
+            )
+        return self._client
+
+    async def _close(self) -> None:
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
 
     async def scrape_all(self) -> list[MatchOdds]:
-        """Navigate to Lottomatica, acquire Akamai cookies, then scrape all tournaments."""
-        page = self.browser.page
-        await self._warm_up_session(page)
+        """Scrape all configured tournaments."""
+        try:
+            return await self._scrape_tournaments(None)
+        finally:
+            await self._close()
 
+    async def scrape_sport(self, sport: str) -> list[MatchOdds]:
+        """Scrape only tournaments for the given sport key."""
+        try:
+            return await self._scrape_tournaments(sport)
+        finally:
+            await self._close()
+
+    # ── internals ────────────────────────────────────────────────────
+
+    async def _scrape_tournaments(self, sport: str | None) -> list[MatchOdds]:
         all_results: list[MatchOdds] = []
         for id_sport, id_tournament, id_aams, league_name, sport_key in TOURNAMENTS:
+            if sport is not None and sport_key != sport:
+                continue
             try:
                 results = await self._scrape_tournament(
-                    page, id_sport, id_tournament, id_aams, league_name, sport_key
+                    id_sport, id_tournament, id_aams, league_name, sport_key
                 )
                 all_results.extend(results)
                 n_events = self._count_unique_events(results)
-                logger.info("[Lottomatica] %s — %d events, %d market rows", league_name, n_events, len(results))
+                logger.info(
+                    "[Lottomatica] %s — %d events, %d market rows",
+                    league_name, n_events, len(results),
+                )
             except Exception as exc:
                 logger.error("[Lottomatica] %s failed: %s", league_name, exc, exc_info=True)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.4)
 
         logger.info("[Lottomatica] Total match+market rows: %d", len(all_results))
         return all_results
 
-    async def scrape_sport(self, sport: str) -> list[MatchOdds]:
-        """Scrape only tournaments for the given sport key."""
-        page = self.browser.page
-        await self._warm_up_session(page)
-
-        all_results: list[MatchOdds] = []
-        for id_sport, id_tournament, id_aams, league_name, sport_key in TOURNAMENTS:
-            if sport_key != sport:
-                continue
-            try:
-                results = await self._scrape_tournament(
-                    page, id_sport, id_tournament, id_aams, league_name, sport_key
-                )
-                all_results.extend(results)
-            except Exception as exc:
-                logger.error("[Lottomatica] %s failed: %s", league_name, exc, exc_info=True)
-            await asyncio.sleep(0.5)
-
-        return all_results
-
-    # ── internals ────────────────────────────────────────────────────
-
-    async def _warm_up_session(self, page: Page) -> None:
-        """Navigate to Lottomatica so Akamai sets valid session cookies."""
-        logger.info("[Lottomatica] Warming up session...")
+    async def _api_get(self, url: str) -> dict | None:
+        client = await self._get_client()
         try:
-            resp = await page.goto(
-                f"{BASE_URL}/scommesse/sport/",
-                wait_until="domcontentloaded",
-                timeout=30_000,
-            )
-            logger.info("[Lottomatica] Page load status: %s", resp.status if resp else "no response")
+            resp = await client.get(url)
+            logger.debug("[Lottomatica] GET %s → %s", url, resp.status_code)
+            if resp.status_code != 200:
+                logger.warning(
+                    "[Lottomatica] HTTP %s for %s — body: %s",
+                    resp.status_code, url, resp.text[:300],
+                )
+                return None
+            return resp.json()
         except Exception as e:
-            logger.error("[Lottomatica] Warm-up page load failed: %s", e)
-
-        # Give Akamai JS fingerprinting time to run and set bm_sv / ak_bmsc
-        await page.wait_for_timeout(6_000)
-
-        # Log which Akamai cookies were set
-        cookies = await page.context.cookies()
-        akamai_cookies = [c["name"] for c in cookies if "ak" in c["name"].lower() or "bm" in c["name"].lower()]
-        logger.info("[Lottomatica] Akamai cookies present: %s", akamai_cookies or "NONE — may be blocked")
-
-        title = await page.title()
-        logger.info("[Lottomatica] Page title: %r", title)
-
-    async def _api_fetch(self, page: Page, url: str) -> dict | None:
-        """Make an authenticated API call from within the browser context."""
-        raw = await page.evaluate(_FETCH_JS, url)
-        if raw is None:
-            logger.warning("[Lottomatica] API fetch returned None for %s", url)
+            logger.error("[Lottomatica] Request failed for %s: %s", url, e)
             return None
-        status = raw.get("__status", 0)
-        if "__error" in raw or status != 200:
-            logger.warning("[Lottomatica] API %s → HTTP %s | %s", url, status, raw.get("__error", ""))
-            return None
-        return raw.get("__data")
 
     async def _scrape_tournament(
         self,
-        page: Page,
         id_sport: int,
         id_tournament: int,
         id_aams: int,
         league_name: str,
         sport_key: str,
     ) -> list[MatchOdds]:
-        # Step 1: get event list for the tournament
         overview_url = (
             f"{API_BASE}/getOverviewEventsAams"
             f"/0/{id_sport}/{id_aams}/{id_tournament}/0/0/STANDARD"
         )
-        overview = await self._api_fetch(page, overview_url)
+        overview = await self._api_get(overview_url)
         if not overview or not overview.get("leo"):
             logger.warning("[Lottomatica] No events for %s", league_name)
             return []
@@ -199,21 +164,19 @@ class LottomaticaScraper:
             home = parts[0].strip() if len(parts) == 2 else event_name
             away = parts[1].strip() if len(parts) == 2 else ""
 
-            # IDs needed for the details endpoint
-            tai = event.get("tai", id_aams)   # AAMS tournament ID
+            tai = event.get("tai", id_aams)
             ti = event.get("ti", id_tournament)
-            pi = event.get("pi", "")          # AAMS event ID
-            ei = event.get("ei", "")          # event ID
+            pi = event.get("pi", "")
+            ei = event.get("ei", "")
 
             if not pi or not ei:
                 continue
 
-            # Step 2: get full market details for this event
             details_url = (
                 f"{API_BASE}/getDetailsEventAams"
                 f"/{tai}/{ti}/{pi}/{ei}/0/STANDARD"
             )
-            details = await self._api_fetch(page, details_url)
+            details = await self._api_get(details_url)
             if not details or not details.get("leo"):
                 continue
 
@@ -223,7 +186,7 @@ class LottomaticaScraper:
                 )
                 results.extend(market_rows)
 
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.2)
 
         return results
 
@@ -237,13 +200,12 @@ class LottomaticaScraper:
         league_name: str,
         sport_key: str,
     ) -> list[MatchOdds]:
-        """Parse all wanted markets from an event detail dict."""
         results: list[MatchOdds] = []
 
         for mkt in event.get("mmkW", {}).values():
             market_raw = mkt.get("mn", "").strip()
 
-            # ── simple markets (flat odds, no spread) ────────────────
+            # ── simple markets ────────────────────────────────────────
             canonical = SIMPLE_MARKET_MAP.get(market_raw)
             if canonical:
                 odds_dict: dict[str, float] = {}
@@ -251,16 +213,17 @@ class LottomaticaScraper:
                     for sel in spread_data.get("asl", []):
                         ov = sel.get("ov")
                         sn = sel.get("sn", "")
-                        cls = sel.get("cls", 1)   # cls=0 → selezione bloccata/sospesa
+                        cls = sel.get("cls", 1)  # cls=0 → suspended
                         if ov and ov > 1.0 and cls == 1:
                             odds_dict[sn] = float(ov)
                 if odds_dict:
                     results.append(self._make_match_odds(
-                        sport_key, league_name, home, away, event_name, event_time, canonical, odds_dict
+                        sport_key, league_name, home, away,
+                        event_name, event_time, canonical, odds_dict,
                     ))
                 continue
 
-            # ── U/O market: one MatchOdds per wanted spread level ────
+            # ── Over/Under: one MatchOdds per spread level ────────────
             if market_raw == "U/O":
                 for spread_data in mkt.get("spd", {}).values():
                     sl = spread_data.get("sl", "")
@@ -270,13 +233,13 @@ class LottomaticaScraper:
                     for sel in spread_data.get("asl", []):
                         ov = sel.get("ov")
                         sn = sel.get("sn", "")
-                        cls = sel.get("cls", 1)   # cls=0 → selezione bloccata/sospesa
+                        cls = sel.get("cls", 1)
                         if ov and ov > 1.0 and cls == 1:
                             odds_dict[sn] = float(ov)
                     if odds_dict:
                         results.append(self._make_match_odds(
-                            sport_key, league_name, home, away, event_name, event_time,
-                            f"Over/Under {sl}", odds_dict
+                            sport_key, league_name, home, away,
+                            event_name, event_time, f"Over/Under {sl}", odds_dict,
                         ))
 
         return results
