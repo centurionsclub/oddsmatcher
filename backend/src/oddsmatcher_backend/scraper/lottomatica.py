@@ -226,7 +226,8 @@ class LottomaticaScraper:
                     for sel in spread_data.get("asl", []):
                         ov = sel.get("ov")
                         sn = sel.get("sn", "")
-                        if ov and ov > 1.0:
+                        cls = sel.get("cls", 1)   # cls=0 → selezione bloccata/sospesa
+                        if ov and ov > 1.0 and cls == 1:
                             odds_dict[sn] = float(ov)
                 if odds_dict:
                     results.append(self._make_match_odds(
@@ -244,7 +245,8 @@ class LottomaticaScraper:
                     for sel in spread_data.get("asl", []):
                         ov = sel.get("ov")
                         sn = sel.get("sn", "")
-                        if ov and ov > 1.0:
+                        cls = sel.get("cls", 1)   # cls=0 → selezione bloccata/sospesa
+                        if ov and ov > 1.0 and cls == 1:
                             odds_dict[sn] = float(ov)
                     if odds_dict:
                         results.append(self._make_match_odds(
