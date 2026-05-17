@@ -27,15 +27,17 @@ BOOKMAKER = "Sisal"
 
 # fmt: off
 # (league_name, sport_key, sisal_url_slug, country_slug)
+# URL slugs verified against sisal.it/scommesse-matchpoint/quote/
 LEAGUES: list[tuple[str, str, str, str]] = [
-    ("Serie A",          "calcio", "calcio/serie-a",          "italia"),
-    ("Serie B",          "calcio", "calcio/serie-b",          "italia"),
-    ("Champions League", "calcio", "calcio/champions-league", "europa"),
-    ("Europa League",    "calcio", "calcio/europa-league",    "europa"),
-    ("Premier League",   "calcio", "calcio/premier-league",   "inghilterra"),
-    ("La Liga",          "calcio", "calcio/la-liga",          "spagna"),
-    ("Bundesliga",       "calcio", "calcio/bundesliga",       "germania"),
-    ("Ligue 1",          "calcio", "calcio/ligue-1",          "francia"),
+    ("Serie A",          "calcio", "calcio/serie-a",                        "italia"),
+    ("Serie B",          "calcio", "calcio/serie-b",                        "italia"),
+    ("Champions League", "calcio", "calcio/calcio-champions-league",        "europa"),
+    ("Europa League",    "calcio", "calcio/calcio-europa-league",           "europa"),
+    ("Conference League","calcio", "calcio/calcio-conference-league",       "europa"),
+    ("Premier League",   "calcio", "calcio/calcio-premier-league",         "inghilterra"),
+    ("La Liga",          "calcio", "calcio/calcio-la-liga",                 "spagna"),
+    ("Bundesliga",       "calcio", "calcio/calcio-bundesliga",              "germania"),
+    ("Ligue 1",          "calcio", "calcio/calcio-ligue-1",                 "francia"),
 ]
 # fmt: on
 
@@ -159,16 +161,29 @@ class SisalScraper:
         url = f"{BASE_URL}/scommesse-matchpoint/quote/{sisal_slug}"
         logger.info("[Sisal] Loading %s", url)
         try:
-            await self._page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            await self._page.wait_for_timeout(4000)  # let lazy data load
+            await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+            await self._page.wait_for_timeout(5000)  # let lazy API calls fire
         except Exception as e:
-            logger.error("[Sisal] Failed to load %s: %s", url, e)
+            logger.warning("[Sisal] Page load issue for %s (may still have data): %s", url, e)
             self._page.remove_listener("response", on_response)
             return []
 
         self._page.remove_listener("response", on_response)
 
         logger.info("[Sisal] %s: captured %d JSON responses", league_name, len(captured))
+
+        # Log all captured URLs + top-level keys so we can tune the parser
+        for item in captured:
+            body = item["body"]
+            if isinstance(body, dict):
+                keys = list(body.keys())[:10]
+            elif isinstance(body, list):
+                keys = f"list[{len(body)}]"
+                if body and isinstance(body[0], dict):
+                    keys = f"list[{len(body)}] → {list(body[0].keys())[:8]}"
+            else:
+                keys = type(body).__name__
+            logger.info("[Sisal] CAPTURE url=%s keys=%s", item["url"], keys)
 
         # Try to parse each captured response
         for item in captured:
