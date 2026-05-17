@@ -108,30 +108,33 @@ class SupabaseWriter:
             return 0
 
     def write_lottomatica_live_odds(self, results: "list[MatchOdds]") -> int:
-        """Replace Lottomatica rows in live_odds with freshly scraped data.
+        """Replace Lottomatica/GoldBet/PlanetWin365 rows in live_odds with freshly scraped data.
 
-        For each batch of results:
-          1. Delete existing 'Lottomatica' rows in live_odds for the affected event names.
-          2. Insert the new normalized rows.
-
-        Args:
-            results: MatchOdds list produced by LottomaticaScraper.
+        Lottomatica, GoldBet and PlanetWin365 share the same backend and always
+        have identical odds, so we write one set of rows and copy it for all three.
 
         Returns:
-            Number of rows inserted.
+            Total number of rows inserted across all three bookmakers.
         """
         if not results:
             return 0
 
-        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
-        rows: list[dict[str, Any]] = []
+        # Bookmakers to write: (name shown in DB, fallback URL if match_url unavailable)
+        TARGETS = [
+            ("Lottomatica",  "https://www.lottomatica.it/scommesse/sport/"),
+            ("GoldBet",      "https://www.goldbet.it/scommesse/sport/"),
+            ("Planetwin365", "https://www.planetwin365.it/it/"),
+        ]
 
+        expires_at = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
+
+        # Build base rows (bookmaker-agnostic)
+        base_rows: list[dict[str, Any]] = []
         for match in results:
             for bm in match.bookmaker_odds:
                 for outcome_raw, odds_val in bm["odds"].items():
                     market_norm, outcome_norm = _normalize_market_outcome(match.market, outcome_raw)
                     row: dict[str, Any] = {
-                        "bookmaker": "Lottomatica",
                         "sport": match.sport,
                         "league": match.league,
                         "event_name": match.event_name,
@@ -143,41 +146,48 @@ class SupabaseWriter:
                     }
                     if match.event_time:
                         row["event_time"] = match.event_time
-                    rows.append(row)
+                    base_rows.append(row)
 
-        if not rows:
+        if not base_rows:
             logger.warning("write_lottomatica_live_odds: no rows to write after normalization")
             return 0
 
-        # Delete stale Lottomatica rows for the events we are about to replace
-        event_names = list({r["event_name"] for r in rows})
-        try:
-            (
-                self.client.table("live_odds")
-                .delete()
-                .eq("bookmaker", "Lottomatica")
-                .in_("event_name", event_names)
-                .execute()
-            )
-            logger.info("Deleted stale Lottomatica rows for %d events", len(event_names))
-        except Exception as e:
-            logger.error("Failed to delete stale Lottomatica live_odds: %s", e)
-
-        # Insert fresh rows in batches (Supabase has a row limit per request)
+        event_names = list({r["event_name"] for r in base_rows})
         BATCH = 500
-        inserted = 0
-        for i in range(0, len(rows), BATCH):
-            batch = rows[i : i + BATCH]
-            try:
-                result = self.client.table("live_odds").insert(batch).execute()
-                inserted += len(result.data) if result.data else 0
-            except Exception as e:
-                logger.error("Failed to insert Lottomatica live_odds batch %d: %s", i // BATCH, e)
+        total_inserted = 0
 
-        logger.info(
-            "Lottomatica live_odds: %d rows inserted for %d events", inserted, len(event_names)
-        )
-        return inserted
+        for bm_name, fallback_url in TARGETS:
+            # Delete stale rows for this bookmaker
+            try:
+                (
+                    self.client.table("live_odds")
+                    .delete()
+                    .eq("bookmaker", bm_name)
+                    .in_("event_name", event_names)
+                    .execute()
+                )
+            except Exception as e:
+                logger.error("Failed to delete stale %s live_odds: %s", bm_name, e)
+
+            # Build rows for this bookmaker
+            bm_rows = [
+                {**r, "bookmaker": bm_name, "match_url": r["match_url"] or fallback_url}
+                for r in base_rows
+            ]
+
+            # Insert in batches
+            for i in range(0, len(bm_rows), BATCH):
+                batch = bm_rows[i : i + BATCH]
+                try:
+                    result = self.client.table("live_odds").insert(batch).execute()
+                    total_inserted += len(result.data) if result.data else 0
+                except Exception as e:
+                    logger.error("Failed to insert %s live_odds batch %d: %s", bm_name, i // BATCH, e)
+
+            logger.info("%s live_odds: %d rows for %d events", bm_name, len(bm_rows), len(event_names))
+
+        logger.info("Total inserted across Lottomatica+GoldBet+PlanetWin365: %d rows", total_inserted)
+        return total_inserted
 
     def cleanup_stale_odds(self, hours: int = 24) -> int:
         """Delete odds for events that have already started (older than N hours).
