@@ -11,6 +11,8 @@ Flow per tournament:
 
 import asyncio
 import logging
+import re
+import unicodedata
 
 import httpx
 
@@ -22,18 +24,19 @@ BASE_URL = "https://www.lottomatica.it"
 API_BASE = f"{BASE_URL}/api/sport/pregame"
 
 # fmt: off
-# (id_sport, id_tournament, id_aams_tournament, league_name, sport_key, league_url_slug)
-TOURNAMENTS: list[tuple[int, int, int, str, str, str]] = [
-    # Calcio
-    (1,  93,      21,   "Serie A",           "calcio", "serie-a"),
-    (1,  97,      34,   "Serie B",           "calcio", "serie-b"),
-    (1,  26534,   18,   "Champions League",  "calcio", "champions-league-uefa"),
-    (1,  247944,  153,  "Europa League",     "calcio", "europa-league-uefa"),
-    (1,  5675488, 2474, "Conference League", "calcio", "conference-league-uefa"),
-    (1,  26604,   86,   "Premier League",    "calcio", "premier-league"),
-    (1,  95,      79,   "La Liga",           "calcio", "la-liga"),
-    (1,  94,      20,   "Bundesliga",        "calcio", "bundesliga"),
-    (1,  96,      23,   "Ligue 1",           "calcio", "ligue-1"),
+# (id_sport, id_tournament, id_aams_tournament, league_name, sport_key, league_slug, country_slug)
+TOURNAMENTS: list[tuple[int, int, int, str, str, str, str]] = [
+    # Calcio — leghe nazionali
+    (1,  93,      21,   "Serie A",           "calcio", "serie-a",              "italia"),
+    (1,  97,      34,   "Serie B",           "calcio", "serie-b",              "italia"),
+    (1,  26604,   86,   "Premier League",    "calcio", "premier-league",       "inghilterra"),
+    (1,  95,      79,   "La Liga",           "calcio", "la-liga",              "spagna"),
+    (1,  94,      20,   "Bundesliga",        "calcio", "bundesliga",           "germania"),
+    (1,  96,      23,   "Ligue 1",           "calcio", "ligue-1",              "francia"),
+    # Calcio — coppe europee
+    (1,  26534,   18,   "Champions League",  "calcio", "champions-league-uefa","europa"),
+    (1,  247944,  153,  "Europa League",     "calcio", "europa-league-uefa",   "europa"),
+    (1,  5675488, 2474, "Conference League", "calcio", "conference-league-uefa","europa"),
 ]
 # fmt: on
 
@@ -62,6 +65,19 @@ _HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     ),
 }
+
+
+def _slugify_team(name: str) -> str:
+    """Convert a team name to a URL slug.
+
+    Example: "Atlético Madrid" → "atletico-madrid"
+    """
+    # Normalize unicode (decompose accented chars) then strip combining chars
+    nfkd = unicodedata.normalize("NFKD", name)
+    ascii_str = nfkd.encode("ascii", "ignore").decode("ascii")
+    # Lowercase, replace non-alphanumeric runs with a single hyphen
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_str.lower()).strip("-")
+    return slug
 
 
 class LottomaticaScraper:
@@ -101,12 +117,12 @@ class LottomaticaScraper:
 
     async def _scrape_tournaments(self, sport: str | None) -> list[MatchOdds]:
         all_results: list[MatchOdds] = []
-        for id_sport, id_tournament, id_aams, league_name, sport_key, league_slug in TOURNAMENTS:
+        for id_sport, id_tournament, id_aams, league_name, sport_key, league_slug, country_slug in TOURNAMENTS:
             if sport is not None and sport_key != sport:
                 continue
             try:
                 results = await self._scrape_tournament(
-                    id_sport, id_tournament, id_aams, league_name, sport_key, league_slug
+                    id_sport, id_tournament, id_aams, league_name, sport_key, league_slug, country_slug
                 )
                 all_results.extend(results)
                 n_events = self._count_unique_events(results)
@@ -145,6 +161,7 @@ class LottomaticaScraper:
         league_name: str,
         sport_key: str,
         league_slug: str,
+        country_slug: str,
     ) -> list[MatchOdds]:
         overview_url = (
             f"{API_BASE}/getOverviewEventsAams"
@@ -181,10 +198,19 @@ class LottomaticaScraper:
             if not details or not details.get("leo"):
                 continue
 
-            league_url = f"{BASE_URL}/scommesse/sport/{sport_key}/{league_slug}/"
+            # Build direct event URL:
+            # e.g. /scommesse/sport/calcio/italia/serie-a/atalanta-bologna?tid=93&eid=15569840
+            home_slug = _slugify_team(home)
+            away_slug = _slugify_team(away)
+            match_url = (
+                f"{BASE_URL}/scommesse/sport/{sport_key}/{country_slug}/{league_slug}"
+                f"/{home_slug}-{away_slug}?tid={id_tournament}&eid={ei}"
+            )
+
             for detail_event in details["leo"]:
                 market_rows = self._parse_markets(
-                    detail_event, event_name, home, away, event_time, league_name, sport_key, league_url
+                    detail_event, event_name, home, away, event_time,
+                    league_name, sport_key, match_url,
                 )
                 results.extend(market_rows)
 
@@ -201,7 +227,7 @@ class LottomaticaScraper:
         event_time: str,
         league_name: str,
         sport_key: str,
-        league_url: str,
+        match_url: str,
     ) -> list[MatchOdds]:
         results: list[MatchOdds] = []
 
@@ -222,7 +248,7 @@ class LottomaticaScraper:
                 if odds_dict:
                     results.append(self._make_match_odds(
                         sport_key, league_name, home, away,
-                        event_name, event_time, canonical, odds_dict, league_url,
+                        event_name, event_time, canonical, odds_dict, match_url,
                     ))
                 continue
 
@@ -242,7 +268,7 @@ class LottomaticaScraper:
                     if odds_dict:
                         results.append(self._make_match_odds(
                             sport_key, league_name, home, away,
-                            event_name, event_time, f"Over/Under {sl}", odds_dict, league_url,
+                            event_name, event_time, f"Over/Under {sl}", odds_dict, match_url,
                         ))
 
         return results
