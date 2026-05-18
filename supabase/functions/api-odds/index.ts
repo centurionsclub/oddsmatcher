@@ -24,10 +24,10 @@ serve(async (req) => {
 
     console.log('Fetching odds for:', { sport, market, league, minRating });
 
-    // Get aggregated odds from cache
+    // Read directly from live_odds (one row per bookmaker+event+market+outcome)
     let query = supabase
-      .from('odds_cache')
-      .select('*')
+      .from('live_odds')
+      .select('bookmaker, sport, league, event_name, event_time, market, outcome, odds, scraped_at, expires_at')
       .eq('sport', sport)
       .eq('market', market)
       .gt('expires_at', new Date().toISOString())
@@ -44,7 +44,7 @@ serve(async (req) => {
       throw oddsError;
     }
 
-    console.log(`Found ${oddsData?.length || 0} odds records`);
+    console.log(`Found ${oddsData?.length || 0} odds rows`);
 
     // Get matched bets with rating filter
     const { data: matchedData, error: matchedError } = await supabase
@@ -59,27 +59,40 @@ serve(async (req) => {
       console.error('Error fetching matched bets:', matchedError);
     }
 
-    // Group odds by event
-    const eventMap = new Map();
-    
-    for (const odd of oddsData || []) {
-      const key = `${odd.event_name}_${odd.market}`;
-      if (!eventMap.has(key)) {
-        eventMap.set(key, {
-          event_name: odd.event_name,
-          event_time: odd.event_time,
-          league: odd.league,
-          sport: odd.sport,
-          market: odd.market,
-          bookmakers: []
+    // Group by event+market, then by bookmaker, collecting outcomes into odds object
+    // live_odds has one row per outcome; we rebuild {outcome: value} per bookmaker
+    const eventMap = new Map<string, {
+      event_name: string;
+      event_time: string | null;
+      league: string;
+      sport: string;
+      market: string;
+      bookmakers: { bookmaker: string; odds: Record<string, number>; scraped_at: string }[];
+    }>();
+
+    for (const row of oddsData || []) {
+      const eventKey = `${row.event_name}_${row.market}`;
+
+      if (!eventMap.has(eventKey)) {
+        eventMap.set(eventKey, {
+          event_name: row.event_name,
+          event_time: row.event_time,
+          league: row.league,
+          sport: row.sport,
+          market: row.market,
+          bookmakers: [],
         });
       }
-      
-      eventMap.get(key).bookmakers.push({
-        bookmaker: odd.bookmaker,
-        odds: odd.odds,
-        scraped_at: odd.scraped_at
-      });
+
+      const event = eventMap.get(eventKey)!;
+
+      // Find or create bookmaker entry
+      let bm = event.bookmakers.find(b => b.bookmaker === row.bookmaker);
+      if (!bm) {
+        bm = { bookmaker: row.bookmaker, odds: {}, scraped_at: row.scraped_at };
+        event.bookmakers.push(bm);
+      }
+      bm.odds[row.outcome] = parseFloat(row.odds);
     }
 
     const result = {
@@ -94,27 +107,27 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify(result),
-      { 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
+      {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
       }
     );
 
   } catch (error) {
     console.error('API error:', error);
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: error instanceof Error ? error.message : 'Internal server error',
         timestamp: new Date().toISOString()
       }),
-      { 
-        status: 500, 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
+      {
+        status: 500,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
       }
     );
   }
