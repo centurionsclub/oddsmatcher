@@ -234,6 +234,33 @@ def _parse_scheda(
     scommessa_map: dict = body.get("scommessaMap", {})
     info_map: dict = body.get("infoAggiuntivaMap", {})
 
+    # ── diagnostica: scommesse e info per il primo avvenimento ──────
+    if avvenimenti and scommessa_map:
+        avv0 = avvenimenti[0]
+        avv_key0 = avv0.get("key", "")
+        prefix0 = avv_key0 + "-"
+        avv_scoms = [(k, v) for k, v in scommessa_map.items() if k.startswith(prefix0)]
+        logger.info(
+            "[Sisal] DEBUG avv0 key=%r desc=%r → %d scommesse in map",
+            avv_key0, avv0.get("descrizione"), len(avv_scoms),
+        )
+        for sk, sv in avv_scoms[:8]:
+            logger.info(
+                "[Sisal] DEBUG  scom key=%r codiceScommessa=%r desc=%r",
+                sk, sv.get("codiceScommessa"), sv.get("descrizione", "").strip(),
+            )
+        # Logga le info del primo mercato trovato
+        if avv_scoms:
+            first_scom_key = avv_scoms[0][0]
+            cod = first_scom_key.split("-")[-1]
+            for i in range(5):
+                ik = f"{avv_key0}-{cod}-{i}"
+                iv = info_map.get(ik)
+                if iv:
+                    non_null = {k: v for k, v in iv.items() if v is not None and k not in ("data", "posizione", "key")}
+                    logger.info("[Sisal] DEBUG  info %s → %s", ik, non_null)
+    # ─────────────────────────────────────────────────────────────────
+
     results: list[MatchOdds] = []
 
     for avv in avvenimenti:
