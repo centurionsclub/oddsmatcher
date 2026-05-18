@@ -162,12 +162,18 @@ class SisalScraper:
         url = f"{BASE_URL}/scommesse-matchpoint/quote/{sisal_slug}"
         logger.info("[Sisal] Loading %s", url)
         try:
-            await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+            # Usa expect_response per attendere esattamente la schedaManifestazione
+            # (si registra PRIMA della navigazione per non perdere la risposta)
+            async with self._page.expect_response(
+                lambda r: "schedaManifestazione" in r.url and "sisal.it" in r.url,
+                timeout=55_000,
+            ):
+                await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+            # Brevissima pausa per assicurarsi che on_response abbia elaborato
+            await self._page.wait_for_timeout(500)
         except Exception as e:
-            logger.warning("[Sisal] Page load issue for %s: %s", url, e)
+            logger.warning("[Sisal] %s: timeout/errore navigazione: %s", league_name, e)
 
-        # Aspetta che l'SPA carichi i dati prematch (schedaManifestazione arriva dopo ~10-20s)
-        await self._page.wait_for_timeout(25000)
         self._page.remove_listener("response", on_response)
 
         if not captured:

@@ -170,7 +170,7 @@ class LottomaticaScraper:
         logger.info("[Lottomatica] Loading %s", url)
         try:
             await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-            await self._page.wait_for_timeout(25000)  # SPA API calls arrivano dopo ~10-20s
+            await self._page.wait_for_timeout(50000)  # SPA API calls arrivano dopo 25-50s
         except Exception as e:
             logger.warning("[Lottomatica] Page load issue for %s: %s", url, e)
 
