@@ -202,7 +202,7 @@ class SisalScraper:
 
         # Prova ogni risposta catturata e restituisce la prima con risultati
         for item in sorted(captured, key=lambda x: len(x["body"].get("avvenimentoFeList", [])), reverse=True):
-            rows = _parse_scheda(item["body"], league_name, sport_key, country_slug)
+            rows = _parse_scheda(item["body"], league_name, sport_key, sisal_slug)
             if rows:
                 logger.info("[Sisal] %s: %d righe da %s", league_name, len(rows), item["url"])
                 return rows
@@ -224,7 +224,7 @@ def _parse_scheda(
     body: dict,
     league_name: str,
     sport_key: str,
-    country_slug: str,
+    sisal_slug: str,
 ) -> list[MatchOdds]:
     """Parse a schedaManifestazione response into MatchOdds.
 
@@ -257,7 +257,7 @@ def _parse_scheda(
         event_time = data if data else None
         home_slug = _slugify(home)
         away_slug = _slugify(away)
-        match_url = f"{BASE_URL}/scommesse-matchpoint/quote/{sport_key}/{home_slug}-{away_slug}"
+        match_url = f"{BASE_URL}/scommesse-matchpoint/evento/{sisal_slug}/{home_slug}-{away_slug}"
 
         # Log tutte le scommesse disponibili per il primo avvenimento (debug struttura API)
         if not _logged_scommesse:
