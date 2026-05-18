@@ -146,13 +146,11 @@ class SisalScraper:
         async def on_response(response: Response) -> None:
             if "sisal.it" not in response.url:
                 return
-            ct = response.headers.get("content-type", "")
-            if "json" not in ct:
-                return
+            # Non filtrare per content-type: Sisal potrebbe usare tipi non standard
             try:
                 body = await response.json()
                 captured.append({"url": response.url, "body": body})
-                logger.debug("[Sisal] Captured JSON from %s", response.url)
+                logger.debug("[Sisal] Captured parseable JSON from %s", response.url)
             except Exception:
                 pass
 
@@ -161,12 +159,13 @@ class SisalScraper:
         url = f"{BASE_URL}/scommesse-matchpoint/quote/{sisal_slug}"
         logger.info("[Sisal] Loading %s", url)
         try:
-            await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-            await self._page.wait_for_timeout(5000)  # let lazy API calls fire
+            # networkidle aspetta che TUTTE le chiamate di rete finiscano
+            await self._page.goto(url, wait_until="networkidle", timeout=60_000)
+            await self._page.wait_for_timeout(3000)  # buffer extra per chiamate lazy
         except Exception as e:
             logger.warning("[Sisal] Page load issue for %s (may still have data): %s", url, e)
-            self._page.remove_listener("response", on_response)
-            return []
+
+        self._page.remove_listener("response", on_response)
 
         self._page.remove_listener("response", on_response)
 
@@ -198,7 +197,76 @@ class SisalScraper:
                 )
                 return results
 
+        # Fallback: cerca JSON embedded nell'HTML della pagina (SSR / __NEXT_DATA__ / script tags)
+        if not captured:
+            logger.info("[Sisal] %s: 0 JSON catturati via network — provo fallback HTML", league_name)
+            try:
+                html_results = await self._extract_from_html(league_name, sport_key, country_slug)
+                if html_results:
+                    return html_results
+            except Exception as e:
+                logger.debug("[Sisal] HTML fallback error: %s", e)
+
         logger.warning("[Sisal] %s: no parseable response found in %d captured", league_name, len(captured))
+        return []
+
+    async def _extract_from_html(
+        self,
+        league_name: str,
+        sport_key: str,
+        country_slug: str,
+    ) -> list[MatchOdds]:
+        """Fallback: estrae JSON embedded nell'HTML (es. __NEXT_DATA__ o window.__STATE__)."""
+        import json as _json
+        assert self._page is not None
+
+        # Prova __NEXT_DATA__ (Next.js SSR)
+        try:
+            next_data = await self._page.evaluate("() => JSON.stringify(window.__NEXT_DATA__ || null)")
+            if next_data and next_data != "null":
+                body = _json.loads(next_data)
+                logger.info("[Sisal] %s: trovato __NEXT_DATA__ (%d chars)", league_name, len(next_data))
+                results = _parse_response("__NEXT_DATA__", body, league_name, sport_key, country_slug)
+                if results:
+                    return results
+        except Exception:
+            pass
+
+        # Prova tutti i script tag con JSON >= 500 chars
+        try:
+            scripts = await self._page.evaluate("""() => {
+                const scripts = Array.from(document.querySelectorAll('script:not([src])'));
+                return scripts.map(s => s.textContent).filter(t => t && t.length > 500);
+            }""")
+            for script_text in scripts[:10]:
+                # Cerca blocchi JSON nei contenuti degli script
+                for match in re.finditer(r'\{["\']avveniment|\{["\']evento|\{["\']events', script_text):
+                    start = match.start()
+                    try:
+                        body = _json.loads(script_text[start:])
+                        results = _parse_response("script_tag", body, league_name, sport_key, country_slug)
+                        if results:
+                            logger.info("[Sisal] %s: trovati %d eventi da script tag", league_name, len(results))
+                            return results
+                    except Exception:
+                        pass
+                # Prova a parsare l'intero script come JSON
+                stripped = script_text.strip()
+                if stripped.startswith(("{", "[")):
+                    try:
+                        body = _json.loads(stripped)
+                        # Log preview per debug
+                        logger.info("[Sisal] SCRIPT_TAG keys=%s BODY=%s",
+                                    list(body.keys())[:8] if isinstance(body, dict) else f"list[{len(body)}]",
+                                    _json.dumps(body, ensure_ascii=False)[:300])
+                        results = _parse_response("script_tag", body, league_name, sport_key, country_slug)
+                        if results:
+                            return results
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug("[Sisal] script tag scan error: %s", e)
+
         return []
 
 
