@@ -178,6 +178,7 @@ class SisalScraper:
         except Exception as e:
             logger.info("[Sisal] %s: networkidle timeout (atteso): %s", league_name, type(e).__name__)
 
+        logger.info("[Sisal] %s: page.url after nav = %s", league_name, self._page.url)
         await self._page.wait_for_timeout(500)
         self._page.remove_listener("response", on_response)
 
@@ -208,6 +209,32 @@ def _parse_scheda(
     avvenimenti: list[dict] = body.get("avvenimentoFeList", [])
     scommessa_map: dict = body.get("scommessaMap", {})
     info_map: dict = body.get("infoAggiuntivaMap", {})
+
+    # ── diagnostica struttura risposta ──────────────────────────────
+    if avvenimenti:
+        avv0 = avvenimenti[0]
+        logger.info("[Sisal] DEBUG avv fields=%s", list(avv0.keys())[:12])
+        logger.info(
+            "[Sisal] DEBUG avv[0] key=%r descrizione=%r",
+            avv0.get("key"), avv0.get("descrizione"),
+        )
+    if scommessa_map:
+        sk0 = list(scommessa_map.keys())[0]
+        sv0 = scommessa_map[sk0]
+        logger.info("[Sisal] DEBUG scom key0=%r fields=%s", sk0, list(sv0.keys())[:10])
+        logger.info(
+            "[Sisal] DEBUG scom[0] codiceGruppo=%r descrizione=%r",
+            sv0.get("codiceGruppo"), sv0.get("descrizione"),
+        )
+    if info_map:
+        ik0 = list(info_map.keys())[0]
+        iv0 = info_map[ik0]
+        logger.info("[Sisal] DEBUG info key0=%r fields=%s", ik0, list(iv0.keys())[:10])
+        logger.info(
+            "[Sisal] DEBUG info[0] descrizione=%r quota=%r multipla=%r singola=%r",
+            iv0.get("descrizione"), iv0.get("quota"), iv0.get("multipla"), iv0.get("singola"),
+        )
+    # ─────────────────────────────────────────────────────────────────
 
     results: list[MatchOdds] = []
 
@@ -276,10 +303,15 @@ def _extract_1x2(
                     break
 
     if not esito_scommessa:
+        logger.info(
+            "[Sisal] DEBUG _extract_1x2 avv_key=%r prefix=%r — nessuna scommessa trovata",
+            avv_key, avv_key.split("-")[0] if avv_key else "(vuoto)",
+        )
         return None
 
     # Estrai le infoAggiuntive (esiti) di questa scommessa
     info_keys = [item.get("key", "") for item in esito_scommessa.get("infoAggiuntivaKeyDataList", [])]
+    logger.info("[Sisal] DEBUG esito_scommessa trovata: desc=%r info_keys=%s", esito_scommessa.get("descrizione"), info_keys[:5])
     odds: dict[str, float] = {}
 
     for ik in info_keys:
