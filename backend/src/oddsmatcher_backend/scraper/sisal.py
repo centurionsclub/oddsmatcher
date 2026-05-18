@@ -30,16 +30,21 @@ BETTING_URL = "https://betting.sisal.it"
 BOOKMAKER = "Sisal"
 
 # fmt: off
-LEAGUES: list[tuple[str, str, str, str]] = [
-    ("Serie A",          "calcio", "calcio/serie-a",                    "italia"),
-    ("Serie B",          "calcio", "calcio/serie-b",                    "italia"),
-    ("Premier League",   "calcio", "calcio/inghilterra/premier-league", "inghilterra"),
-    ("La Liga",          "calcio", "calcio/spagna/liga",                "spagna"),
-    ("Bundesliga",       "calcio", "calcio/germania/bundesliga",        "germania"),
-    ("Ligue 1",          "calcio", "calcio/francia/ligue-1",            "francia"),
-    ("Champions League", "calcio", "calcio/europa/champions-league",    "europa"),
-    ("Europa League",    "calcio", "calcio/europa/europa-league",       "europa"),
-    ("Conference League","calcio", "calcio/europa/conference-league",   "europa"),
+# (league_name, sport_key, sisal_slug, country_slug, url_type)
+# url_type = "quote" → /scommesse-matchpoint/quote/{sisal_slug}   (singola lega)
+# url_type = "sport" → /scommesse-matchpoint/sport/{sisal_slug}   (intero sport, più risposte)
+LEAGUES: list[tuple[str, str, str, str, str]] = [
+    ("Serie A",           "calcio",  "calcio/serie-a",                    "italia",         "quote"),
+    ("Serie B",           "calcio",  "calcio/serie-b",                    "italia",         "quote"),
+    ("Premier League",    "calcio",  "calcio/inghilterra/premier-league", "inghilterra",    "quote"),
+    ("La Liga",           "calcio",  "calcio/spagna/liga",                "spagna",         "quote"),
+    ("Bundesliga",        "calcio",  "calcio/germania/bundesliga",        "germania",       "quote"),
+    ("Ligue 1",           "calcio",  "calcio/francia/ligue-1",            "francia",        "quote"),
+    ("Champions League",  "calcio",  "calcio/europa/champions-league",    "europa",         "quote"),
+    ("Europa League",     "calcio",  "calcio/europa/europa-league",       "europa",         "quote"),
+    ("Conference League", "calcio",  "calcio/europa/conference-league",   "europa",         "quote"),
+    ("Tennis",            "tennis",  "tennis",                            "internazionale", "sport"),
+    ("Basket",            "basket",  "basket",                            "internazionale", "sport"),
 ]
 # fmt: on
 
@@ -132,11 +137,11 @@ class SisalScraper:
 
     async def _scrape_leagues(self, sport: str | None) -> list[MatchOdds]:
         all_results: list[MatchOdds] = []
-        for league_name, sport_key, sisal_slug, country_slug in LEAGUES:
+        for league_name, sport_key, sisal_slug, country_slug, url_type in LEAGUES:
             if sport and sport_key != sport:
                 continue
             try:
-                results = await self._scrape_league(league_name, sport_key, sisal_slug, country_slug)
+                results = await self._scrape_league(league_name, sport_key, sisal_slug, url_type)
                 all_results.extend(results)
                 logger.info("[Sisal] %s — %d match+market rows", league_name, len(results))
             except Exception as exc:
@@ -151,7 +156,7 @@ class SisalScraper:
         league_name: str,
         sport_key: str,
         sisal_slug: str,
-        country_slug: str,
+        url_type: str = "quote",
     ) -> list[MatchOdds]:
         assert self._page is not None
 
@@ -167,14 +172,12 @@ class SisalScraper:
                     captured.append({"url": url, "body": body})
                     logger.info("[Sisal] %s: catturata schedaManifestazione da %s", league_name, url)
                 elif "schedaManifestazione" in url:
-                    # Risposta JSON ma senza i dati attesi — log per diagnosi
                     logger.warning(
                         "[Sisal] %s: schedaManifestazione senza avvenimentoFeList: keys=%s",
                         league_name, list(body.keys())[:8],
                     )
             except Exception:
                 if "schedaManifestazione" in url:
-                    # Risposta non-JSON (probabile blocco Akamai)
                     logger.warning(
                         "[Sisal] %s: schedaManifestazione non-JSON status=%d url=%s",
                         league_name, response.status, url[:120],
@@ -182,11 +185,12 @@ class SisalScraper:
 
         self._page.on("response", on_response)
 
-        url = f"{BASE_URL}/scommesse-matchpoint/quote/{sisal_slug}"
+        if url_type == "sport":
+            url = f"{BASE_URL}/scommesse-matchpoint/sport/{sisal_slug}"
+        else:
+            url = f"{BASE_URL}/scommesse-matchpoint/quote/{sisal_slug}"
         logger.info("[Sisal] Loading %s", url)
         try:
-            # networkidle fa sempre timeout sulle SPA (polling continuo) — va bene:
-            # il timeout scatta dopo 65s durante i quali on_response cattura schedaManifestazione
             await self._page.goto(url, wait_until="networkidle", timeout=65_000)
             logger.info("[Sisal] %s: networkidle raggiunto (inatteso)", league_name)
         except Exception as e:
@@ -200,12 +204,26 @@ class SisalScraper:
             logger.warning("[Sisal] %s: nessuna schedaManifestazione catturata", league_name)
             return []
 
-        # Prova ogni risposta catturata e restituisce la prima con risultati
-        for item in sorted(captured, key=lambda x: len(x["body"].get("avvenimentoFeList", [])), reverse=True):
-            rows = _parse_scheda(item["body"], league_name, sport_key, sisal_slug)
-            if rows:
-                logger.info("[Sisal] %s: %d righe da %s", league_name, len(rows), item["url"])
-                return rows
+        if url_type == "sport":
+            # Pagine sport-level: combina TUTTE le risposte (una per torneo/competizione)
+            all_rows: list[MatchOdds] = []
+            seen_events: set[str] = set()
+            for item in captured:
+                rows = _parse_scheda(item["body"], league_name, sport_key, sisal_slug)
+                for row in rows:
+                    key = f"{row.event_name}|{row.market}|{row.bookmaker_odds[0]['bookmaker'] if row.bookmaker_odds else ''}"
+                    if key not in seen_events:
+                        seen_events.add(key)
+                        all_rows.append(row)
+            logger.info("[Sisal] %s: %d righe da %d risposte", league_name, len(all_rows), len(captured))
+            return all_rows
+        else:
+            # Pagina singola lega: prima risposta con risultati
+            for item in sorted(captured, key=lambda x: len(x["body"].get("avvenimentoFeList", [])), reverse=True):
+                rows = _parse_scheda(item["body"], league_name, sport_key, sisal_slug)
+                if rows:
+                    logger.info("[Sisal] %s: %d righe da %s", league_name, len(rows), item["url"])
+                    return rows
 
         logger.warning("[Sisal] %s: nessuna riga estratta da %d risposte", league_name, len(captured))
         return []
@@ -358,7 +376,7 @@ def _extract_1x2(
             # quota è intero centesimale: 172 → 1.72
             odds[ESITO_MAP[desc]] = round(float(quota) / 100.0, 2)
 
-    return odds if len(odds) == 3 else None
+    return odds if len(odds) >= 2 else None  # 3 per calcio, 2 per tennis/basket (no pareggio)
 
 
 def _decode_ou_line(id_info_str: str, info: dict) -> str | None:
