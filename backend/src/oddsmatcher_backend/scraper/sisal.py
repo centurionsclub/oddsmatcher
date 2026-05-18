@@ -213,6 +213,13 @@ class SisalScraper:
 
 # ── parser ────────────────────────────────────────────────────────────────────
 
+# Keywords che identificano il mercato Over/Under nella descrizione scommessa Sisal
+_OU_KEYWORDS = ("TOTALE GOL", "OVER/UNDER", "TOTAL GOALS", "O/U")
+
+# Keywords che identificano il mercato Goal/No Goal
+_GNG_KEYWORDS = ("GOAL/NOGOAL", "GOAL/NO GOAL", "GG/NG")
+
+
 def _parse_scheda(
     body: dict,
     league_name: str,
@@ -231,6 +238,7 @@ def _parse_scheda(
     info_map: dict = body.get("infoAggiuntivaMap", {})
 
     results: list[MatchOdds] = []
+    _logged_scommesse = False  # log scommesse disponibili solo una volta per lega
 
     for avv in avvenimenti:
         descrizione: str = avv.get("descrizione", "")
@@ -251,6 +259,26 @@ def _parse_scheda(
         away_slug = _slugify(away)
         match_url = f"{BASE_URL}/scommesse-matchpoint/quote/{sport_key}/{home_slug}-{away_slug}"
 
+        # Log tutte le scommesse disponibili per il primo avvenimento (debug struttura API)
+        if not _logged_scommesse:
+            _logged_scommesse = True
+            avv_scommesse = {
+                k: v.get("descrizione", "")
+                for k, v in scommessa_map.items()
+                if k.startswith(avv_key + "-")
+            }
+            logger.info(
+                "[Sisal] %s — scommesse disponibili per '%s': %s",
+                league_name, event_name, avv_scommesse,
+            )
+            # Log anche alcune chiavi infoAggiuntivaMap per capire la struttura
+            avv_info_keys = [k for k in info_map if k.startswith(avv_key + "-")][:20]
+            logger.info(
+                "[Sisal] %s — info keys (prime 20): %s",
+                league_name, avv_info_keys,
+            )
+
+        # 1X2
         odds_1x2 = _extract_1x2(avv_key, scommessa_map, info_map)
         if odds_1x2:
             results.append(MatchOdds(
@@ -263,6 +291,21 @@ def _parse_scheda(
                 match_url=match_url,
                 market="1X2",
                 bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_1x2}],
+            ))
+
+        # Over/Under
+        ou_rows = _extract_over_under(avv_key, scommessa_map, info_map)
+        for ou_odds in ou_rows:
+            results.append(MatchOdds(
+                sport=sport_key,
+                league=league_name,
+                home_team=home,
+                away_team=away,
+                event_name=event_name,
+                event_time=event_time,
+                match_url=match_url,
+                market="Over/Under",
+                bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": ou_odds}],
             ))
 
     return results
@@ -316,3 +359,94 @@ def _extract_1x2(
             odds[ESITO_MAP[desc]] = round(float(quota) / 100.0, 2)
 
     return odds if len(odds) == 3 else None
+
+
+def _decode_ou_line(id_info_str: str, info: dict) -> str | None:
+    """Cerca di ricavare la linea Over/Under (es. '2.5') da una voce infoAggiuntivaMap.
+
+    Strategie (dalla più affidabile alla meno):
+      1. info['descrizione'] contiene direttamente la linea (es. "2.5")
+      2. idInfoAggiuntiva è la linea * 10 (es. 25 → "2.5", 35 → "3.5")
+      3. idInfoAggiuntiva è la linea * 100 (es. 250 → "2.5")
+    """
+    # Strategia 1: campo descrizione sull'info
+    desc = str(info.get("descrizione", "")).strip()
+    if re.match(r'^\d+[.,]\d+$', desc):
+        return desc.replace(",", ".")
+
+    # Strategia 2/3: decodifica numerica dell'id
+    try:
+        val = int(id_info_str)
+        if val > 0:
+            # X.5 pattern: val % 10 == 5 (es. 25→2.5, 35→3.5, 45→4.5)
+            if val % 10 == 5 and 5 <= val <= 995:
+                return f"{val // 10}.5"
+            # X.5 pattern * 100 (es. 250→2.5, 350→3.5)
+            if val % 100 == 50 and 50 <= val <= 9950:
+                return f"{val // 100}.5"
+    except (ValueError, TypeError):
+        pass
+
+    # Strategia 4: la chiave stessa è già una stringa decimale
+    if re.match(r'^\d+[.,]\d+$', id_info_str):
+        return id_info_str.replace(",", ".")
+
+    return None
+
+
+def _extract_over_under(
+    avv_key: str,
+    scommessa_map: dict,
+    info_map: dict,
+) -> list[dict[str, float]]:
+    """Estrae le quote Over/Under per tutte le linee disponibili.
+
+    Returns: lista di dict con chiavi tipo "Over 2.5" / "Under 2.5"
+    Ogni dict = una linea (es. [{"Over 2.5": 1.65, "Under 2.5": 2.15}, ...])
+    """
+    results: list[dict[str, float]] = []
+
+    # Trova i codiceScommessa corrispondenti a Over/Under
+    ou_cod_scommessa: list[str] = []
+    for k, scom in scommessa_map.items():
+        if not k.startswith(avv_key + "-"):
+            continue
+        desc = scom.get("descrizione", "").upper().strip()
+        if any(kw in desc for kw in _OU_KEYWORDS):
+            # k = "avv_key-codiceScommessa"
+            cod = k[len(avv_key) + 1:]
+            ou_cod_scommessa.append(cod)
+            logger.debug("[Sisal] O/U scommessa trovata: cod=%s desc='%s'", cod, scom.get("descrizione"))
+
+    if not ou_cod_scommessa:
+        return results
+
+    for cod in ou_cod_scommessa:
+        prefix = f"{avv_key}-{cod}-"
+        for info_key, info in info_map.items():
+            if not info_key.startswith(prefix):
+                continue
+
+            id_info_str = info_key[len(prefix):]
+            line = _decode_ou_line(id_info_str, info)
+            if not line:
+                logger.debug("[Sisal] O/U linea non decodificabile: key=%s info_keys=%s", info_key, list(info.keys())[:6])
+                continue
+
+            esito_list = info.get("esitoList", [])
+            odds: dict[str, float] = {}
+            for esito in esito_list:
+                desc = esito.get("descrizione", "").strip().upper()
+                quota = esito.get("quota")
+                stato = esito.get("stato", 0)
+                if quota and stato == 1:
+                    if "OVER" in desc or desc == "O":
+                        odds[f"Over {line}"] = round(float(quota) / 100.0, 2)
+                    elif "UNDER" in desc or desc == "U":
+                        odds[f"Under {line}"] = round(float(quota) / 100.0, 2)
+
+            if len(odds) == 2:
+                results.append(odds)
+                logger.debug("[Sisal] O/U estratto: linea=%s odds=%s", line, odds)
+
+    return results
