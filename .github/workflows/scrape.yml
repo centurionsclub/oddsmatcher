@@ -43,6 +43,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PROXY_URL: ${{ secrets.PROXY_URL }}
         run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape --bookmaker sisal
 
   # ── Lottomatica ──────────────────────────────────────────────────────
@@ -82,6 +83,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PROXY_URL: ${{ secrets.PROXY_URL }}
         run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape --bookmaker lottomatica
 
   # ── CentroQuote ──────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ We capture this response and parse it directly — no content-type filtering
 
 import asyncio
 import logging
+import os
 import re
 import unicodedata
 from typing import Any
@@ -71,18 +72,30 @@ class SisalScraper:
 
     async def _start(self) -> None:
         self._playwright = await async_playwright().start()
+
+        proxy_url = os.environ.get("PROXY_URL")
+        proxy = None
+        if proxy_url:
+            # http://user:pass@host:port → Playwright proxy dict
+            import urllib.parse
+            p = urllib.parse.urlparse(proxy_url)
+            proxy = {
+                "server": f"{p.scheme}://{p.hostname}:{p.port}",
+                "username": p.username or "",
+                "password": p.password or "",
+            }
+            logger.info("[Sisal] Usando proxy: %s:%s", p.hostname, p.port)
+
         self._browser = await self._playwright.chromium.launch(
             headless=False,
             args=["--no-sandbox", "--disable-dev-shm-usage"],
+            proxy=proxy,
         )
         self._context = await self._browser.new_context(
             user_agent=_USER_AGENT,
             locale="it-IT",
             timezone_id="Europe/Rome",
             viewport={"width": 1280, "height": 900},
-            # Blocca i Service Worker: altrimenti il SW cache intercetta le API calls
-            # e Playwright non vede le risposte tramite on_response
-            service_workers="block",
         )
         self._page = await self._context.new_page()
 

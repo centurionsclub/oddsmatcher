@@ -14,6 +14,7 @@ Flow per tournament:
 
 import asyncio
 import logging
+import os
 import re
 import unicodedata
 from typing import Any
@@ -75,9 +76,23 @@ class LottomaticaScraper:
 
     async def _start(self) -> None:
         self._playwright = await async_playwright().start()
+
+        proxy_url = os.environ.get("PROXY_URL")
+        proxy = None
+        if proxy_url:
+            import urllib.parse
+            p = urllib.parse.urlparse(proxy_url)
+            proxy = {
+                "server": f"{p.scheme}://{p.hostname}:{p.port}",
+                "username": p.username or "",
+                "password": p.password or "",
+            }
+            logger.info("[Lottomatica] Usando proxy: %s:%s", p.hostname, p.port)
+
         self._browser = await self._playwright.chromium.launch(
             headless=False,
             args=["--no-sandbox", "--disable-dev-shm-usage"],
+            proxy=proxy,
         )
         self._context = await self._browser.new_context(
             user_agent=_USER_AGENT,
