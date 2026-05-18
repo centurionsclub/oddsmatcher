@@ -43,8 +43,11 @@ LEAGUES: list[tuple[str, str, str, str, str]] = [
     ("Champions League",  "calcio",  "calcio/europa/champions-league",    "europa",         "quote"),
     ("Europa League",     "calcio",  "calcio/europa/europa-league",       "europa",         "quote"),
     ("Conference League", "calcio",  "calcio/europa/conference-league",   "europa",         "quote"),
-    ("Tennis",            "tennis",  "tennis",                            "internazionale", "sport"),
-    ("Basket",            "basket",  "basket",                            "internazionale", "sport"),
+    ("Tennis",            "tennis",  "tennis",                                        "internazionale", "sport"),
+    ("NBA",               "basket",  "basket/stati-uniti-d-america/nba",              "stati-uniti",    "quote"),
+    ("Eurolega",          "basket",  "basket/eurolega",                               "europa",         "quote"),
+    ("Serie A Basket",    "basket",  "basket/serie-a",                                "italia",         "quote"),
+    ("Serie A2 Basket",   "basket",  "basket/serie-a2",                               "italia",         "quote"),
 ]
 # fmt: on
 
