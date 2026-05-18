@@ -40,6 +40,13 @@ TOURNAMENTS: list[tuple[int, str, str, str, str, str]] = [
     (26534,   "Champions League",  "calcio", "champions-league-uefa", "europa",       "/scommesse/sport/calcio/europa/champions-league-uefa/"),
     (247944,  "Europa League",     "calcio", "europa-league-uefa",    "europa",       "/scommesse/sport/calcio/europa/europa-league-uefa/"),
     (5675488, "Conference League", "calcio", "conference-league-uefa","europa",       "/scommesse/sport/calcio/europa/conference-league-uefa/"),
+    # Basket
+    (54529,   "NBA",               "basket", "nba",                   "usa",          "/scommesse/sport/basket/usa/nba?did=2&nid=8455&eid=54529"),
+    (890160,  "Serie A Basket",    "basket", "serie-a",               "italia",       "/scommesse/sport/basket/italia/serie-a?did=2&nid=7606&eid=890160"),
+    (26064,   "A2 Basket",         "basket", "a2",                    "italia",       "/scommesse/sport/basket/italia/a2?did=2&nid=7606&eid=26064"),
+    (155272,  "WNBA",              "basket", "wnba",                  "usa",          "/scommesse/sport/basket/usa/wnba?did=2&nid=8455&eid=155272"),
+    # Tennis
+    (203115,  "ATP Amburgo",       "tennis", "atp-amburgo",           "atp",          "/scommesse/sport/tennis/atp/atp-amburgo?did=5&nid=19254&eid=203115"),
 ]
 # fmt: on
 
