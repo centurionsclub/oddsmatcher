@@ -49,9 +49,7 @@ _USER_AGENT = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
-# codiceGruppo = 1 → Esito finale (1X2)
-ESITO_GRUPPO = 1
-# Descrizioni outcomes Sisal → canonical
+# Descrizioni outcomes Sisal → canonical (codiceScommessa=1, Esito Finale)
 ESITO_MAP = {"1": "1", "X": "X", "2": "2"}
 
 
@@ -206,15 +204,15 @@ class SisalScraper:
             logger.warning("[Sisal] %s: nessuna schedaManifestazione catturata", league_name)
             return []
 
-        # Prendi la risposta più ricca (più eventi)
-        best = max(captured, key=lambda x: len(x["body"].get("avvenimentoFeList", [])))
-        logger.info(
-            "[Sisal] %s: parsing %d eventi da %s",
-            league_name,
-            len(best["body"].get("avvenimentoFeList", [])),
-            best["url"],
-        )
-        return _parse_scheda(best["body"], league_name, sport_key, country_slug)
+        # Prova ogni risposta catturata e restituisce la prima con risultati
+        for item in sorted(captured, key=lambda x: len(x["body"].get("avvenimentoFeList", [])), reverse=True):
+            rows = _parse_scheda(item["body"], league_name, sport_key, country_slug)
+            if rows:
+                logger.info("[Sisal] %s: %d righe da %s", league_name, len(rows), item["url"])
+                return rows
+
+        logger.warning("[Sisal] %s: nessuna riga estratta da %d risposte", league_name, len(captured))
+        return []
 
 
 # ── parser ────────────────────────────────────────────────────────────────────
@@ -225,36 +223,16 @@ def _parse_scheda(
     sport_key: str,
     country_slug: str,
 ) -> list[MatchOdds]:
-    """Parse a schedaManifestazione response into MatchOdds."""
+    """Parse a schedaManifestazione response into MatchOdds.
+
+    Struttura reale API Sisal:
+      avvenimentoFeList[i].key = 'codicePalinsesto-codiceAvvenimento'  e.g. '36211-257'
+      scommessaMap key         = 'codicePalinsesto-codiceAvvenimento-codiceScommessa'
+      infoAggiuntivaMap key    = 'codicePalinsesto-codiceAvvenimento-codiceScommessa-idInfoAggiuntiva'
+    """
     avvenimenti: list[dict] = body.get("avvenimentoFeList", [])
     scommessa_map: dict = body.get("scommessaMap", {})
     info_map: dict = body.get("infoAggiuntivaMap", {})
-
-    # ── diagnostica struttura risposta ──────────────────────────────
-    if avvenimenti:
-        avv0 = avvenimenti[0]
-        logger.info("[Sisal] DEBUG avv fields=%s", list(avv0.keys())[:12])
-        logger.info(
-            "[Sisal] DEBUG avv[0] key=%r descrizione=%r",
-            avv0.get("key"), avv0.get("descrizione"),
-        )
-    if scommessa_map:
-        sk0 = list(scommessa_map.keys())[0]
-        sv0 = scommessa_map[sk0]
-        logger.info("[Sisal] DEBUG scom key0=%r fields=%s", sk0, list(sv0.keys())[:10])
-        logger.info(
-            "[Sisal] DEBUG scom[0] codiceGruppo=%r descrizione=%r",
-            sv0.get("codiceGruppo"), sv0.get("descrizione"),
-        )
-    if info_map:
-        ik0 = list(info_map.keys())[0]
-        iv0 = info_map[ik0]
-        logger.info("[Sisal] DEBUG info key0=%r fields=%s", ik0, list(iv0.keys())[:10])
-        logger.info(
-            "[Sisal] DEBUG info[0] descrizione=%r quota=%r multipla=%r singola=%r",
-            iv0.get("descrizione"), iv0.get("quota"), iv0.get("multipla"), iv0.get("singola"),
-        )
-    # ─────────────────────────────────────────────────────────────────
 
     results: list[MatchOdds] = []
 
@@ -263,7 +241,6 @@ def _parse_scheda(
         data: str = avv.get("data", "") or ""
         avv_key: str = avv.get("key", "")
 
-        # "INTER - MILAN" → home, away
         parts = descrizione.split(" - ", 1)
         if len(parts) != 2:
             continue
@@ -274,12 +251,10 @@ def _parse_scheda(
 
         event_name = f"{home} - {away}"
         event_time = data if data else None
-
         home_slug = _slugify(home)
         away_slug = _slugify(away)
         match_url = f"{BASE_URL}/scommesse-matchpoint/quote/{sport_key}/{home_slug}-{away_slug}"
 
-        # Trova la scommessa Esito finale (codiceGruppo == 1)
         odds_1x2 = _extract_1x2(avv_key, scommessa_map, info_map)
         if odds_1x2:
             results.append(MatchOdds(
@@ -302,63 +277,58 @@ def _extract_1x2(
     scommessa_map: dict,
     info_map: dict,
 ) -> dict[str, float] | None:
-    """Estrae le quote 1X2 dall'infoAggiuntivaMap per un avvenimento."""
-    # Cerca scommesse per questo avvenimento con codiceGruppo == 1 (Esito finale)
-    esito_scommessa = None
-    for key, scom in scommessa_map.items():
-        if not key.startswith(avv_key.split("-")[0]):  # stesso codiceAvvenimento
-            continue
-        if scom.get("codiceGruppo") == ESITO_GRUPPO:
-            esito_scommessa = scom
-            break
+    """Estrae le quote 1X2 per un avvenimento.
 
-    if not esito_scommessa:
-        # Fallback: cerca per descrizione
-        for scom in scommessa_map.values():
-            desc = scom.get("descrizione", "").upper()
-            if "ESITO" in desc or "1X2" in desc:
-                cod_avv = str(scom.get("codiceAvvenimento", ""))
-                if avv_key.startswith(cod_avv):
-                    esito_scommessa = scom
-                    break
+    avv_key = 'codicePalinsesto-codiceAvvenimento' (e.g. '36211-257')
+    Le scommesse di questo avvenimento hanno chiavi che iniziano con avv_key + '-'.
+    Il mercato Esito Finale (1X2) ha codiceScommessa=1.
+    Le info (quote) hanno chiave avv_key + '-' + codiceScommessa + '-' + idInfoAggiuntiva.
+    """
+    prefix = avv_key + "-"
 
-    if not esito_scommessa:
-        logger.info(
-            "[Sisal] DEBUG _extract_1x2 avv_key=%r prefix=%r — nessuna scommessa trovata",
-            avv_key, avv_key.split("-")[0] if avv_key else "(vuoto)",
-        )
+    # Trova la scommessa Esito Finale: prova codiceScommessa=1, poi cerca per descrizione
+    esito_cod: str | None = None
+
+    # Prima prova diretta con codiceScommessa=1
+    if (prefix + "1") in scommessa_map:
+        esito_cod = "1"
+    else:
+        # Cerca tra tutte le scommesse di questo avvenimento
+        for k, scom in scommessa_map.items():
+            if not k.startswith(prefix):
+                continue
+            desc = scom.get("descrizione", "").upper().strip()
+            if "ESITO" in desc or "1X2" in desc or desc in ("1 X 2",):
+                # Il codiceScommessa è l'ultima parte della key
+                esito_cod = k.split("-")[-1]
+                break
+
+    if esito_cod is None:
         return None
 
-    # Estrai le infoAggiuntive (esiti) di questa scommessa
-    info_keys = [item.get("key", "") for item in esito_scommessa.get("infoAggiuntivaKeyDataList", [])]
-    logger.info("[Sisal] DEBUG esito_scommessa trovata: desc=%r info_keys=%s", esito_scommessa.get("descrizione"), info_keys[:5])
+    # Leggi le info (quote) per questo mercato
     odds: dict[str, float] = {}
-
-    for ik in info_keys:
-        info = info_map.get(ik, {})
+    for i in range(10):
+        info_key = f"{avv_key}-{esito_cod}-{i}"
+        info = info_map.get(info_key)
+        if info is None:
+            if i > 0:
+                break
+            continue
         desc = info.get("descrizione", "").strip()
-        # La quota può essere in 'quota', 'multipla', 'singola', 'coeff'
         quota = (
             info.get("quota")
             or info.get("multipla")
             or info.get("singola")
             or info.get("coeff")
         )
-        if desc in ESITO_MAP and quota and float(quota) > 1.0:
-            odds[ESITO_MAP[desc]] = float(quota)
+        if quota and float(quota) > 1.0:
+            if desc in ESITO_MAP:
+                odds[ESITO_MAP[desc]] = float(quota)
+            elif not desc and len(odds) < 3:
+                # Fallback posizionale: 0→1, 1→X, 2→2
+                pos_map = {0: "1", 1: "X", 2: "2"}
+                if i in pos_map:
+                    odds[pos_map[i]] = float(quota)
 
-    if len(odds) == 3:
-        return odds
-
-    # Fallback: i valori numerici >1.0 ordinati potrebbero essere 1, X, 2
-    if not odds and info_keys:
-        vals = []
-        for ik in info_keys[:3]:
-            info = info_map.get(ik, {})
-            q = info.get("quota") or info.get("multipla") or info.get("singola")
-            if q and float(q) > 1.0:
-                vals.append(float(q))
-        if len(vals) == 3:
-            return {"1": vals[0], "X": vals[1], "2": vals[2]}
-
-    return None
+    return odds if len(odds) == 3 else None
