@@ -1,9 +1,6 @@
 name: CentroQuote Scraper
 
 on:
-  schedule:
-    # 2 volte al giorno: 7:00 e 19:00 UTC — TTL 14h, budget ~930 min/mese
-    - cron: '0 7,19 * * *'
   workflow_dispatch:
 
 jobs:
