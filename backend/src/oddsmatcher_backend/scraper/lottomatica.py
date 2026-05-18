@@ -180,7 +180,8 @@ class LottomaticaScraper:
 
         logger.info("[Lottomatica] %s: captured %d JSON responses", league_name, len(captured))
 
-        # Log captured URLs + keys for debugging
+        # Log captured URLs + keys + body preview for debugging
+        import json as _json
         for item in captured:
             body = item["body"]
             if isinstance(body, dict):
@@ -191,7 +192,8 @@ class LottomaticaScraper:
                     keys = f"list[{len(body)}] → {list(body[0].keys())[:6]}"
             else:
                 keys = type(body).__name__
-            logger.info("[Lottomatica] CAPTURE url=%s keys=%s", item["url"], keys)
+            body_preview = _json.dumps(body, ensure_ascii=False)[:500]
+            logger.info("[Lottomatica] CAPTURE url=%s keys=%s BODY=%s", item["url"], keys, body_preview)
 
         # Parse: find the response containing event/odds data
         for item in captured:

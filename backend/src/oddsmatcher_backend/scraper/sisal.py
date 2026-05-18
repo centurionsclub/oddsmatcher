@@ -172,7 +172,8 @@ class SisalScraper:
 
         logger.info("[Sisal] %s: captured %d JSON responses", league_name, len(captured))
 
-        # Log all captured URLs + top-level keys so we can tune the parser
+        # Log all captured URLs + structure for debugging
+        import json as _json
         for item in captured:
             body = item["body"]
             if isinstance(body, dict):
@@ -183,7 +184,9 @@ class SisalScraper:
                     keys = f"list[{len(body)}] → {list(body[0].keys())[:8]}"
             else:
                 keys = type(body).__name__
-            logger.info("[Sisal] CAPTURE url=%s keys=%s", item["url"], keys)
+            # Dump first 500 chars of body so we can see the real structure
+            body_preview = _json.dumps(body, ensure_ascii=False)[:500]
+            logger.info("[Sisal] CAPTURE url=%s keys=%s BODY=%s", item["url"], keys, body_preview)
 
         # Try to parse each captured response
         for item in captured:
