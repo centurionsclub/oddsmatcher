@@ -696,7 +696,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     // Betfair only covers calcio, so rawExchangeSide is empty for other sports).
     // In that case we automatically fall back to book-vs-book matching.
     const effectivePuntaPunta = isPuntaPuntaMode || rawExchangeSide.length === 0;
-    const allPool = data.data;
+    // In punta-punta, escludiamo i veri exchange (Betfair Exchange ecc.) dall'allPool:
+    // hanno quote lay, non back — non sono confrontabili con i bookmaker.
+    const allPool = effectivePuntaPunta
+      ? data.data.filter(odd => !isRealExchange(odd.bookmaker))
+      : data.data;
     const exchangeSide = effectivePuntaPunta ? allPool : rawExchangeSide;
 
     if (exchangeSide.length === 0) return [];
