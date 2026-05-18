@@ -356,7 +356,7 @@ def _extract_1x2(
         for k, scom in scommessa_map.items():
             if k.startswith(avv_key + "-"):
                 desc = scom.get("descrizione", "").upper().strip()
-                if "1X2" in desc or "ESITO FINALE" in desc:
+                if "1X2" in desc or "ESITO FINALE" in desc or "TESTA A TESTA RISULTATO" in desc or "T/T MATCH" in desc:
                     scom_key = k
                     found = True
                     break
@@ -402,8 +402,8 @@ def _decode_ou_line(id_info_str: str, info: dict) -> str | None:
             # X.5 pattern: val % 10 == 5 (es. 25→2.5, 35→3.5, 45→4.5)
             if val % 10 == 5 and 5 <= val <= 995:
                 return f"{val // 10}.5"
-            # X.5 pattern * 100 (es. 250→2.5, 350→3.5)
-            if val % 100 == 50 and 50 <= val <= 9950:
+            # X.5 pattern * 100 (es. 250→2.5, 350→3.5, 19150→191.5 per basket)
+            if val % 100 == 50 and val >= 50:
                 return f"{val // 100}.5"
     except (ValueError, TypeError):
         pass
