@@ -1,13 +1,15 @@
 """Sisal pregame odds scraper.
 
-Strategy: Playwright browser + DOM scraping.
-Akamai Bot Manager blocks all API calls from CI runners, so we cannot
-use network response interception.  Instead we navigate to each league
-page and read the odds directly from the rendered DOM via page.evaluate().
+Strategy: Playwright browser + network response interception on betting.sisal.it.
 
-Sisal renders event rows in the page HTML; each row contains team names
-and 1X2 odds buttons.  We extract them with JS selectors after waiting
-for the content to appear.
+The SPA loads data from betting.sisal.it/api/lettura-palinsesto-sport/palinsesto/
+prematch/v1/schedaManifestazione/... which returns:
+  - avvenimentoFeList: list of events with descrizione ("INTER - MILAN"), data
+  - scommessaMap:      bet types keyed by "codAvv-codPal-codGruppo"
+  - infoAggiuntivaMap: actual quota values keyed by "codAvv-codPal-codGruppo-codInfoAgg"
+
+We capture this response and parse it directly — no content-type filtering
+(Sisal uses non-standard headers), domcontentloaded + 8s wait.
 """
 
 import asyncio
@@ -16,26 +18,27 @@ import re
 import unicodedata
 from typing import Any
 
-from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
+from playwright.async_api import Browser, BrowserContext, Page, Playwright, Response, async_playwright
 
 from oddsmatcher_backend.scraper.centroquote import MatchOdds
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.sisal.it"
+BETTING_URL = "https://betting.sisal.it"
 BOOKMAKER = "Sisal"
 
 # fmt: off
 LEAGUES: list[tuple[str, str, str, str]] = [
-    ("Serie A",          "calcio", "calcio/serie-a",               "italia"),
-    ("Serie B",          "calcio", "calcio/serie-b",               "italia"),
+    ("Serie A",          "calcio", "calcio/serie-a",                "italia"),
+    ("Serie B",          "calcio", "calcio/serie-b",                "italia"),
     ("Champions League", "calcio", "calcio/calcio-champions-league","europa"),
     ("Europa League",    "calcio", "calcio/calcio-europa-league",   "europa"),
     ("Conference League","calcio", "calcio/calcio-conference-league","europa"),
-    ("Premier League",   "calcio", "calcio/calcio-premier-league", "inghilterra"),
-    ("La Liga",          "calcio", "calcio/calcio-la-liga",        "spagna"),
-    ("Bundesliga",       "calcio", "calcio/calcio-bundesliga",     "germania"),
-    ("Ligue 1",          "calcio", "calcio/calcio-ligue-1",        "francia"),
+    ("Premier League",   "calcio", "calcio/calcio-premier-league",  "inghilterra"),
+    ("La Liga",          "calcio", "calcio/calcio-la-liga",         "spagna"),
+    ("Bundesliga",       "calcio", "calcio/calcio-bundesliga",      "germania"),
+    ("Ligue 1",          "calcio", "calcio/calcio-ligue-1",         "francia"),
 ]
 # fmt: on
 
@@ -45,103 +48,10 @@ _USER_AGENT = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
-# JS che estrae le quote direttamente dal DOM di Sisal
-_EXTRACT_JS = """
-() => {
-    const results = [];
-
-    // Sisal usa elementi con data attributes o classi specifiche per gli eventi.
-    // Proviamo diversi selettori comuni per i siti di scommesse italiani.
-
-    // Selettore 1: righe evento con quote (struttura tipica Sisal)
-    const eventSelectors = [
-        '[data-testid*="event"]',
-        '[class*="event-row"]',
-        '[class*="EventRow"]',
-        '[class*="avvenimento"]',
-        '[class*="match-row"]',
-        'article[class*="event"]',
-    ];
-
-    let eventRows = [];
-    for (const sel of eventSelectors) {
-        const found = document.querySelectorAll(sel);
-        if (found.length > 0) {
-            eventRows = Array.from(found);
-            break;
-        }
-    }
-
-    // Selettore 2: cerchiamo bottoni quota con valori numerici
-    if (eventRows.length === 0) {
-        // Cerca gruppi di 3 bottoni consecutivi con valori numerici (1X2)
-        const allButtons = Array.from(document.querySelectorAll('button, [role="button"]'));
-        const oddsButtons = allButtons.filter(b => {
-            const txt = b.textContent.trim();
-            return /^\\d+[.,]\\d+$/.test(txt) && parseFloat(txt.replace(',', '.')) > 1.0;
-        });
-
-        if (oddsButtons.length >= 3) {
-            // Raggruppa in blocchi di 3 (1, X, 2)
-            for (let i = 0; i <= oddsButtons.length - 3; i += 3) {
-                const o1 = parseFloat(oddsButtons[i].textContent.replace(',', '.'));
-                const ox = parseFloat(oddsButtons[i+1].textContent.replace(',', '.'));
-                const o2 = parseFloat(oddsButtons[i+2].textContent.replace(',', '.'));
-                if (o1 > 1 && ox > 1 && o2 > 1) {
-                    results.push({
-                        home: '', away: '', time: '',
-                        odds1: o1, oddsX: ox, odds2: o2
-                    });
-                }
-            }
-        }
-    }
-
-    // Selettore 3: cerca testo con pattern "Squadra A - Squadra B" vicino a numeri quota
-    if (results.length === 0) {
-        const allText = document.body.innerText;
-        const lines = allText.split('\\n').map(l => l.trim()).filter(l => l);
-        let i = 0;
-        while (i < lines.length) {
-            const line = lines[i];
-            // Pattern: "Team A - Team B" (almeno 5 caratteri per parte, separato da " - ")
-            if (/ - /.test(line) && line.length > 6 && !/^\\d/.test(line)) {
-                const parts = line.split(' - ');
-                if (parts.length === 2 && parts[0].length > 2 && parts[1].length > 2) {
-                    // Cerca le prossime righe con quote
-                    let odds = [];
-                    for (let j = i+1; j < Math.min(i+15, lines.length); j++) {
-                        const m = lines[j].match(/^(\\d+[.,]\\d+)$/);
-                        if (m) {
-                            odds.push(parseFloat(m[1].replace(',', '.')));
-                            if (odds.length === 3) break;
-                        }
-                    }
-                    if (odds.length === 3 && odds.every(o => o > 1.0 && o < 50)) {
-                        results.push({
-                            home: parts[0].trim(),
-                            away: parts[1].trim(),
-                            time: '',
-                            odds1: odds[0], oddsX: odds[1], odds2: odds[2]
-                        });
-                    }
-                }
-            }
-            i++;
-        }
-    }
-
-    // Log DOM snapshot per debug
-    return {
-        results: results,
-        pageTitle: document.title,
-        bodyLength: document.body.innerText.length,
-        url: window.location.href,
-        // Primi 800 chars del testo per debug
-        bodyPreview: document.body.innerText.substring(0, 800),
-    };
-}
-"""
+# codiceGruppo = 1 → Esito finale (1X2)
+ESITO_GRUPPO = 1
+# Descrizioni outcomes Sisal → canonical
+ESITO_MAP = {"1": "1", "X": "X", "2": "2"}
 
 
 def _slugify(name: str) -> str:
@@ -151,7 +61,7 @@ def _slugify(name: str) -> str:
 
 
 class SisalScraper:
-    """Scrapes pregame odds from Sisal via Playwright DOM scraping."""
+    """Scrapes pregame odds from Sisal via Playwright network interception."""
 
     def __init__(self, browser=None):
         self._playwright: Playwright | None = None
@@ -231,78 +141,161 @@ class SisalScraper:
     ) -> list[MatchOdds]:
         assert self._page is not None
 
+        captured: list[dict[str, Any]] = []
+
+        async def on_response(response: Response) -> None:
+            url = response.url
+            # Cattura da betting.sisal.it E www.sisal.it — senza filtro content-type
+            if "sisal.it" not in url:
+                return
+            try:
+                body = await response.json()
+                # Interessa solo la risposta con i dati prematch
+                if isinstance(body, dict) and "avvenimentoFeList" in body:
+                    captured.append({"url": url, "body": body})
+                    logger.info("[Sisal] %s: catturata schedaManifestazione da %s", league_name, url)
+            except Exception:
+                pass
+
+        self._page.on("response", on_response)
+
         url = f"{BASE_URL}/scommesse-matchpoint/quote/{sisal_slug}"
         logger.info("[Sisal] Loading %s", url)
-
         try:
             await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
         except Exception as e:
             logger.warning("[Sisal] Page load issue for %s: %s", url, e)
+
+        # Aspetta che l'SPA carichi i dati prematch
+        await self._page.wait_for_timeout(8000)
+        self._page.remove_listener("response", on_response)
+
+        if not captured:
+            logger.warning("[Sisal] %s: nessuna schedaManifestazione catturata", league_name)
             return []
 
-        # Aspetta che gli elementi evento appaiano nel DOM (max 10s)
-        try:
-            await self._page.wait_for_timeout(6000)
-        except Exception:
-            pass
-
-        # Estrae dati direttamente dal DOM
-        try:
-            dom_data = await self._page.evaluate(_EXTRACT_JS)
-        except Exception as e:
-            logger.warning("[Sisal] DOM extraction failed for %s: %s", league_name, e)
-            return []
-
+        # Prendi la risposta più ricca (più eventi)
+        best = max(captured, key=lambda x: len(x["body"].get("avvenimentoFeList", [])))
         logger.info(
-            "[Sisal] %s: DOM title=%r bodyLen=%d url=%s",
+            "[Sisal] %s: parsing %d eventi da %s",
             league_name,
-            dom_data.get("pageTitle", "?"),
-            dom_data.get("bodyLength", 0),
-            dom_data.get("url", "?"),
+            len(best["body"].get("avvenimentoFeList", [])),
+            best["url"],
         )
-        logger.info("[Sisal] %s: BODY_PREVIEW=%s", league_name, dom_data.get("bodyPreview", "")[:400])
-
-        raw_events = dom_data.get("results", [])
-        logger.info("[Sisal] %s: extracted %d events from DOM", league_name, len(raw_events))
-
-        return _build_match_odds(raw_events, league_name, sport_key, country_slug)
+        return _parse_scheda(best["body"], league_name, sport_key, country_slug)
 
 
-def _build_match_odds(
-    raw_events: list[dict],
+# ── parser ────────────────────────────────────────────────────────────────────
+
+def _parse_scheda(
+    body: dict,
     league_name: str,
     sport_key: str,
     country_slug: str,
 ) -> list[MatchOdds]:
-    results: list[MatchOdds] = []
-    for evt in raw_events:
-        home = (evt.get("home") or "").strip()
-        away = (evt.get("away") or "").strip()
-        if not home or not away or home == away:
-            continue
+    """Parse a schedaManifestazione response into MatchOdds."""
+    avvenimenti: list[dict] = body.get("avvenimentoFeList", [])
+    scommessa_map: dict = body.get("scommessaMap", {})
+    info_map: dict = body.get("infoAggiuntivaMap", {})
 
-        o1 = evt.get("odds1")
-        ox = evt.get("oddsX")
-        o2 = evt.get("odds2")
-        if not (o1 and ox and o2 and o1 > 1.0 and ox > 1.0 and o2 > 1.0):
+    results: list[MatchOdds] = []
+
+    for avv in avvenimenti:
+        descrizione: str = avv.get("descrizione", "")
+        data: str = avv.get("data", "") or ""
+        avv_key: str = avv.get("key", "")
+
+        # "INTER - MILAN" → home, away
+        parts = descrizione.split(" - ", 1)
+        if len(parts) != 2:
+            continue
+        home = parts[0].strip().title()
+        away = parts[1].strip().title()
+        if not home or not away:
             continue
 
         event_name = f"{home} - {away}"
-        event_time = evt.get("time") or None
+        event_time = data if data else None
+
         home_slug = _slugify(home)
         away_slug = _slugify(away)
         match_url = f"{BASE_URL}/scommesse-matchpoint/quote/{sport_key}/{home_slug}-{away_slug}"
 
-        results.append(MatchOdds(
-            sport=sport_key,
-            league=league_name,
-            home_team=home,
-            away_team=away,
-            event_name=event_name,
-            event_time=event_time,
-            match_url=match_url,
-            market="1X2",
-            bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": {"1": o1, "X": ox, "2": o2}}],
-        ))
+        # Trova la scommessa Esito finale (codiceGruppo == 1)
+        odds_1x2 = _extract_1x2(avv_key, scommessa_map, info_map)
+        if odds_1x2:
+            results.append(MatchOdds(
+                sport=sport_key,
+                league=league_name,
+                home_team=home,
+                away_team=away,
+                event_name=event_name,
+                event_time=event_time,
+                match_url=match_url,
+                market="1X2",
+                bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_1x2}],
+            ))
 
     return results
+
+
+def _extract_1x2(
+    avv_key: str,
+    scommessa_map: dict,
+    info_map: dict,
+) -> dict[str, float] | None:
+    """Estrae le quote 1X2 dall'infoAggiuntivaMap per un avvenimento."""
+    # Cerca scommesse per questo avvenimento con codiceGruppo == 1 (Esito finale)
+    esito_scommessa = None
+    for key, scom in scommessa_map.items():
+        if not key.startswith(avv_key.split("-")[0]):  # stesso codiceAvvenimento
+            continue
+        if scom.get("codiceGruppo") == ESITO_GRUPPO:
+            esito_scommessa = scom
+            break
+
+    if not esito_scommessa:
+        # Fallback: cerca per descrizione
+        for scom in scommessa_map.values():
+            desc = scom.get("descrizione", "").upper()
+            if "ESITO" in desc or "1X2" in desc:
+                cod_avv = str(scom.get("codiceAvvenimento", ""))
+                if avv_key.startswith(cod_avv):
+                    esito_scommessa = scom
+                    break
+
+    if not esito_scommessa:
+        return None
+
+    # Estrai le infoAggiuntive (esiti) di questa scommessa
+    info_keys = [item.get("key", "") for item in esito_scommessa.get("infoAggiuntivaKeyDataList", [])]
+    odds: dict[str, float] = {}
+
+    for ik in info_keys:
+        info = info_map.get(ik, {})
+        desc = info.get("descrizione", "").strip()
+        # La quota può essere in 'quota', 'multipla', 'singola', 'coeff'
+        quota = (
+            info.get("quota")
+            or info.get("multipla")
+            or info.get("singola")
+            or info.get("coeff")
+        )
+        if desc in ESITO_MAP and quota and float(quota) > 1.0:
+            odds[ESITO_MAP[desc]] = float(quota)
+
+    if len(odds) == 3:
+        return odds
+
+    # Fallback: i valori numerici >1.0 ordinati potrebbero essere 1, X, 2
+    if not odds and info_keys:
+        vals = []
+        for ik in info_keys[:3]:
+            info = info_map.get(ik, {})
+            q = info.get("quota") or info.get("multipla") or info.get("singola")
+            if q and float(q) > 1.0:
+                vals.append(float(q))
+        if len(vals) == 3:
+            return {"1": vals[0], "X": vals[1], "2": vals[2]}
+
+    return None

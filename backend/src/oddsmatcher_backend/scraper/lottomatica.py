@@ -157,9 +157,7 @@ class LottomaticaScraper:
         async def on_response(response: Response) -> None:
             if "lottomatica.it" not in response.url:
                 return
-            ct = response.headers.get("content-type", "")
-            if "json" not in ct:
-                return
+            # Nessun filtro content-type — Lottomatica può usare tipi non standard
             try:
                 body = await response.json()
                 captured.append({"url": response.url, "body": body})
@@ -172,7 +170,7 @@ class LottomaticaScraper:
         logger.info("[Lottomatica] Loading %s", url)
         try:
             await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-            await self._page.wait_for_timeout(4000)
+            await self._page.wait_for_timeout(8000)  # aumentato per dare tempo all'SPA
         except Exception as e:
             logger.warning("[Lottomatica] Page load issue for %s: %s", url, e)
 
