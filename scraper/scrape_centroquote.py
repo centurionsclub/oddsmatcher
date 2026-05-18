@@ -99,7 +99,6 @@ BM_ALIASES: dict[str, str] = {
     "eurobet.it":     "Eurobet",
     "eurobet":        "Eurobet",
     "goldbet":        "GoldBet",
-    "lottomatica":    "Lottomatica",
     "netwin":         "NetWin",
     "netbet":         "NetBet",
     "planetwin365":   "Planetwin365",
