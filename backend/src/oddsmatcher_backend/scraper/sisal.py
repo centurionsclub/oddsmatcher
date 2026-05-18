@@ -80,6 +80,9 @@ class SisalScraper:
             locale="it-IT",
             timezone_id="Europe/Rome",
             viewport={"width": 1280, "height": 900},
+            # Blocca i Service Worker: altrimenti il SW cache intercetta le API calls
+            # e Playwright non vede le risposte tramite on_response
+            service_workers="block",
         )
         self._page = await self._context.new_page()
 
@@ -178,7 +181,11 @@ class SisalScraper:
         except Exception as e:
             logger.info("[Sisal] %s: networkidle timeout (atteso): %s", league_name, type(e).__name__)
 
-        logger.info("[Sisal] %s: page.url after nav = %s", league_name, self._page.url)
+        page_title = await self._page.title()
+        logger.info(
+            "[Sisal] %s: page.url=%s title=%r",
+            league_name, self._page.url, page_title,
+        )
         await self._page.wait_for_timeout(500)
         self._page.remove_listener("response", on_response)
 
