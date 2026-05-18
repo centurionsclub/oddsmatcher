@@ -55,6 +55,12 @@ SIMPLE_MARKET_MAP: dict[str, str] = {
     "DC": "Doppia Chance",
     "GG/NG": "Goal No Goal",
     "Esito Finale": "1X2",
+    # Basket 2-way (NBA, WNBA, Serie A Basket ecc.)
+    "T/T Risultato": "1X2",
+    "Testa a Testa Risultato": "1X2",
+    # Tennis
+    "Vincente Incontro (escl. ritiro)": "1X2",
+    "Vincente Incontro": "1X2",
 }
 
 UO_SPREADS_WANTED: set[str] = {"1.5", "2.5", "3.5"}
