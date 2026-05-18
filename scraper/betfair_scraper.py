@@ -332,7 +332,7 @@ def _market_label(market_type: str | None, market_name: str) -> tuple[str, str |
     mn = (market_name or "").lower()
 
     # By marketName (primary — marketType is not returned by Betfair catalogue)
-    if "match odds" in mn:
+    if "match odds" in mn or "moneyline" in mn:
         return "1X2", None
     if "both teams" in mn or "btts" in mn:
         return "BTTS", None
@@ -418,8 +418,8 @@ def _extract_rows(
 
         # Map Betfair runner names → centroquote outcome format
         mn = (market_name or "").lower()
-        if "match odds" in mn:
-            # Football 1X2: use sortPriority (1=Home→"1", 2=Away→"2") or name for draw
+        if "match odds" in mn or "moneyline" in mn:
+            # 1X2 / Moneyline: sortPriority 1=Home→"1", 2=Away→"2", draw="X"
             if runner_name == "The Draw":
                 outcome = "X"
             elif sort_priority == 1:
@@ -427,7 +427,7 @@ def _extract_rows(
             elif sort_priority == 2:
                 outcome = "2"
             else:
-                outcome = runner_name  # tennis/other 2-way: keep team name
+                outcome = runner_name  # fallback: keep team name
         elif "both teams" in mn or "btts" in mn:
             outcome = {"Yes": "Goal", "No": "No Goal"}.get(runner_name, runner_name)
         elif "over" in mn and "under" in mn:
