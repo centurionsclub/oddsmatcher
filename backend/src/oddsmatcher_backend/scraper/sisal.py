@@ -30,15 +30,15 @@ BOOKMAKER = "Sisal"
 
 # fmt: off
 LEAGUES: list[tuple[str, str, str, str]] = [
-    ("Serie A",          "calcio", "calcio/serie-a",                "italia"),
-    ("Serie B",          "calcio", "calcio/serie-b",                "italia"),
-    ("Champions League", "calcio", "calcio/calcio-champions-league","europa"),
-    ("Europa League",    "calcio", "calcio/calcio-europa-league",   "europa"),
-    ("Conference League","calcio", "calcio/calcio-conference-league","europa"),
-    ("Premier League",   "calcio", "calcio/calcio-premier-league",  "inghilterra"),
-    ("La Liga",          "calcio", "calcio/calcio-la-liga",         "spagna"),
-    ("Bundesliga",       "calcio", "calcio/calcio-bundesliga",      "germania"),
-    ("Ligue 1",          "calcio", "calcio/calcio-ligue-1",         "francia"),
+    ("Serie A",          "calcio", "calcio/serie-a",                    "italia"),
+    ("Serie B",          "calcio", "calcio/serie-b",                    "italia"),
+    ("Premier League",   "calcio", "calcio/inghilterra/premier-league", "inghilterra"),
+    ("La Liga",          "calcio", "calcio/spagna/liga",                "spagna"),
+    ("Bundesliga",       "calcio", "calcio/germania/bundesliga",        "germania"),
+    ("Ligue 1",          "calcio", "calcio/francia/ligue-1",            "francia"),
+    ("Champions League", "calcio", "calcio/europa/champions-league",    "europa"),
+    ("Europa League",    "calcio", "calcio/europa/europa-league",       "europa"),
+    ("Conference League","calcio", "calcio/europa/conference-league",   "europa"),
 ]
 # fmt: on
 
