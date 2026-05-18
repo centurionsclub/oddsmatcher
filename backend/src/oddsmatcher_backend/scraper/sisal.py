@@ -401,52 +401,54 @@ def _extract_over_under(
 ) -> list[dict[str, float]]:
     """Estrae le quote Over/Under per tutte le linee disponibili.
 
+    Strategia: scansiona tutte le voci infoAggiuntivaMap dell'avvenimento e
+    controlla se la esitoList contiene esiti "OVER"/"UNDER" — così non dipende
+    dalla descrizione del mercato (che varia tra versioni API Sisal).
+
     Returns: lista di dict con chiavi tipo "Over 2.5" / "Under 2.5"
-    Ogni dict = una linea (es. [{"Over 2.5": 1.65, "Under 2.5": 2.15}, ...])
     """
     results: list[dict[str, float]] = []
+    seen_lines: set[str] = set()
 
-    # Trova i codiceScommessa corrispondenti a Over/Under
-    ou_cod_scommessa: list[str] = []
-    for k, scom in scommessa_map.items():
-        if not k.startswith(avv_key + "-"):
+    prefix = avv_key + "-"
+    for info_key, info in info_map.items():
+        if not info_key.startswith(prefix):
             continue
-        desc = scom.get("descrizione", "").upper().strip()
-        if any(kw in desc for kw in _OU_KEYWORDS):
-            # k = "avv_key-codiceScommessa"
-            cod = k[len(avv_key) + 1:]
-            ou_cod_scommessa.append(cod)
-            logger.debug("[Sisal] O/U scommessa trovata: cod=%s desc='%s'", cod, scom.get("descrizione"))
 
-    if not ou_cod_scommessa:
-        return results
+        esito_list = info.get("esitoList", [])
+        if not esito_list:
+            continue
 
-    for cod in ou_cod_scommessa:
-        prefix = f"{avv_key}-{cod}-"
-        for info_key, info in info_map.items():
-            if not info_key.startswith(prefix):
+        # Controlla se questa entry ha esiti Over/Under
+        odds: dict[str, float] = {}
+        for esito in esito_list:
+            desc = esito.get("descrizione", "").strip().upper()
+            quota = esito.get("quota")
+            stato = esito.get("stato", 0)
+            if not quota or stato != 1:
                 continue
+            if "OVER" in desc or desc == "O":
+                odds["__over__"] = round(float(quota) / 100.0, 2)
+            elif "UNDER" in desc or desc == "U":
+                odds["__under__"] = round(float(quota) / 100.0, 2)
 
-            id_info_str = info_key[len(prefix):]
-            line = _decode_ou_line(id_info_str, info)
-            if not line:
-                logger.debug("[Sisal] O/U linea non decodificabile: key=%s info_keys=%s", info_key, list(info.keys())[:6])
-                continue
+        if len(odds) != 2:
+            continue  # non è un mercato Over/Under
 
-            esito_list = info.get("esitoList", [])
-            odds: dict[str, float] = {}
-            for esito in esito_list:
-                desc = esito.get("descrizione", "").strip().upper()
-                quota = esito.get("quota")
-                stato = esito.get("stato", 0)
-                if quota and stato == 1:
-                    if "OVER" in desc or desc == "O":
-                        odds[f"Over {line}"] = round(float(quota) / 100.0, 2)
-                    elif "UNDER" in desc or desc == "U":
-                        odds[f"Under {line}"] = round(float(quota) / 100.0, 2)
+        # Determina la linea dal key (ultima parte dopo "avv_key-cod-")
+        parts = info_key[len(prefix):].split("-")
+        id_info_str = parts[-1] if parts else ""
+        line = _decode_ou_line(id_info_str, info)
+        if not line:
+            logger.debug("[Sisal] O/U linea non decodificabile: key=%s info=%s", info_key, {k: info.get(k) for k in ("descrizione", "quota", "idInfoAggiuntiva")})
+            continue
 
-            if len(odds) == 2:
-                results.append(odds)
-                logger.debug("[Sisal] O/U estratto: linea=%s odds=%s", line, odds)
+        if line in seen_lines:
+            continue
+        seen_lines.add(line)
+
+        result = {f"Over {line}": odds["__over__"], f"Under {line}": odds["__under__"]}
+        results.append(result)
+        logger.debug("[Sisal] O/U estratto: key=%s linea=%s odds=%s", info_key, line, result)
 
     return results
