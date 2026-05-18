@@ -633,7 +633,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
   const [selectedTreVie, setSelectedTreVie] = useState<TreVieGroup | null>(null);
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
-  const [singolaSort, setSingolaSort] = useState<"data" | "rating">("data");
+  const [singolaSort, setSingolaSort] = useState<"data" | "rating">("rating");
 
   // Reset selezione multipla quando l'utente clicca Aggiorna o Pulisci
   useEffect(() => {
