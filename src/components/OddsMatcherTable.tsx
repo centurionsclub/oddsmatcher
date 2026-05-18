@@ -633,6 +633,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   const [selectedOpp, setSelectedOpp] = useState<Opportunity | null>(null);
   const [selectedTreVie, setSelectedTreVie] = useState<TreVieGroup | null>(null);
   const [multiplaSelected, setMultiplaSelected] = useState<Opportunity[]>([]);
+  const [singolaSort, setSingolaSort] = useState<"data" | "rating">("data");
 
   // Reset selezione multipla quando l'utente clicca Aggiorna o Pulisci
   useEffect(() => {
@@ -1192,7 +1193,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         </div>
       );
     }
-    return renderOpportunityTable(filtered, isPuntaPuntaMode);
+    return renderOpportunityTable(filtered, isPuntaPuntaMode, singolaSort);
   }
 
   // ═══ RENDER: TRE VIE ═══
@@ -1864,28 +1865,34 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   }
 
   // ═══ Helper: render opportunity table ═══
-  function renderOpportunityTable(opps: Opportunity[], isBookVsBook: boolean) {
+  function renderOpportunityTable(opps: Opportunity[], isBookVsBook: boolean, sortMode: "data" | "rating" = "data") {
     const showVolume = !isBookVsBook; // volume only in back-lay mode
     const colSpan = showVolume ? 11 : 10;
 
-    // Sort: date ASC → rating DESC
+    // Sort: data ASC → rating DESC  OR  rating DESC globale
     const sorted = [...opps].sort((a, b) => {
+      if (sortMode === "rating") return b.rating - a.rating;
       const da = a.eventTime.slice(0, 10);
       const db = b.eventTime.slice(0, 10);
       if (da !== db) return da < db ? -1 : 1;
       return b.rating - a.rating;
     });
 
-    // Group by date
+    // Group by date (solo in modalità "data")
     const dayGroups: { date: string; opps: Opportunity[] }[] = [];
-    for (const opp of sorted) {
-      const date = opp.eventTime.slice(0, 10);
-      const last = dayGroups[dayGroups.length - 1];
-      if (!last || last.date !== date) {
-        dayGroups.push({ date, opps: [opp] });
-      } else {
-        last.opps.push(opp);
+    if (sortMode === "data") {
+      for (const opp of sorted) {
+        const date = opp.eventTime.slice(0, 10);
+        const last = dayGroups[dayGroups.length - 1];
+        if (!last || last.date !== date) {
+          dayGroups.push({ date, opps: [opp] });
+        } else {
+          last.opps.push(opp);
+        }
       }
+    } else {
+      // Rating mode: un unico gruppo fittizio
+      dayGroups.push({ date: "", opps: sorted });
     }
 
     // Italian day label: "Mer 14 Mag"
@@ -1918,11 +1925,22 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       >
         ↑
       </button>
-      {/* Date jumper */}
-      <DateJumper
-        idPrefix="day-"
-        days={dayGroups.map(g => ({ date: g.date, label: formatDayLabel(g.date), count: g.opps.length }))}
-      />
+      {/* Sort toggle + Date jumper */}
+      <div className="flex items-center gap-3 px-3 py-2 bg-[#0d1829] border-b border-[#1e3050]">
+        <span className="text-[#87c4e8] text-xs font-semibold uppercase tracking-wide">Ordina:</span>
+        <button
+          onClick={() => setSingolaSort(sortMode === "data" ? "rating" : "data")}
+          className={`px-3 py-1 rounded text-xs font-bold border transition-colors ${sortMode === "data" ? "bg-[#1e3050] border-[#2a4060] text-slate-300 hover:bg-[#2a4060]" : "bg-[#87c4e8]/20 border-[#87c4e8]/60 text-[#87c4e8]"}`}
+        >
+          {sortMode === "data" ? "📅 Per data" : "⭐ Per rating"}
+        </button>
+      </div>
+      {sortMode === "data" && (
+        <DateJumper
+          idPrefix="day-"
+          days={dayGroups.map(g => ({ date: g.date, label: formatDayLabel(g.date), count: g.opps.length }))}
+        />
+      )}
 
       <div>
         <div className="overflow-x-auto">
@@ -1945,7 +1963,8 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             <tbody className="divide-y divide-[#1e3050]">
               {dayGroups.map(({ date, opps: dayOpps }) => (
                 <>
-                  {/* Day divider row */}
+                  {/* Day divider row — nascosto in modalità rating */}
+                  {sortMode === "data" && (
                   <tr key={`divider-${date}`} id={`day-${date}`}>
                     <td colSpan={colSpan} className="bg-[#0d1829] border-t-2 border-[#87c4e8] py-2 px-4">
                       <span className="text-[#87c4e8] font-semibold text-[14px] uppercase tracking-wider">
@@ -1956,6 +1975,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
                       </span>
                     </td>
                   </tr>
+                  )}
                   {dayOpps.map((opp, i) => {
                     const bookColor = getBookColor(opp.bookmaker);
                     const exchColor = getBookColor(opp.exchange);
