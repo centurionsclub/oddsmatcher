@@ -81,11 +81,12 @@ for _t in ["05", "15", "25", "35", "45", "55", "65", "75", "85", "95"]:
     v = _t[0] + "." + _t[1]
     MARKET_LABEL_MAP[f"OVER_UNDER_{_t}"] = f"Over/Under"
 
-# Mapping Betfair sport name → nostra categoria
+# Mapping Betfair eventTypeId → nostra categoria
+# 1=Football, 2=Tennis, 7522=Basketball (7=Horse Racing, non basket!)
 BF_SPORT_NAME: dict[str, str] = {
     "1": "calcio",
     "2": "tennis",
-    "7": "basket",
+    "7522": "basket",
 }
 
 BOOKMAKER = "Betfair Exchange"
