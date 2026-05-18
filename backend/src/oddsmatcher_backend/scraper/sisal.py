@@ -166,8 +166,8 @@ class SisalScraper:
         except Exception as e:
             logger.warning("[Sisal] Page load issue for %s: %s", url, e)
 
-        # Aspetta che l'SPA carichi i dati prematch
-        await self._page.wait_for_timeout(8000)
+        # Aspetta che l'SPA carichi i dati prematch (schedaManifestazione arriva dopo ~10-20s)
+        await self._page.wait_for_timeout(25000)
         self._page.remove_listener("response", on_response)
 
         if not captured:
