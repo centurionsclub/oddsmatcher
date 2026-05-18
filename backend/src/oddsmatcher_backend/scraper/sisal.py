@@ -299,6 +299,9 @@ def _parse_scheda(
     return results
 
 
+_ESITO_FINALE_COD = "3"  # codiceScommessa=3 → "1X2 ESITO FINALE"
+
+
 def _extract_1x2(
     avv_key: str,
     scommessa_map: dict,
@@ -306,56 +309,41 @@ def _extract_1x2(
 ) -> dict[str, float] | None:
     """Estrae le quote 1X2 per un avvenimento.
 
-    avv_key = 'codicePalinsesto-codiceAvvenimento' (e.g. '36211-257')
-    Le scommesse di questo avvenimento hanno chiavi che iniziano con avv_key + '-'.
-    Il mercato Esito Finale (1X2) ha codiceScommessa=1.
-    Le info (quote) hanno chiave avv_key + '-' + codiceScommessa + '-' + idInfoAggiuntiva.
+    Struttura reale:
+      - codiceScommessa=3 → "1X2 ESITO FINALE"
+      - info key = avv_key + '-3-0'  (idInfoAggiuntiva sempre 0)
+      - odds in info['esitoList'][i]['quota'] (intero, es. 172 = 1.72)
+      - descrizione esito: "1", "X", "2"
     """
-    prefix = avv_key + "-"
-
-    # Trova la scommessa Esito Finale: prova codiceScommessa=1, poi cerca per descrizione
-    esito_cod: str | None = None
-
-    # Prima prova diretta con codiceScommessa=1
-    if (prefix + "1") in scommessa_map:
-        esito_cod = "1"
-    else:
-        # Cerca tra tutte le scommesse di questo avvenimento
+    # Verifica che il mercato 1X2 esista per questo avvenimento
+    scom_key = f"{avv_key}-{_ESITO_FINALE_COD}"
+    if scom_key not in scommessa_map:
+        # Fallback: cerca per descrizione
+        found = False
         for k, scom in scommessa_map.items():
-            if not k.startswith(prefix):
-                continue
-            desc = scom.get("descrizione", "").upper().strip()
-            if "ESITO" in desc or "1X2" in desc or desc in ("1 X 2",):
-                # Il codiceScommessa è l'ultima parte della key
-                esito_cod = k.split("-")[-1]
-                break
+            if k.startswith(avv_key + "-"):
+                desc = scom.get("descrizione", "").upper().strip()
+                if "1X2" in desc or "ESITO FINALE" in desc:
+                    scom_key = k
+                    found = True
+                    break
+        if not found:
+            return None
 
-    if esito_cod is None:
+    esito_cod = scom_key.split("-")[-1]
+    info_key = f"{avv_key}-{esito_cod}-0"
+    info = info_map.get(info_key)
+    if not info:
         return None
 
-    # Leggi le info (quote) per questo mercato
+    esito_list = info.get("esitoList", [])
     odds: dict[str, float] = {}
-    for i in range(10):
-        info_key = f"{avv_key}-{esito_cod}-{i}"
-        info = info_map.get(info_key)
-        if info is None:
-            if i > 0:
-                break
-            continue
-        desc = info.get("descrizione", "").strip()
-        quota = (
-            info.get("quota")
-            or info.get("multipla")
-            or info.get("singola")
-            or info.get("coeff")
-        )
-        if quota and float(quota) > 1.0:
-            if desc in ESITO_MAP:
-                odds[ESITO_MAP[desc]] = float(quota)
-            elif not desc and len(odds) < 3:
-                # Fallback posizionale: 0→1, 1→X, 2→2
-                pos_map = {0: "1", 1: "X", 2: "2"}
-                if i in pos_map:
-                    odds[pos_map[i]] = float(quota)
+    for esito in esito_list:
+        desc = esito.get("descrizione", "").strip()
+        quota = esito.get("quota")
+        stato = esito.get("stato", 0)
+        if quota and stato == 1 and desc in ESITO_MAP:
+            # quota è intero centesimale: 172 → 1.72
+            odds[ESITO_MAP[desc]] = round(float(quota) / 100.0, 2)
 
     return odds if len(odds) == 3 else None
