@@ -145,35 +145,40 @@ class SisalScraper:
 
         async def on_response(response: Response) -> None:
             url = response.url
-            # Cattura da betting.sisal.it E www.sisal.it — senza filtro content-type
             if "sisal.it" not in url:
                 return
             try:
                 body = await response.json()
-                # Interessa solo la risposta con i dati prematch
                 if isinstance(body, dict) and "avvenimentoFeList" in body:
                     captured.append({"url": url, "body": body})
                     logger.info("[Sisal] %s: catturata schedaManifestazione da %s", league_name, url)
+                elif "schedaManifestazione" in url:
+                    # Risposta JSON ma senza i dati attesi — log per diagnosi
+                    logger.warning(
+                        "[Sisal] %s: schedaManifestazione senza avvenimentoFeList: keys=%s",
+                        league_name, list(body.keys())[:8],
+                    )
             except Exception:
-                pass
+                if "schedaManifestazione" in url:
+                    # Risposta non-JSON (probabile blocco Akamai)
+                    logger.warning(
+                        "[Sisal] %s: schedaManifestazione non-JSON status=%d url=%s",
+                        league_name, response.status, url[:120],
+                    )
 
         self._page.on("response", on_response)
 
         url = f"{BASE_URL}/scommesse-matchpoint/quote/{sisal_slug}"
         logger.info("[Sisal] Loading %s", url)
         try:
-            # Usa expect_response per attendere esattamente la schedaManifestazione
-            # (si registra PRIMA della navigazione per non perdere la risposta)
-            async with self._page.expect_response(
-                lambda r: "schedaManifestazione" in r.url and "sisal.it" in r.url,
-                timeout=55_000,
-            ):
-                await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-            # Brevissima pausa per assicurarsi che on_response abbia elaborato
-            await self._page.wait_for_timeout(500)
+            # networkidle fa sempre timeout sulle SPA (polling continuo) — va bene:
+            # il timeout scatta dopo 65s durante i quali on_response cattura schedaManifestazione
+            await self._page.goto(url, wait_until="networkidle", timeout=65_000)
+            logger.info("[Sisal] %s: networkidle raggiunto (inatteso)", league_name)
         except Exception as e:
-            logger.warning("[Sisal] %s: timeout/errore navigazione: %s", league_name, e)
+            logger.info("[Sisal] %s: networkidle timeout (atteso): %s", league_name, type(e).__name__)
 
+        await self._page.wait_for_timeout(500)
         self._page.remove_listener("response", on_response)
 
         if not captured:

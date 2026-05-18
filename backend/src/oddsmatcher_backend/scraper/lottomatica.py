@@ -169,11 +169,13 @@ class LottomaticaScraper:
         url = BASE_URL + page_path
         logger.info("[Lottomatica] Loading %s", url)
         try:
-            await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-            await self._page.wait_for_timeout(50000)  # SPA API calls arrivano dopo 25-50s
+            # networkidle fa sempre timeout sulle SPA — durante i 65s on_response cattura le API
+            await self._page.goto(url, wait_until="networkidle", timeout=65_000)
+            logger.info("[Lottomatica] %s: networkidle raggiunto (inatteso)", league_name)
         except Exception as e:
-            logger.warning("[Lottomatica] Page load issue for %s: %s", url, e)
+            logger.info("[Lottomatica] %s: networkidle timeout (atteso): %s", league_name, type(e).__name__)
 
+        await self._page.wait_for_timeout(500)
         self._page.remove_listener("response", on_response)
 
         logger.info("[Lottomatica] %s: captured %d JSON responses", league_name, len(captured))
