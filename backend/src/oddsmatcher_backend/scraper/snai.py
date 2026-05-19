@@ -355,13 +355,16 @@ class SnaiScraper:
 
         page.on("response", on_response)
 
-        # ── Step 1: load homepage first (warms up session cookies) ───
+        # ── Step 1: load homepage — warms up session + triggers alberaturaPrematch ──
         logger.info("[Snai] Navigating to homepage...")
         try:
-            await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30_000)
-            await page.wait_for_timeout(2000)
+            await page.goto(BASE_URL, wait_until="networkidle", timeout=40_000)
+            logger.info("[Snai] Homepage: networkidle")
         except Exception as e:
             logger.info("[Snai] Homepage: %s", type(e).__name__)
+
+        # Wait for alberatura response to arrive (sometimes fires after networkidle)
+        await page.wait_for_timeout(4000)
 
         # ── Step 2: accept cookie consent if present ──────────────────
         COOKIE_SELECTORS = [
@@ -382,29 +385,33 @@ class SnaiScraper:
             except Exception:
                 pass
 
-        # ── Step 3: navigate to scommesse to trigger API calls ────────
-        logger.info("[Snai] Navigating to /scommesse...")
-        try:
-            await page.goto(BASE_URL + "/scommesse", wait_until="networkidle", timeout=40_000)
-            logger.info("[Snai] /scommesse loaded")
-        except Exception as e:
-            logger.info("[Snai] /scommesse: %s", type(e).__name__)
+        # ── Step 3: if alberatura not yet captured, navigate to sport page ──
+        # We intentionally avoid /scommesse which causes ERR_HTTP2_PROTOCOL_ERROR
+        # via the proxy. The alberatura is usually captured during the homepage load.
+        if not captured_alberatura:
+            logger.info("[Snai] alberatura not yet captured, trying /scommesse/calcio…")
+            try:
+                await page.goto(BASE_URL + "/scommesse/calcio", wait_until="networkidle", timeout=40_000)
+                logger.info("[Snai] /scommesse/calcio: networkidle")
+            except Exception as e:
+                logger.info("[Snai] /scommesse/calcio: %s", type(e).__name__)
+            await page.wait_for_timeout(5000)
 
-        await page.wait_for_timeout(5000)
-
-        # ── Diagnostics ───────────────────────────────────────────────
-        try:
-            title = await page.title()
-            final_url = page.url
-            logger.info("[Snai] Page title: %s | URL: %s", title, final_url)
-            body_html = await page.evaluate("document.body ? document.body.innerHTML : 'NO BODY'")
-            logger.info("[Snai] Body snippet: %.3000s", body_html)
-        except Exception as ex:
-            logger.warning("[Snai] Could not read DOM: %s", ex)
         logger.info("[Snai] intercepted_urls (%d): %s", len(intercepted_urls), intercepted_urls[:30])
 
         page.remove_listener("response", on_response)
         logger.info("[Snai] alberatura captured: %s", bool(captured_alberatura))
+
+        # ── Step 4: make sure we're on a snai.it page for CORS-safe fetch() calls ──
+        # If the page ended up on an error page, navigate back to homepage.
+        current_url = page.url
+        if not current_url.startswith("https://www.snai.it") and not current_url.startswith("https://betting-snai"):
+            logger.info("[Snai] Page drifted to %s — navigating back to homepage", current_url)
+            try:
+                await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30_000)
+                await page.wait_for_timeout(2000)
+            except Exception as e:
+                logger.warning("[Snai] Could not return to homepage: %s", e)
 
         # ── Find wanted competitions ───────────────────────────────────
         competitions = self._find_competitions(captured_alberatura, sport)
