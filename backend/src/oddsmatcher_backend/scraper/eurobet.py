@@ -22,18 +22,27 @@ BOOKMAKER = "Eurobet"
 
 # fmt: off
 LEAGUES: list[tuple[str, str, str]] = [
-    ("Serie A",           "calcio", "/it/scommesse/#!sport/calcio/italia/serie-a/"),
-    ("Serie B",           "calcio", "/it/scommesse/#!sport/calcio/italia/serie-b/"),
-    ("Premier League",    "calcio", "/it/scommesse/#!sport/calcio/inghilterra/premier-league/"),
-    ("La Liga",           "calcio", "/it/scommesse/#!sport/calcio/spagna/la-liga/"),
-    ("Bundesliga",        "calcio", "/it/scommesse/#!sport/calcio/germania/bundesliga/"),
-    ("Ligue 1",           "calcio", "/it/scommesse/#!sport/calcio/francia/ligue-1/"),
-    ("Champions League",  "calcio", "/it/scommesse/#!sport/calcio/europa/champions-league/"),
-    ("Europa League",     "calcio", "/it/scommesse/#!sport/calcio/europa/europa-league/"),
-    ("Conference League", "calcio", "/it/scommesse/#!sport/calcio/europa/conference-league/"),
-    ("NBA",               "basket", "/it/scommesse/#!sport/basket/usa/nba/"),
-    ("Serie A Basket",    "basket", "/it/scommesse/#!sport/basket/italia/serie-a/"),
-    ("ATP",               "tennis", "/it/scommesse/#!sport/tennis/"),
+    # Calcio
+    ("Serie A",           "calcio", "/it/scommesse/calcio/it-serie-a"),
+    ("Serie B",           "calcio", "/it/scommesse/calcio/ita-serie-b"),
+    ("Champions League",  "calcio", "/it/scommesse/calcio/eu-champions-league"),
+    ("Europa League",     "calcio", "/it/scommesse/calcio/eu-europa-league"),
+    ("Conference League", "calcio", "/it/scommesse/calcio/eu-conference-league"),
+    ("Premier League",    "calcio", "/it/scommesse/calcio/ing-premier-league"),
+    ("La Liga",           "calcio", "/it/scommesse/calcio/es-liga"),
+    ("Bundesliga",        "calcio", "/it/scommesse/calcio/de-bundesliga"),
+    # Tennis
+    ("ATP Amburgo",       "tennis", "/it/scommesse/tennis/de-amburgo"),
+    ("ATP Ginevra",       "tennis", "/it/scommesse/tennis/ch-ginevra"),
+    ("WTA Rabat",         "tennis", "/it/scommesse/tennis/ma-rabat"),
+    ("WTA Strasburgo",    "tennis", "/it/scommesse/tennis/fr-strasburgo"),
+    ("Roland Garros",     "tennis", "/it/scommesse/tennis/fr-roland-garros-m"),
+    ("Wimbledon",         "tennis", "/it/scommesse/tennis/ing-wimbledon"),
+    ("US Open",           "tennis", "/it/scommesse/tennis/us-open-m"),
+    ("Australian Open",   "tennis", "/it/scommesse/tennis/au-australian-open-m"),
+    # Basket
+    ("NBA",               "basket", "/it/scommesse/basket/us-nba"),
+    ("Serie A Basket",    "basket", "/it/scommesse/basket/it-serie-a12"),
 ]
 # fmt: on
 
