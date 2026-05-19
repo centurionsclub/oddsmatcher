@@ -298,9 +298,21 @@ def _parse_kambi_events(data: Any, league_name: str, sport_key: str) -> list[Mat
 
 
 class EurobetScraper:
-    """Direct Kambi API scraper for Eurobet Italy — no browser, no Cloudflare."""
+    """Eurobet scraper — Playwright browser intercepts Kambi API calls.
+
+    Direct httpx to Kambi CDN gets 429 (rate-limited by proxy IP).
+    Using a browser session: the JS on eurobet.it makes Kambi API calls
+    that carry browser fingerprint + cookies, bypassing the CDN rate limit.
+    """
 
     bookmaker_name = BOOKMAKER
+
+    # Eurobet sport pages that trigger Kambi API calls
+    SPORT_PAGES: list[tuple[str, str]] = [
+        ("calcio",  "https://www.eurobet.it/it/scommesse/sport/calcio/"),
+        ("tennis",  "https://www.eurobet.it/it/scommesse/sport/tennis/"),
+        ("basket",  "https://www.eurobet.it/it/scommesse/sport/basket/"),
+    ]
 
     async def scrape_all(self) -> list[MatchOdds]:
         return await self._run(sport_filter=None)
@@ -309,61 +321,96 @@ class EurobetScraper:
         return await self._run(sport_filter=sport)
 
     async def _run(self, sport_filter: str | None) -> list[MatchOdds]:
-        proxy_url = os.environ.get("PROXY_URL")
-        if proxy_url:
-            logger.info("[Eurobet] Using proxy: %s", proxy_url.split("@")[-1] if "@" in proxy_url else proxy_url)
-
-        all_results: list[MatchOdds] = []
         import json as _json
+        import os, urllib.parse
+        from playwright.async_api import async_playwright, Response as _Response
 
-        # Wanted league names per sport_key (for filtering sport-level responses)
+        proxy_url = os.environ.get("PROXY_URL")
+
+        # Wanted league names per sport (for filtering intercepted Kambi events)
         wanted_leagues: dict[str, set[str]] = {}
         for lg_name, sp_key, _ in LEAGUES:
             wanted_leagues.setdefault(sp_key, set()).add(lg_name)
 
-        async with httpx.AsyncClient(
-            headers=_HEADERS,
-            timeout=30,
-            follow_redirects=True,
-            proxy=proxy_url,
-        ) as client:
-            # Fetch sport-level (3 requests total instead of 16)
-            for sport_key, kambi_sport in SPORT_PATHS:
-                if sport_filter and sport_key != sport_filter:
-                    continue
+        all_results: list[MatchOdds] = []
 
-                url = f"{KAMBI_BASE}/listView/{kambi_sport}.json?{KAMBI_PARAMS}"
-                logger.info("[Eurobet] Fetching sport %s — %s", sport_key, url)
+        async with async_playwright() as pw:
+            proxy = None
+            if proxy_url:
+                p = urllib.parse.urlparse(proxy_url)
+                proxy = {
+                    "server": f"{p.scheme}://{p.hostname}:{p.port}",
+                    "username": p.username or "",
+                    "password": p.password or "",
+                }
+                logger.info("[Eurobet] Using proxy: %s:%s", p.hostname, p.port)
 
-                # Small delay to be respectful
-                await asyncio.sleep(2.0)
+            browser = await pw.chromium.launch(
+                headless=False,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+                proxy=proxy,
+            )
+            try:
+                context = await browser.new_context(
+                    user_agent=_HEADERS["User-Agent"],
+                    locale="it-IT",
+                    timezone_id="Europe/Rome",
+                    viewport={"width": 1280, "height": 800},
+                )
                 try:
-                    resp = await client.get(url)
-                    if resp.status_code == 404:
-                        logger.info("[Eurobet] %s: 404 (no events)", sport_key)
-                        continue
-                    if resp.status_code == 429:
-                        logger.warning("[Eurobet] %s: 429 — waiting 10s and retrying", sport_key)
-                        await asyncio.sleep(10.0)
-                        resp = await client.get(url)
-                    if resp.status_code == 429:
-                        logger.error("[Eurobet] %s: 429 again — skipping", sport_key)
-                        continue
-                    resp.raise_for_status()
-                    data = resp.json()
-                except Exception as exc:
-                    logger.error("[Eurobet] %s: request failed: %s", sport_key, exc)
-                    continue
+                    from playwright_stealth import stealth_async as _stealth_async
+                    page = await context.new_page()
+                    await _stealth_async(page)
+                    logger.info("[Eurobet] playwright-stealth applied")
+                except ImportError:
+                    page = await context.new_page()
+                    logger.warning("[Eurobet] playwright-stealth not installed")
 
-                rows = _parse_kambi_events_sport(data, sport_key, wanted_leagues.get(sport_key, set()))
-                if not rows:
-                    preview = _json.dumps(data, ensure_ascii=False)[:400]
-                    logger.info("[Eurobet] %s: 0 rows — response preview: %s", sport_key, preview)
-                else:
-                    n_events = len({r.event_name for r in rows})
-                    logger.info("[Eurobet] %s: %d events, %d market rows", sport_key, n_events, len(rows))
+                for sport_key, sport_url in self.SPORT_PAGES:
+                    if sport_filter and sport_key != sport_filter:
+                        continue
 
-                all_results.extend(rows)
+                    captured: list[MatchOdds] = []
+
+                    async def _on_response(resp: _Response, _sk: str = sport_key, _cap: list = captured) -> None:
+                        if "kambicdn.com" not in resp.url and "kambi" not in resp.url:
+                            return
+                        try:
+                            data = await resp.json()
+                            rows = _parse_kambi_events_sport(data, _sk, wanted_leagues.get(_sk, set()))
+                            if rows:
+                                logger.info("[Eurobet] Intercepted Kambi resp for %s: %d rows", _sk, len(rows))
+                                _cap.extend(rows)
+                            else:
+                                preview = _json.dumps(data, ensure_ascii=False)[:200] if data else "empty"
+                                logger.debug("[Eurobet] Kambi resp 0 rows (sport=%s) — %s", _sk, preview)
+                        except Exception:
+                            pass
+
+                    page.on("response", _on_response)
+                    logger.info("[Eurobet] Navigating to %s", sport_url)
+                    try:
+                        await page.goto(sport_url, wait_until="networkidle", timeout=45_000)
+                        logger.info("[Eurobet] %s: networkidle", sport_key)
+                    except Exception as e:
+                        logger.info("[Eurobet] %s: %s — continuing", sport_key, type(e).__name__)
+                    await page.wait_for_timeout(3000)
+                    page.remove_listener("response", _on_response)
+
+                    # Deduplicate by (event_name, market)
+                    seen: dict[tuple[str, str], MatchOdds] = {}
+                    for r in captured:
+                        seen[(r.event_name, r.market)] = r
+                    deduped = list(seen.values())
+                    n_events = len({r.event_name for r in deduped})
+                    logger.info("[Eurobet] %s: %d events, %d market rows (after dedup)",
+                                sport_key, n_events, len(deduped))
+                    all_results.extend(deduped)
+
+                    await asyncio.sleep(2.0)
+
+            finally:
+                await browser.close()
 
         logger.info("[Eurobet] Total rows: %d", len(all_results))
         return all_results

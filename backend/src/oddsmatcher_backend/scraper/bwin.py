@@ -52,6 +52,9 @@ SIMPLE_MARKET_MAP: dict[str, str] = {
     "1X2": "1X2", "Risultato 1 X 2": "1X2", "Match Result": "1X2",
     "Esito Finale": "1X2", "Result": "1X2", "Moneyline": "1X2",
     "Scommessa 1 2 - Chi vincerà?": "1X2",
+    # Basket/tennis head-to-head (no draw, 2 outcomes)
+    "Testa a testa (vincitore)": "1X2", "Vincitore partita": "1X2",
+    "Head to Head": "1X2", "Testa a Testa": "1X2",
     "Double Chance": "DC", "Doppia Chance": "DC",
     "Both Teams to Score": "BTTS", "Goal/No Goal": "BTTS",
 }
@@ -213,7 +216,8 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                 for r in sels_raw:
                     if not isinstance(r, dict):
                         continue
-                    lbl_raw = _get_name_str(r.get("name") or r.get("sourceName", ""))
+                    # Prefer sourceName ("1"/"X"/"2") over display name (player name)
+                    lbl_raw = _get_name_str(r.get("sourceName") or r.get("name", ""))
                     lbl = OUTCOME_MAP.get(lbl_raw, lbl_raw)
                     f = _get_odds_float(r)
                     if f and lbl:
@@ -463,10 +467,19 @@ class BwinScraper(BasePlaywrightScraper):
                         n_events, len(self._captured_rows))
 
         # Filter by sport if requested
-        if sport:
-            filtered = [r for r in self._captured_rows if r.sport == sport]
-        else:
-            filtered = self._captured_rows
+        rows = [r for r in self._captured_rows if r.sport == sport] if sport else list(self._captured_rows)
+
+        # Deduplicate: same event may appear in multiple CDS responses during navigation.
+        # Keep the last captured entry per (event_name, market) to avoid DB unique-key conflicts.
+        seen: dict[tuple[str, str], MatchOdds] = {}
+        for r in rows:
+            seen[(r.event_name, r.market)] = r
+        filtered = list(seen.values())
+
+        n_before = len(rows)
+        n_after = len(filtered)
+        if n_before != n_after:
+            logger.info("[Bwin] Deduplicated %d → %d rows", n_before, n_after)
 
         self._log.info("[Bwin] Total match+market rows: %d", len(filtered))
         return filtered

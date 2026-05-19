@@ -280,7 +280,7 @@ def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[Matc
 # Events API endpoint — {manif_id} is replaced per-competition
 EVENTS_API = (
     "https://" + "betting-snai.flutterseatech.it"
-    + "/api/lettura-palinsesto-sport/palinsesto/prematch/live-ora-for-cards"
+    + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList"
     + "/{manif_id}?offerId=0&metaTplEnabled=true&deep=true"
 )
 
