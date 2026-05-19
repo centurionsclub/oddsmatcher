@@ -37,22 +37,25 @@ BOOKMAKER = "Eurobet"
 
 # fmt: off
 # (league_name, sport_key, page_path)
+# NOTA: i path esatti vengono scoperti al primo run (HTML snippet nel log).
+# Eurobet potrebbe usare hash routing (#!) o path diversi.
+# Proviamo sia i path diretti che la homepage sport per catturare le API.
 LEAGUES: list[tuple[str, str, str]] = [
-    # Calcio
-    ("Serie A",           "calcio", "/it/scommesse/sport/calcio/italy/serie-a/"),
-    ("Serie B",           "calcio", "/it/scommesse/sport/calcio/italy/serie-b/"),
-    ("Premier League",    "calcio", "/it/scommesse/sport/calcio/england/premier-league/"),
-    ("La Liga",           "calcio", "/it/scommesse/sport/calcio/spain/la-liga/"),
-    ("Bundesliga",        "calcio", "/it/scommesse/sport/calcio/germany/bundesliga/"),
-    ("Ligue 1",           "calcio", "/it/scommesse/sport/calcio/france/ligue-1/"),
-    ("Champions League",  "calcio", "/it/scommesse/sport/calcio/europe/champions-league/"),
-    ("Europa League",     "calcio", "/it/scommesse/sport/calcio/europe/europa-league/"),
-    ("Conference League", "calcio", "/it/scommesse/sport/calcio/europe/conference-league/"),
+    # Calcio — proviamo prima la homepage del calcio che di solito carica Serie A
+    ("Serie A",           "calcio", "/it/scommesse/#!sport/calcio/italia/serie-a/"),
+    ("Serie B",           "calcio", "/it/scommesse/#!sport/calcio/italia/serie-b/"),
+    ("Premier League",    "calcio", "/it/scommesse/#!sport/calcio/inghilterra/premier-league/"),
+    ("La Liga",           "calcio", "/it/scommesse/#!sport/calcio/spagna/la-liga/"),
+    ("Bundesliga",        "calcio", "/it/scommesse/#!sport/calcio/germania/bundesliga/"),
+    ("Ligue 1",           "calcio", "/it/scommesse/#!sport/calcio/francia/ligue-1/"),
+    ("Champions League",  "calcio", "/it/scommesse/#!sport/calcio/europa/champions-league/"),
+    ("Europa League",     "calcio", "/it/scommesse/#!sport/calcio/europa/europa-league/"),
+    ("Conference League", "calcio", "/it/scommesse/#!sport/calcio/europa/conference-league/"),
     # Basket
-    ("NBA",               "basket", "/it/scommesse/sport/basket/usa/nba/"),
-    ("Serie A Basket",    "basket", "/it/scommesse/sport/basket/italy/serie-a/"),
+    ("NBA",               "basket", "/it/scommesse/#!sport/basket/usa/nba/"),
+    ("Serie A Basket",    "basket", "/it/scommesse/#!sport/basket/italia/serie-a/"),
     # Tennis
-    ("ATP",               "tennis", "/it/scommesse/sport/tennis/"),
+    ("ATP",               "tennis", "/it/scommesse/#!sport/tennis/"),
 ]
 # fmt: on
 
@@ -227,10 +230,14 @@ class EurobetScraper:
     ) -> list[MatchOdds]:
         assert self._page is not None
 
+        # Cattura TUTTE le risposte JSON — nessun filtro di dominio.
+        # Eurobet può usare CDN/subdomini esterni (Entain platform, Akamai, ecc.)
         captured: list[dict[str, Any]] = []
 
         async def on_response(response: Response) -> None:
-            if "eurobet.it" not in response.url:
+            # Ignora risorse statiche ovvie
+            url_lower = response.url.lower()
+            if any(ext in url_lower for ext in (".png", ".jpg", ".gif", ".woff", ".css", ".ico", ".svg")):
                 return
             try:
                 body = await response.json()
@@ -243,17 +250,37 @@ class EurobetScraper:
         url = BASE_URL + page_path
         logger.info("[Eurobet] Loading %s", url)
         try:
+            # networkidle può fare timeout sulle SPA — durante i 65s on_response cattura le API
             await self._page.goto(url, wait_until="networkidle", timeout=65_000)
             logger.info("[Eurobet] %s: networkidle raggiunto", league_name)
         except Exception as e:
             logger.info("[Eurobet] %s: networkidle timeout (atteso): %s", league_name, type(e).__name__)
 
-        await self._page.wait_for_timeout(500)
+        # Aspetta un po' in più per eventuali chiamate lazy
+        await self._page.wait_for_timeout(3000)
         self._page.remove_listener("response", on_response)
+
+        # Log URL finale (per rilevare redirect e hash routing)
+        final_url = self._page.url
+        logger.info("[Eurobet] %s: final_url=%s", league_name, final_url)
+
+        # Log titolo pagina
+        try:
+            title = await self._page.title()
+            logger.info("[Eurobet] %s: page title=%s", league_name, title)
+        except Exception:
+            pass
+
+        # Log source della pagina (prime 2000 chars) per rilevare SSR/JSON embedded
+        try:
+            html_snippet = await self._page.evaluate("document.documentElement.innerHTML")
+            logger.info("[Eurobet] %s: HTML snippet (2000c)=%.2000s", league_name, html_snippet)
+        except Exception as e:
+            logger.warning("[Eurobet] %s: could not read HTML: %s", league_name, e)
 
         logger.info("[Eurobet] %s: captured %d JSON responses", league_name, len(captured))
 
-        # Log every captured response for first-run API discovery
+        # Log ogni risposta catturata (URL + keys + body preview 500c)
         for item in captured:
             body = item["body"]
             if isinstance(body, dict):
@@ -267,7 +294,7 @@ class EurobetScraper:
             body_preview = _json.dumps(body, ensure_ascii=False)[:500]
             logger.info("[Eurobet] CAPTURE url=%s keys=%s BODY=%s", item["url"], keys, body_preview)
 
-        # Try to parse a known structure from each captured response
+        # Prova a parsare ogni risposta catturata
         for item in captured:
             results = _parse_eurobet_response(
                 item["url"], item["body"],
