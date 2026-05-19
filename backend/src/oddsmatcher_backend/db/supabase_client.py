@@ -177,11 +177,12 @@ class SupabaseWriter:
         if not results:
             return 0
 
-        # Bookmakers to write: (name shown in DB, fallback URL if match_url unavailable)
+        # Bookmakers to write: (name, base URL per riscrivere match_url, fallback URL)
+        LOTTOMATICA_BASE = "https://www.lottomatica.it"
         TARGETS = [
-            ("Lottomatica",  "https://www.lottomatica.it/scommesse/sport/"),
-            ("GoldBet",      "https://www.goldbet.it/scommesse/sport/"),
-            ("Planetwin365", "https://www.planetwin365.it/it/"),
+            ("Lottomatica",  LOTTOMATICA_BASE,                    "https://www.lottomatica.it/scommesse/sport/"),
+            ("GoldBet",      "https://www.goldbet.it",            "https://www.goldbet.it/scommesse/sport/"),
+            ("Planetwin365", "https://www.planetwin365.it/it",    "https://www.planetwin365.it/it/scommesse/sport/"),
         ]
 
         expires_at = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
@@ -214,7 +215,7 @@ class SupabaseWriter:
         BATCH = 500
         total_inserted = 0
 
-        for bm_name, fallback_url in TARGETS:
+        for bm_name, bm_base, fallback_url in TARGETS:
             # Delete stale rows for this bookmaker
             try:
                 (
@@ -227,9 +228,14 @@ class SupabaseWriter:
             except Exception as e:
                 logger.error("Failed to delete stale %s live_odds: %s", bm_name, e)
 
-            # Build rows for this bookmaker
+            # Build rows for this bookmaker — riscrivi il dominio base nell'URL
+            def _rewrite(url: str, base: str, fallback: str) -> str:
+                if url and url.startswith(LOTTOMATICA_BASE):
+                    return url.replace(LOTTOMATICA_BASE, base, 1)
+                return url or fallback
+
             bm_rows = [
-                {**r, "bookmaker": bm_name, "match_url": r["match_url"] or fallback_url}
+                {**r, "bookmaker": bm_name, "match_url": _rewrite(r["match_url"], bm_base, fallback_url)}
                 for r in base_rows
             ]
 
