@@ -1,61 +1,76 @@
-"""Snai pregame odds scraper — Playwright + network interception."""
+"""Snai Italy pregame odds scraper.
 
+Strategy: Playwright browser to get Akamai session cookies from www.snai.it,
+then call betting-snai.flutterseatech.it REST API with those cookies.
+
+API base: https://betting-snai.flutterseatech.it/api/lettura-palinsesto-sport
+Key endpoints:
+  GET /alberaturaPrematch          → tournament tree (sport → country → tournament IDs)
+  GET /palinsesto/prematch/...     → events with odds for a specific tournament
+"""
+
+import json as _json
 import logging
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from oddsmatcher_backend.scraper._base_playwright import BasePlaywrightScraper
+from playwright.async_api import async_playwright
+
 from oddsmatcher_backend.scraper.centroquote import MatchOdds
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.snai.it"
+API_BASE = "https://betting-snai.flutterseatech.it/api/lettura-palinsesto-sport"
 BOOKMAKER = "Snai"
 
-# fmt: off
-LEAGUES: list[tuple[str, str, str]] = [
-    ("Serie A",           "calcio", "/scommesse/calcio/italia/serie-a/"),
-    ("Serie B",           "calcio", "/scommesse/calcio/italia/serie-b/"),
-    ("Premier League",    "calcio", "/scommesse/calcio/inghilterra/premier-league/"),
-    ("La Liga",           "calcio", "/scommesse/calcio/spagna/primera-division/"),
-    ("Bundesliga",        "calcio", "/scommesse/calcio/germania/bundesliga/"),
-    ("Ligue 1",           "calcio", "/scommesse/calcio/francia/ligue-1/"),
-    ("Champions League",  "calcio", "/scommesse/calcio/champions-league/"),
-    ("Europa League",     "calcio", "/scommesse/calcio/europa-league/"),
-    ("Conference League", "calcio", "/scommesse/calcio/conference-league/"),
-    ("NBA",               "basket", "/scommesse/basket/usa/nba/"),
-    ("Serie A Basket",    "basket", "/scommesse/basket/italia/serie-a/"),
-    ("ATP",               "tennis", "/scommesse/tennis/"),
-]
-# fmt: on
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
 
-SIMPLE_MARKET_MAP: dict[str, str] = {
-    "1X2": "1X2", "Esito Finale": "1X2", "Finale": "1X2", "Match Result": "1X2",
-    "Testa a Testa": "1X2", "Vincente": "1X2",
-    "Doppia Chance": "DC", "Double Chance": "DC",
-    "Goal/No Goal": "BTTS", "Gol/No Gol": "BTTS",
+# Sport names in Snai → our sport key
+SPORT_MAP = {
+    "Calcio": "calcio",
+    "CALCIO": "calcio",
+    "calcio": "calcio",
+    "Tennis": "tennis",
+    "TENNIS": "tennis",
+    "Basket": "basket",
+    "BASKET": "basket",
+    "Pallacanestro": "basket",
 }
-UO_SPREADS_WANTED: set[str] = {"1.5", "2.5", "3.5"}
 
-OUTCOME_MAP: dict[str, str] = {
-    "1": "1", "Casa": "1", "Home": "1",
-    "X": "X", "Pareggio": "X", "Draw": "X",
-    "2": "2", "Ospite": "2", "Away": "2",
-    "1X": "1X", "X2": "X2", "12": "12",
-    "Gol": "Goal", "Goal": "Goal", "GG": "Goal", "Si": "Goal",
-    "No Gol": "No Goal", "No Goal": "No Goal", "NG": "No Goal", "No": "No Goal",
+# Leagues to include (by name in Snai's system)
+WANTED_LEAGUES = {
+    "calcio": {
+        "Serie A", "Serie B", "Premier League", "La Liga", "Primera Division",
+        "Bundesliga", "Ligue 1", "Champions League", "Europa League",
+        "Conference League", "Serie A Italia",
+    },
+    "tennis": {
+        "Roland Garros", "Wimbledon", "US Open", "Australian Open",
+        "Amburgo", "Ginevra", "Rabat", "Strasburgo",
+    },
+    "basket": {
+        "NBA", "Serie A", "Serie A Basket", "Eurolega",
+    },
 }
 
 
 def _parse_date(s: str) -> str | None:
     if not s:
         return None
-    FMTS = ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
-            "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d-%m-%Y %H:%M"]
+    FMTS = [
+        "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+        "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y%m%d %H:%M:%S",
+    ]
     for fmt in FMTS:
         try:
-            dt = datetime.strptime(s.strip(), fmt)
+            dt = datetime.strptime(s.strip()[:19], fmt)
             off = 2 if 3 <= dt.month <= 10 else 1
             return dt.replace(tzinfo=timezone(timedelta(hours=off))).astimezone(timezone.utc).isoformat()
         except ValueError:
@@ -66,138 +81,309 @@ def _parse_date(s: str) -> str | None:
         return s
 
 
-def _val(d: dict, *keys: str) -> Any:
-    for k in keys:
-        v = d.get(k)
-        if v is not None:
-            return v
-    return None
-
-
-def _odds(sel: dict) -> float | None:
-    v = _val(sel, "price", "odds", "quota", "value", "odd", "ov")
-    if v is None:
-        return None
-    try:
-        f = float(v)
-        return f if f > 1.0 else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _label(sel: dict) -> str:
-    v = _val(sel, "selectionDescription", "description", "name", "outcome", "esito", "label", "sn")
-    return str(v).strip() if v else ""
-
-
-def _event_name(ev: dict) -> str:
-    v = _val(ev, "eventDescription", "description", "name", "eventName", "descrizione", "en")
-    return re.sub(r"\s+v\s+", " - ", str(v)).strip() if v else ""
-
-
-def _event_time(ev: dict) -> str | None:
-    v = _val(ev, "eventDate", "date", "startTime", "matchDate", "data", "startDate", "ed")
-    return _parse_date(str(v)) if v else None
-
-
-def _match_url(ev: dict) -> str:
-    v = _val(ev, "deepLink", "url", "link", "matchUrl")
-    if v:
-        u = str(v)
-        return u if u.startswith("http") else BASE_URL + u
-    return f"{BASE_URL}/scommesse/"
-
-
-def _selections(mkt: dict) -> list:
-    v = _val(mkt, "selections", "outcomes", "odds", "esiti", "runners", "asl")
-    if v is None:
-        return []
-    return list(v.values()) if isinstance(v, dict) else list(v)
-
-
-def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchOdds]:
+def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
+    """Parse Snai API event response (format TBD — logs full structure on first run)."""
     results: list[MatchOdds] = []
+    if not data:
+        return results
+
+    # Normalise to list of events
+    events: list = []
+    if isinstance(data, list):
+        events = data
+    elif isinstance(data, dict):
+        for key in ("avvenimenti", "eventi", "events", "data", "result",
+                    "matches", "fixtures", "palinsesto", "avv"):
+            val = data.get(key)
+            if isinstance(val, list) and val:
+                events = val
+                break
+            if isinstance(val, dict):
+                for k2 in ("avvenimenti", "eventi", "events", "avv"):
+                    v2 = val.get(k2)
+                    if isinstance(v2, list) and v2:
+                        events = v2
+                        break
+                if events:
+                    break
+
     for ev in events:
         if not isinstance(ev, dict):
             continue
-        name = _event_name(ev)
+
+        # Event name
+        name_raw = (
+            ev.get("descrizione") or ev.get("description") or
+            ev.get("eventDescription") or ev.get("name") or
+            ev.get("da") or ev.get("en") or ""
+        )
+        name = re.sub(r"\s+[-–v]\s+", " - ", str(name_raw)).strip()
         if not name:
             continue
-        etime = _event_time(ev)
-        murl = _match_url(ev)
+
+        # Event time
+        time_raw = (
+            ev.get("dataOra") or ev.get("data") or ev.get("startTime") or
+            ev.get("startDate") or ev.get("eventDate") or ev.get("ts") or ""
+        )
+        event_time = _parse_date(str(time_raw)) if time_raw else None
+
+        match_url = f"{BASE_URL}/scommesse/"
         parts = name.split(" - ", 1)
         home = parts[0].strip() if len(parts) == 2 else name
         away = parts[1].strip() if len(parts) == 2 else ""
 
-        mkts_raw = _val(ev, "markets", "market", "odds", "quote", "scommesse", "mmkW") or []
+        # Markets
+        mkts_raw = (
+            ev.get("scommesse") or ev.get("mercati") or ev.get("markets") or
+            ev.get("quote") or ev.get("odds") or []
+        )
         if isinstance(mkts_raw, dict):
             mkts_raw = list(mkts_raw.values())
 
         for mkt in mkts_raw:
             if not isinstance(mkt, dict):
                 continue
-            mname = (_val(mkt, "marketDescription", "description", "name", "marketName", "tipo", "mn") or "").strip()
-            canonical = SIMPLE_MARKET_MAP.get(mname)
-            sels = _selections(mkt)
 
-            if canonical:
-                odds_dict = {}
-                for s in sels:
-                    lbl = OUTCOME_MAP.get(_label(s), _label(s))
-                    v = _odds(s)
-                    if lbl and v:
-                        odds_dict[lbl] = v
+            mname = str(
+                mkt.get("descrizione") or mkt.get("description") or
+                mkt.get("name") or mkt.get("tipo") or mkt.get("marketName") or ""
+            ).strip()
+
+            # 1X2 detection
+            if any(kw in mname for kw in ("1X2", "Esito Finale", "Finale", "Risultato Finale",
+                                           "1 X 2", "Match Result", "Testa a Testa")):
+                sels_raw = (
+                    mkt.get("esiti") or mkt.get("selections") or
+                    mkt.get("outcomes") or mkt.get("quote") or []
+                )
+                if isinstance(sels_raw, dict):
+                    sels_raw = list(sels_raw.values())
+                odds_dict: dict[str, float] = {}
+                OUTCOME_MAP = {
+                    "1": "1", "Casa": "1", "Home": "1",
+                    "X": "X", "Pareggio": "X", "Draw": "X",
+                    "2": "2", "Ospite": "2", "Away": "2",
+                }
+                for sel in sels_raw:
+                    if not isinstance(sel, dict):
+                        continue
+                    lbl = str(
+                        sel.get("descrizione") or sel.get("esito") or
+                        sel.get("name") or sel.get("outcome") or sel.get("label") or ""
+                    ).strip()
+                    canonical = OUTCOME_MAP.get(lbl, lbl)
+                    q_raw = sel.get("quota") or sel.get("odds") or sel.get("price") or sel.get("q")
+                    try:
+                        q = float(q_raw) if q_raw is not None else None
+                        if q and q > 1.0:
+                            odds_dict[canonical] = q
+                    except (TypeError, ValueError):
+                        pass
                 if odds_dict:
-                    results.append(MatchOdds(sport=sport_key, league=league_name, home_team=home, away_team=away,
-                                             event_name=name, event_time=etime, match_url=murl, market=canonical,
-                                             bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}]))
-                continue
+                    results.append(MatchOdds(
+                        sport=sport_key, league=league_name,
+                        home_team=home, away_team=away,
+                        event_name=name, event_time=event_time,
+                        match_url=match_url, market="1X2",
+                        bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
+                    ))
 
-            if any(kw in mname for kw in ("Over/Under", "U/O", "Totale Gol", "Over Under", "Goals")):
+            # Double Chance
+            elif any(kw in mname for kw in ("Doppia Chance", "Double Chance")):
+                sels_raw = (
+                    mkt.get("esiti") or mkt.get("selections") or
+                    mkt.get("outcomes") or []
+                )
+                if isinstance(sels_raw, dict):
+                    sels_raw = list(sels_raw.values())
+                DC_MAP = {"1X": "1X", "X2": "X2", "12": "12"}
+                odds_dc: dict[str, float] = {}
+                for sel in sels_raw:
+                    lbl = str(sel.get("descrizione") or sel.get("esito") or sel.get("name") or "").strip()
+                    canonical = DC_MAP.get(lbl, lbl)
+                    q_raw = sel.get("quota") or sel.get("odds") or sel.get("price")
+                    try:
+                        q = float(q_raw) if q_raw is not None else None
+                        if q and q > 1.0:
+                            odds_dc[canonical] = q
+                    except (TypeError, ValueError):
+                        pass
+                if odds_dc:
+                    results.append(MatchOdds(
+                        sport=sport_key, league=league_name,
+                        home_team=home, away_team=away,
+                        event_name=name, event_time=event_time,
+                        match_url=match_url, market="DC",
+                        bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dc}],
+                    ))
+
+            # Over/Under
+            elif any(kw in mname for kw in ("Over/Under", "U/O", "Totale Gol", "Over Under")):
                 sp_m = re.search(r"(\d+[.,]\d+)", mname)
-                if sp_m:
-                    sp = sp_m.group(1).replace(",", ".")
-                    if sp in UO_SPREADS_WANTED:
-                        SIDE = {"Over": "Over", "Oltre": "Over", "O": "Over",
-                                "Under": "Under", "Meno": "Under", "U": "Under"}
-                        odds_dict = {}
-                        for s in sels:
-                            side = SIDE.get(_label(s))
-                            v = _odds(s)
-                            if side and v:
-                                odds_dict[f"{side} {sp}"] = v
-                        if odds_dict:
-                            results.append(MatchOdds(sport=sport_key, league=league_name, home_team=home, away_team=away,
-                                                     event_name=name, event_time=etime, match_url=murl,
-                                                     market=f"Over/Under {sp}",
-                                                     bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}]))
+                if not sp_m:
+                    continue
+                sp = sp_m.group(1).replace(",", ".")
+                if sp not in {"1.5", "2.5", "3.5"}:
+                    continue
+                sels_raw = mkt.get("esiti") or mkt.get("selections") or mkt.get("outcomes") or []
+                if isinstance(sels_raw, dict):
+                    sels_raw = list(sels_raw.values())
+                SIDE_MAP = {"Over": "Over", "Oltre": "Over", "Under": "Under", "Meno": "Under"}
+                odds_uo: dict[str, float] = {}
+                for sel in sels_raw:
+                    lbl = str(sel.get("descrizione") or sel.get("esito") or sel.get("name") or "").strip()
+                    side = SIDE_MAP.get(lbl)
+                    q_raw = sel.get("quota") or sel.get("odds") or sel.get("price")
+                    try:
+                        q = float(q_raw) if q_raw is not None else None
+                        if side and q and q > 1.0:
+                            odds_uo[f"{side} {sp}"] = q
+                    except (TypeError, ValueError):
+                        pass
+                if odds_uo:
+                    results.append(MatchOdds(
+                        sport=sport_key, league=league_name,
+                        home_team=home, away_team=away,
+                        event_name=name, event_time=event_time,
+                        match_url=match_url, market=f"Over/Under {sp}",
+                        bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_uo}],
+                    ))
+
     return results
 
 
-class SnaiScraper(BasePlaywrightScraper):
-    bookmaker_name = BOOKMAKER
-    base_url = BASE_URL
-    warmup_path = "/scommesse/"
-    leagues = LEAGUES
+class SnaiScraper:
+    """Snai scraper: Playwright for session cookies + direct API calls to flutterseatech.it."""
 
-    def parse_response(self, url: str, body: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
+    bookmaker_name = BOOKMAKER
+
+    async def scrape_all(self) -> list[MatchOdds]:
+        return await self._run(sport=None)
+
+    async def scrape_sport(self, sport: str) -> list[MatchOdds]:
+        return await self._run(sport=sport)
+
+    async def _run(self, sport: str | None) -> list[MatchOdds]:
+        pw = await async_playwright().start()
+        proxy_url = os.environ.get("PROXY_URL")
+        proxy = None
+        if proxy_url:
+            import urllib.parse
+            p = urllib.parse.urlparse(proxy_url)
+            proxy = {
+                "server": f"{p.scheme}://{p.hostname}:{p.port}",
+                "username": p.username or "",
+                "password": p.password or "",
+            }
+            logger.info("[Snai] Using proxy: %s:%s", p.hostname, p.port)
+
+        browser = await pw.chromium.launch(
+            headless=False,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            proxy=proxy,
+        )
+        context = await browser.new_context(
+            user_agent=_UA, locale="it-IT", timezone_id="Europe/Rome",
+            viewport={"width": 1280, "height": 800},
+        )
+        page = await context.new_page()
+        results: list[MatchOdds] = []
+
         try:
-            if isinstance(body, dict):
-                for key in ("events", "data", "result", "avvenimenti", "matches", "matchList", "competitionEvents", "fixtures", "leo"):
-                    val = body.get(key)
-                    if isinstance(val, list) and val:
-                        rows = _parse_events(val, league_name, sport_key)
-                        if rows:
-                            return rows
-                    if isinstance(val, dict):
-                        for k2 in ("events", "matches", "fixtures", "avvenimenti"):
-                            v2 = val.get(k2)
-                            if isinstance(v2, list) and v2:
-                                rows = _parse_events(v2, league_name, sport_key)
-                                if rows:
-                                    return rows
-            if isinstance(body, list) and body and isinstance(body[0], dict):
-                return _parse_events(body, league_name, sport_key)
-        except Exception as e:
-            logger.debug("[Snai] parse error for %s: %s", url, e)
-        return []
+            # ── Step 1: load homepage to get Akamai cookies ──────────
+            logger.info("[Snai] Loading homepage for session cookies...")
+            try:
+                await page.goto(f"{BASE_URL}/scommesse", wait_until="domcontentloaded", timeout=30_000)
+                await page.wait_for_timeout(4000)
+                logger.info("[Snai] Homepage loaded: %s", page.url)
+            except Exception as e:
+                logger.warning("[Snai] Homepage load failed: %s", e)
+
+            # ── Step 2: get tournament tree via alberaturaPrematch ───
+            logger.info("[Snai] Fetching alberaturaPrematch...")
+            try:
+                resp = await page.request.get(
+                    f"{API_BASE}/alberaturaPrematch",
+                    headers={"Accept": "application/json", "Referer": BASE_URL},
+                )
+                tree = await resp.json()
+                logger.info("[Snai] alberaturaPrematch: status=%d keys=%s",
+                            resp.status, list(tree.keys())[:6] if isinstance(tree, dict) else type(tree).__name__)
+                logger.info("[Snai] alberatura preview: %s", _json.dumps(tree)[:1000])
+            except Exception as e:
+                logger.error("[Snai] alberaturaPrematch failed: %s", e)
+                tree = {}
+
+            # ── Step 3: discover tournament IDs from tree ─────────────
+            tournament_ids: list[tuple[str, str, int]] = []  # (league_name, sport_key, tournament_id)
+            self._walk_tree(tree, sport, tournament_ids)
+            logger.info("[Snai] Found %d tournaments to scrape", len(tournament_ids))
+
+            # ── Step 4: fetch events per tournament ───────────────────
+            for league_name, sport_key, tid in tournament_ids:
+                try:
+                    events_url = f"{API_BASE}/palinsesto/prematch/live-ora-for-cards/{tid}?offerId=0&metaTplEnabled=true&deep=true"
+                    resp = await page.request.get(
+                        events_url,
+                        headers={"Accept": "application/json", "Referer": BASE_URL},
+                    )
+                    body = await resp.json()
+                    logger.info("[Snai] %s (id=%d): status=%d keys=%s preview=%s",
+                                league_name, tid, resp.status,
+                                list(body.keys())[:6] if isinstance(body, dict) else type(body).__name__,
+                                _json.dumps(body)[:500])
+                    rows = _parse_snai_events(body, league_name, sport_key)
+                    logger.info("[Snai] %s: %d match-market rows", league_name, len(rows))
+                    results.extend(rows)
+                except Exception as e:
+                    logger.error("[Snai] %s (id=%d) failed: %s", league_name, tid, e)
+
+        finally:
+            await browser.close()
+            await pw.stop()
+
+        logger.info("[Snai] Total rows: %d", len(results))
+        return results
+
+    def _walk_tree(self, tree: Any, sport_filter: str | None,
+                   out: list[tuple[str, str, int]]) -> None:
+        """Recursively walk alberaturaPrematch tree to find tournament IDs we want."""
+        if not tree:
+            return
+        if isinstance(tree, list):
+            for item in tree:
+                self._walk_tree(item, sport_filter, out)
+            return
+        if not isinstance(tree, dict):
+            return
+
+        # Try to detect if this node is a tournament
+        node_id = tree.get("id") or tree.get("torneoId") or tree.get("manifestazioneId")
+        node_name = str(
+            tree.get("descrizione") or tree.get("name") or tree.get("description") or ""
+        ).strip()
+        node_sport_raw = str(
+            tree.get("sport") or tree.get("disciplina") or tree.get("sportName") or ""
+        ).strip()
+        node_sport = SPORT_MAP.get(node_sport_raw, "")
+
+        # Log everything for discovery
+        if node_id and node_name:
+            logger.debug("[Snai] Tree node: id=%s name=%r sport=%r", node_id, node_name, node_sport_raw)
+
+        # Check if this node matches a wanted league
+        if node_id and node_name:
+            for sp_key, wanted_set in WANTED_LEAGUES.items():
+                if sport_filter and sp_key != sport_filter:
+                    continue
+                if node_name in wanted_set:
+                    out.append((node_name, sp_key, int(node_id)))
+                    logger.info("[Snai] Matched tournament: %r id=%s sport=%s", node_name, node_id, sp_key)
+
+        # Recurse into children
+        for child_key in ("figli", "children", "manifestazioni", "tornei",
+                          "sports", "items", "subItems", "data"):
+            child = tree.get(child_key)
+            if child:
+                self._walk_tree(child, sport_filter, out)
