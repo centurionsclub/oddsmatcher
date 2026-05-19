@@ -5,8 +5,13 @@ then call betting-snai.flutterseatech.it REST API with those cookies.
 
 API base: https://betting-snai.flutterseatech.it/api/lettura-palinsesto-sport
 Key endpoints:
-  GET /alberaturaPrematch          → tournament tree (sport → country → tournament IDs)
-  GET /palinsesto/prematch/...     → events with odds for a specific tournament
+  GET /alberaturaPrematch
+      Returns a dict with:
+        disciplinaMap   – {codiceDisciplina: {descrizione, sigla, ...}}
+        manifestazioneMap – {"disciplina-manifestazione": {codiceDisciplina,
+                            codiceManifestazione, descrizione, sigla, ...}}
+  GET /palinsesto/prematch/live-ora-for-cards/{codiceManifestazione}
+      → events with odds for a specific competition
 """
 
 import json as _json
@@ -32,33 +37,52 @@ _UA = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
-# Sport names in Snai → our sport key
-SPORT_MAP = {
-    "Calcio": "calcio",
-    "CALCIO": "calcio",
-    "calcio": "calcio",
-    "Tennis": "tennis",
-    "TENNIS": "tennis",
-    "Basket": "basket",
-    "BASKET": "basket",
-    "Pallacanestro": "basket",
+# codiceDisciplina (int) → our sport key
+SPORT_CODE_MAP: dict[int, str] = {
+    1: "calcio",
+    2: "basket",
+    3: "tennis",
 }
 
-# Leagues to include (by name in Snai's system)
-WANTED_LEAGUES = {
-    "calcio": {
-        "Serie A", "Serie B", "Premier League", "La Liga", "Primera Division",
-        "Bundesliga", "Ligue 1", "Champions League", "Europa League",
-        "Conference League", "Serie A Italia",
-    },
-    "tennis": {
-        "Roland Garros", "Wimbledon", "US Open", "Australian Open",
-        "Amburgo", "Ginevra", "Rabat", "Strasburgo",
-    },
-    "basket": {
-        "NBA", "Serie A", "Serie A Basket", "Eurolega",
-    },
+# Each entry: (our_league_name, [keywords_ALL_must_appear_in_descrizione])
+# Using country prefix + league keyword avoids false positives (e.g. "ALG Ligue 1")
+LEAGUE_PATTERNS: dict[str, list[tuple[str, list[str]]]] = {
+    "calcio": [
+        ("Serie A",           ["ITA", "Serie A"]),
+        ("Serie B",           ["ITA", "Serie B"]),
+        ("Premier League",    ["ENG", "Premier"]),
+        ("La Liga",           ["ESP", "Primera"]),
+        ("Bundesliga",        ["GER", "Bundesliga"]),
+        ("Ligue 1",           ["FRA", "Ligue 1"]),
+        ("Champions League",  ["Champions League"]),
+        ("Europa League",     ["Europa League"]),
+        ("Conference League", ["Conference"]),
+    ],
+    "tennis": [
+        ("Roland Garros",    ["Roland Garros"]),
+        ("Wimbledon",        ["Wimbledon"]),
+        ("US Open",          ["US Open"]),
+        ("Australian Open",  ["Australian Open"]),
+        ("Amburgo",          ["Amburgo"]),
+        ("Ginevra",          ["Ginevra"]),
+        ("Rabat",            ["Rabat"]),
+        ("Strasburgo",       ["Strasburgo"]),
+    ],
+    "basket": [
+        ("NBA",           ["NBA"]),
+        ("Serie A Basket", ["ITA", "Serie A"]),
+        ("Eurolega",      ["Eurolega"]),
+    ],
 }
+
+
+def _match_league(descrizione: str, sport_key: str) -> str | None:
+    """Return our canonical league name if descrizione matches, else None."""
+    patterns = LEAGUE_PATTERNS.get(sport_key, [])
+    for league_name, keywords in patterns:
+        if all(kw in descrizione for kw in keywords):
+            return league_name
+    return None
 
 
 def _parse_date(s: str) -> str | None:
@@ -82,7 +106,7 @@ def _parse_date(s: str) -> str | None:
 
 
 def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
-    """Parse Snai API event response (format TBD — logs full structure on first run)."""
+    """Parse Snai API event response."""
     results: list[MatchOdds] = []
     if not data:
         return results
@@ -300,44 +324,47 @@ class SnaiScraper:
             except Exception as e:
                 logger.warning("[Snai] Homepage load failed: %s", e)
 
-            # ── Step 2: get tournament tree via alberaturaPrematch ───
+            # ── Step 2: get competition catalogue ────────────────────
             logger.info("[Snai] Fetching alberaturaPrematch...")
+            alberatura: dict = {}
             try:
                 resp = await page.request.get(
                     f"{API_BASE}/alberaturaPrematch",
                     headers={"Accept": "application/json", "Referer": BASE_URL},
                 )
-                tree = await resp.json()
-                logger.info("[Snai] alberaturaPrematch: status=%d keys=%s",
-                            resp.status, list(tree.keys())[:6] if isinstance(tree, dict) else type(tree).__name__)
-                logger.info("[Snai] alberatura preview: %s", _json.dumps(tree)[:1000])
+                alberatura = await resp.json()
+                logger.info("[Snai] alberaturaPrematch: status=%d top_keys=%s",
+                            resp.status,
+                            list(alberatura.keys()) if isinstance(alberatura, dict) else type(alberatura).__name__)
             except Exception as e:
                 logger.error("[Snai] alberaturaPrematch failed: %s", e)
-                tree = {}
 
-            # ── Step 3: discover tournament IDs from tree ─────────────
-            tournament_ids: list[tuple[str, str, int]] = []  # (league_name, sport_key, tournament_id)
-            self._walk_tree(tree, sport, tournament_ids)
-            logger.info("[Snai] Found %d tournaments to scrape", len(tournament_ids))
+            # ── Step 3: find matching competitions ───────────────────
+            # manifestazioneMap: key = "{codiceDisciplina}-{codiceManifestazione}"
+            competitions = self._find_competitions(alberatura, sport)
+            logger.info("[Snai] Found %d competitions to scrape", len(competitions))
 
-            # ── Step 4: fetch events per tournament ───────────────────
-            for league_name, sport_key, tid in tournament_ids:
+            # ── Step 4: fetch events per competition ─────────────────
+            for league_name, sport_key, disc_id, manif_id in competitions:
                 try:
-                    events_url = f"{API_BASE}/palinsesto/prematch/live-ora-for-cards/{tid}?offerId=0&metaTplEnabled=true&deep=true"
+                    events_url = (
+                        f"{API_BASE}/palinsesto/prematch/live-ora-for-cards/{manif_id}"
+                        f"?offerId=0&metaTplEnabled=true&deep=true"
+                    )
                     resp = await page.request.get(
                         events_url,
                         headers={"Accept": "application/json", "Referer": BASE_URL},
                     )
                     body = await resp.json()
-                    logger.info("[Snai] %s (id=%d): status=%d keys=%s preview=%s",
-                                league_name, tid, resp.status,
-                                list(body.keys())[:6] if isinstance(body, dict) else type(body).__name__,
-                                _json.dumps(body)[:500])
+                    logger.info("[Snai] %s (disc=%d manif=%d): status=%d top_keys=%s preview=%s",
+                                league_name, disc_id, manif_id, resp.status,
+                                list(body.keys())[:8] if isinstance(body, dict) else type(body).__name__,
+                                _json.dumps(body)[:600])
                     rows = _parse_snai_events(body, league_name, sport_key)
                     logger.info("[Snai] %s: %d match-market rows", league_name, len(rows))
                     results.extend(rows)
                 except Exception as e:
-                    logger.error("[Snai] %s (id=%d) failed: %s", league_name, tid, e)
+                    logger.error("[Snai] %s (manif=%d) failed: %s", league_name, manif_id, e)
 
         finally:
             await browser.close()
@@ -346,44 +373,46 @@ class SnaiScraper:
         logger.info("[Snai] Total rows: %d", len(results))
         return results
 
-    def _walk_tree(self, tree: Any, sport_filter: str | None,
-                   out: list[tuple[str, str, int]]) -> None:
-        """Recursively walk alberaturaPrematch tree to find tournament IDs we want."""
-        if not tree:
-            return
-        if isinstance(tree, list):
-            for item in tree:
-                self._walk_tree(item, sport_filter, out)
-            return
-        if not isinstance(tree, dict):
-            return
+    def _find_competitions(
+        self, alberatura: dict, sport_filter: str | None
+    ) -> list[tuple[str, str, int, int]]:
+        """
+        Parse manifestazioneMap (flat dict) to find competitions we want.
+        Returns list of (league_name, sport_key, codiceDisciplina, codiceManifestazione).
+        """
+        out: list[tuple[str, str, int, int]] = []
+        if not isinstance(alberatura, dict):
+            return out
 
-        # Try to detect if this node is a tournament
-        node_id = tree.get("id") or tree.get("torneoId") or tree.get("manifestazioneId")
-        node_name = str(
-            tree.get("descrizione") or tree.get("name") or tree.get("description") or ""
-        ).strip()
-        node_sport_raw = str(
-            tree.get("sport") or tree.get("disciplina") or tree.get("sportName") or ""
-        ).strip()
-        node_sport = SPORT_MAP.get(node_sport_raw, "")
+        manif_map = alberatura.get("manifestazioneMap", {})
+        if not isinstance(manif_map, dict):
+            logger.warning("[Snai] manifestazioneMap missing or wrong type: %s", type(manif_map))
+            return out
 
-        # Log everything for discovery
-        if node_id and node_name:
-            logger.debug("[Snai] Tree node: id=%s name=%r sport=%r", node_id, node_name, node_sport_raw)
+        logger.info("[Snai] manifestazioneMap has %d entries", len(manif_map))
 
-        # Check if this node matches a wanted league
-        if node_id and node_name:
-            for sp_key, wanted_set in WANTED_LEAGUES.items():
-                if sport_filter and sp_key != sport_filter:
-                    continue
-                if node_name in wanted_set:
-                    out.append((node_name, sp_key, int(node_id)))
-                    logger.info("[Snai] Matched tournament: %r id=%s sport=%s", node_name, node_id, sp_key)
+        for key, entry in manif_map.items():
+            if not isinstance(entry, dict):
+                continue
 
-        # Recurse into children
-        for child_key in ("figli", "children", "manifestazioni", "tornei",
-                          "sports", "items", "subItems", "data"):
-            child = tree.get(child_key)
-            if child:
-                self._walk_tree(child, sport_filter, out)
+            disc_id = entry.get("codiceDisciplina")
+            manif_id = entry.get("codiceManifestazione")
+            descrizione = str(entry.get("descrizione") or "").strip()
+
+            if not disc_id or not manif_id or not descrizione:
+                continue
+
+            sport_key = SPORT_CODE_MAP.get(int(disc_id))
+            if not sport_key:
+                continue  # sport we don't track
+
+            if sport_filter and sport_key != sport_filter:
+                continue
+
+            league_name = _match_league(descrizione, sport_key)
+            if league_name:
+                out.append((league_name, sport_key, int(disc_id), int(manif_id)))
+                logger.info("[Snai] Matched: %r → %r (disc=%s manif=%s)",
+                            descrizione, league_name, disc_id, manif_id)
+
+        return out
