@@ -1,6 +1,12 @@
-"""Bwin pregame odds scraper — Playwright + network interception.
+"""Bwin Italy pregame odds scraper — Playwright + network interception.
 
-Bwin (Entain group) uses sports.bwin.it — same platform as Eurobet in some areas.
+Bwin Italy (Entain group) uses www.bwin.it.
+The Entain CDS API requires runtime config injected by the SPA — not accessible
+without a full browser execution. We use Playwright to navigate each league page
+and intercept the JSON responses.
+
+URL structure: /it/sports/{sport}-{sportId}/{country}/{league-name}-{leagueId}
+The slug before the numeric ID can be anything; the ID determines the data.
 """
 
 import logging
@@ -13,7 +19,7 @@ from oddsmatcher_backend.scraper.centroquote import MatchOdds
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://sports.bwin.it"
+BASE_URL = "https://www.bwin.it"
 BOOKMAKER = "Bwin"
 
 # fmt: off
@@ -106,8 +112,9 @@ def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchO
 
         raw_time = _v(ev, "startDate", "StartDate", "eventDate", "date", "startTime", "StartTime") or ""
         etime = _parse_date(str(raw_time)) if raw_time else None
-        murl = _v(ev, "url", "deepLink", "link") or f"{BASE_URL}/it/sports/"
-        if murl and not str(murl).startswith("http"):
+        murl_raw = _v(ev, "url", "deepLink", "link", "eventUrl") or ""
+        murl = str(murl_raw) if murl_raw else f"{BASE_URL}/it/sports/"
+        if murl and not murl.startswith("http"):
             murl = BASE_URL + murl
 
         parts = name.split(" - ", 1)
@@ -167,7 +174,7 @@ def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchO
 class BwinScraper(BasePlaywrightScraper):
     bookmaker_name = BOOKMAKER
     base_url = BASE_URL
-    warmup_path = "/it/sports/"
+    warmup_path = "/it/sports/calcio-4/"  # warmup on calcio landing page
     leagues = LEAGUES
 
     def parse_response(self, url: str, body: Any, league_name: str, sport_key: str) -> list[MatchOdds]:

@@ -175,7 +175,7 @@ def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchO
 class Bet365Scraper(BasePlaywrightScraper):
     bookmaker_name = BOOKMAKER
     base_url = BASE_URL
-    warmup_path = "/#/IP/B1/"
+    warmup_path = "/"  # hash routing: warmup on root, then navigate to hash URLs
     leagues = LEAGUES
 
     def parse_response(self, url: str, body: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
