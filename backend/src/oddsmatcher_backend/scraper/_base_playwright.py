@@ -18,6 +18,12 @@ from playwright.async_api import Browser, BrowserContext, Page, Playwright, Resp
 
 from oddsmatcher_backend.scraper.centroquote import MatchOdds
 
+try:
+    from playwright_stealth import stealth_async as _stealth_async
+    _STEALTH_AVAILABLE = True
+except ImportError:
+    _STEALTH_AVAILABLE = False
+
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -82,6 +88,13 @@ class BasePlaywrightScraper(ABC):
             viewport={"width": 1280, "height": 800},
         )
         self._page = await self._context.new_page()
+
+        # Apply stealth patches to hide headless browser fingerprints (helps vs Cloudflare)
+        if _STEALTH_AVAILABLE:
+            await _stealth_async(self._page)
+            self._log.info("[%s] playwright-stealth applied", self.bookmaker_name)
+        else:
+            self._log.warning("[%s] playwright-stealth not installed — fingerprint not patched", self.bookmaker_name)
 
         warmup_url = self.base_url + self.warmup_path
         self._log.info("[%s] Navigating to homepage for Akamai warm-up...", self.bookmaker_name)

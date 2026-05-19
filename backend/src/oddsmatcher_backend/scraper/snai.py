@@ -29,6 +29,12 @@ from playwright.async_api import async_playwright
 
 from oddsmatcher_backend.scraper.centroquote import MatchOdds
 
+try:
+    from playwright_stealth import stealth_async as _stealth_async
+    _STEALTH_AVAILABLE = True
+except ImportError:
+    _STEALTH_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.snai.it"
@@ -319,6 +325,9 @@ class SnaiScraper:
             viewport={"width": 1280, "height": 800},
         )
         page = await context.new_page()
+        if _STEALTH_AVAILABLE:
+            await _stealth_async(page)
+            logger.info("[Snai] playwright-stealth applied")
         results: list[MatchOdds] = []
 
         # ── Phase 1: intercept alberaturaPrematch ─────────────────────
