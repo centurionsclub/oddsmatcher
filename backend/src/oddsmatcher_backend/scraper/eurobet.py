@@ -9,6 +9,7 @@ No Cloudflare, no browser, no Playwright. Direct httpx calls.
 Odds format: decimal (already decimal in Kambi responses).
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -235,11 +236,17 @@ class EurobetScraper:
                 url = f"{KAMBI_BASE}/listView/{kambi_path}.json?{KAMBI_PARAMS}"
                 logger.info("[Eurobet] Fetching %s — %s", league_name, url)
 
+                # Rate-limit: 1 request/second to avoid 429 from Kambi
+                await asyncio.sleep(1.0)
                 try:
                     resp = await client.get(url)
                     if resp.status_code == 404:
                         logger.info("[Eurobet] %s: 404 (no events)", league_name)
                         continue
+                    if resp.status_code == 429:
+                        logger.warning("[Eurobet] %s: 429 rate-limited — waiting 5s", league_name)
+                        await asyncio.sleep(5.0)
+                        resp = await client.get(url)
                     resp.raise_for_status()
                     data = resp.json()
                 except Exception as exc:

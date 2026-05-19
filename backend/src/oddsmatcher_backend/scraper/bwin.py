@@ -258,18 +258,26 @@ class BwinScraper(BasePlaywrightScraper):
     warmup_path = "/it/sports/calcio-4/"
     leagues = LEAGUES
 
+    # Sport-level pages to navigate in order to capture all fixture data.
+    # Each navigation triggers CDS API calls whose bodies we intercept.
+    SPORT_PAGES: list[tuple[str, str]] = [
+        ("calcio",  "/it/sports/calcio-4/"),
+        ("basket",  "/it/sports/basket-7/"),
+        ("tennis",  "/it/sports/tennis-5/"),
+    ]
+
     def __init__(self):
         super().__init__()
-        self._access_id: str = ""  # x-bwin-accessid extracted from intercepted URLs
+        self._captured_rows: list[MatchOdds] = []  # responses captured during navigation
 
     async def _start(self) -> None:
-        """Override: intercept CDS responses during warmup to capture x-bwin-accessid."""
-        import asyncio as _asyncio
+        """Override: navigate to sport pages, intercept CDS response bodies."""
         from playwright.async_api import Response as _Response
-
-        # Start playwright + browser but don't warmup yet
-        self._playwright = await __import__("playwright.async_api", fromlist=["async_playwright"]).async_playwright().start()
         import os, urllib.parse
+
+        self._playwright = await __import__(
+            "playwright.async_api", fromlist=["async_playwright"]
+        ).async_playwright().start()
         proxy_url = os.environ.get("PROXY_URL")
         proxy = None
         if proxy_url:
@@ -306,162 +314,98 @@ class BwinScraper(BasePlaywrightScraper):
         except ImportError:
             self._log.warning("[Bwin] playwright-stealth not installed")
 
-        # Set up response listener BEFORE the warmup navigation
-        async def _capture_access_id(resp: _Response) -> None:
-            if "cds-api" in resp.url and not self._access_id:
-                m = re.search(r"x-bwin-accessid=([A-Za-z0-9+/=_-]+)", resp.url)
-                if m:
-                    self._access_id = m.group(1)
-                    self._log.info("[Bwin] Captured x-bwin-accessid from warmup: %s", self._access_id)
+        # Navigate to each sport page and intercept CDS fixture bodies
+        for sport_key, sport_path in self.SPORT_PAGES:
+            rows = await self._navigate_and_capture(sport_key, sport_path)
+            self._captured_rows.extend(rows)
+            self._log.info("[Bwin] %s: %d rows captured during navigation",
+                           sport_key, len(rows))
 
-        self._page.on("response", _capture_access_id)
+    async def _navigate_and_capture(
+        self, sport_key: str, sport_path: str
+    ) -> list[MatchOdds]:
+        """Navigate to a sport page and capture all CDS fixture responses."""
+        from playwright.async_api import Response as _Response
 
-        # Warmup navigation — triggers CDS API calls which contain the access_id
-        warmup_url = self.base_url + self.warmup_path
-        self._log.info("[Bwin] Navigating to warmup: %s", warmup_url)
-        try:
-            await self._page.goto(warmup_url, wait_until="networkidle", timeout=45_000)
-            self._log.info("[Bwin] Warmup networkidle")
-        except Exception as e:
-            self._log.info("[Bwin] Warmup timeout: %s", type(e).__name__)
-        await self._page.wait_for_timeout(3000)
+        assert self._page is not None
+        captured: list[MatchOdds] = []
 
-        self._page.remove_listener("response", _capture_access_id)
-        self._log.info("[Bwin] Warmup done — access_id captured: %s", bool(self._access_id))
-
-    def parse_response(self, url: str, body: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
-        """Try to parse intercepted responses — logs CDS URLs, tries CDS format."""
-        # Log any CDS-related URL for discovery
-        if "cds-api" in url:
-            logger.info("[Bwin] CDS URL: %s keys=%s",
-                        url,
-                        list(body.keys())[:6] if isinstance(body, dict)
-                        else f"list[{len(body)}]→{list(body[0].keys())[:5]}" if isinstance(body, list) and body and isinstance(body[0], dict)
-                        else type(body).__name__)
-            # Extract x-bwin-accessid from URL
-            m = re.search(r"x-bwin-accessid=([A-Za-z0-9+/=_-]+)", url)
-            if m and not self._access_id:
-                self._access_id = m.group(1)
-                logger.info("[Bwin] Extracted x-bwin-accessid: %s", self._access_id)
-
-        # Try CDS fixtures format (list of fixture objects)
-        if isinstance(body, list) and body and isinstance(body[0], dict):
-            first = body[0]
-            if any(k in first for k in ("fixture", "fixtureId", "mainEventMarket", "startDate")):
+        async def _on_response(resp: _Response) -> None:
+            if "cds-api/bettingoffer/fixtures" not in resp.url:
+                return
+            # Determine league_name from competition info in URL
+            m_comp = re.search(r"competitionIds=(\d+)", resp.url)
+            comp_id = m_comp.group(1) if m_comp else ""
+            # Find league from our LEAGUES list by comp_id
+            league_name = sport_key  # fallback
+            for lg_name, lg_sport, lg_path in LEAGUES:
+                if lg_sport == sport_key:
+                    ids = re.findall(r"-(\d+)", lg_path)
+                    if ids and ids[-1] == comp_id:
+                        league_name = lg_name
+                        break
+            try:
+                body = await resp.json()
                 rows = _parse_cds_fixtures(body, league_name, sport_key)
                 if rows:
-                    return rows
+                    logger.info("[Bwin] Intercepted %s (comp=%s): %d rows", league_name, comp_id, len(rows))
+                    captured.extend(rows)
+                else:
+                    preview = _json.dumps(body, ensure_ascii=False)[:300] if body else "empty"
+                    logger.info("[Bwin] CDS resp (comp=%s) 0 rows — preview: %s", comp_id, preview)
+            except Exception as exc:
+                logger.debug("[Bwin] CDS resp parse error: %s", exc)
 
-        # Try generic event list format
+        self._page.on("response", _on_response)
+        url = self.base_url + sport_path
+        self._log.info("[Bwin] Navigating to %s", url)
+        try:
+            await self._page.goto(url, wait_until="networkidle", timeout=45_000)
+            self._log.info("[Bwin] %s: networkidle", sport_key)
+        except Exception as e:
+            self._log.info("[Bwin] %s: %s — continuing", sport_key, type(e).__name__)
+        await self._page.wait_for_timeout(3000)
+        self._page.remove_listener("response", _on_response)
+        return captured
+
+    def parse_response(self, url: str, body: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
+        """Fallback for any JSON intercepted during base navigation (rarely fires)."""
+        if "cds-api" in url:
+            logger.info("[Bwin] CDS URL intercepted via base: %s", url[:120])
+        if isinstance(body, list) and body and isinstance(body[0], dict):
+            rows = _parse_cds_fixtures(body, league_name, sport_key)
+            if rows:
+                return rows
         try:
             if isinstance(body, dict):
-                for key in ("events", "Events", "data", "fixtures", "Fixtures",
-                            "matches", "results", "items"):
+                for key in ("events", "Events", "data", "fixtures", "Fixtures", "matches", "results"):
                     val = body.get(key)
                     if isinstance(val, list) and val:
                         rows = _parse_events(val, league_name, sport_key)
                         if rows:
                             return rows
-                        rows = _parse_cds_fixtures(val, league_name, sport_key)
-                        if rows:
-                            return rows
-            if isinstance(body, list) and body and isinstance(body[0], dict):
-                rows = _parse_events(body, league_name, sport_key)
-                if rows:
-                    return rows
         except Exception as e:
             logger.debug("[Bwin] parse error for %s: %s", url, e)
         return []
 
     async def _scrape_leagues(self, sport: str | None) -> list[MatchOdds]:
-        """Override: warmup once → extract access_id → call CDS API for all leagues.
+        """Return rows already captured during _start() navigation.
 
-        The base implementation navigates to each league page and waits for
-        networkidle (65s timeout each × 11 leagues = ~12 min). We skip that
-        entirely: the warmup in _start() already loads the calcio page and
-        gives us the x-bwin-accessid from intercepted CDS API calls.
-        Then we call the CDS fixtures endpoint per-league via page.evaluate().
+        All CDS fixture responses were captured during sport-page navigations.
+        No additional navigation or fetch() calls needed.
         """
-        assert self._page is not None
+        if not self._captured_rows:
+            logger.warning("[Bwin] No CDS fixture data captured during navigation")
+        else:
+            n_events = len({r.event_name for r in self._captured_rows})
+            logger.info("[Bwin] Total from navigation: %d events, %d rows",
+                        n_events, len(self._captured_rows))
 
-        if not self._access_id:
-            logger.warning("[Bwin] No x-bwin-accessid captured during warmup — aborting")
-            return []
+        # Filter by sport if requested
+        if sport:
+            filtered = [r for r in self._captured_rows if r.sport == sport]
+        else:
+            filtered = self._captured_rows
 
-        all_results: list[MatchOdds] = []
-        for league_name, sport_key, page_path in self.leagues:
-            if sport and sport_key != sport:
-                continue
-            try:
-                rows = await self._fetch_league_cds(league_name, sport_key, page_path)
-                all_results.extend(rows)
-                n_events = len({r.event_name for r in rows})
-                self._log.info("[Bwin] %s — %d events, %d market rows",
-                               league_name, n_events, len(rows))
-            except Exception as exc:
-                self._log.error("[Bwin] %s failed: %s", league_name, exc, exc_info=True)
-
-        self._log.info("[Bwin] Total match+market rows: %d", len(all_results))
-        return all_results
-
-    async def _fetch_league_cds(
-        self, league_name: str, sport_key: str, page_path: str
-    ) -> list[MatchOdds]:
-        """Call CDS fixtures API for one league via page.evaluate()."""
-        assert self._page is not None
-
-        # Extract sportId and competitionId from page_path
-        # e.g. "/it/sports/calcio-4/italia/serie-a-67" → ids = ["4", "67"]
-        ids = re.findall(r"-(\d+)", page_path)
-        if not ids:
-            logger.warning("[Bwin] %s: cannot parse IDs from %s", league_name, page_path)
-            return []
-
-        sport_id = ids[0]
-        comp_id = ids[-1] if len(ids) >= 2 else None
-
-        params = (
-            f"x-bwin-accessid={self._access_id}"
-            f"&lang=it&country=IT&usercountry=IT"
-            f"&fixtureTypes=Standard&state=Active&offer=Main"
-            f"&sportIds={sport_id}"
-        )
-        if comp_id and comp_id != sport_id:
-            params += f"&competitionIds={comp_id}"
-
-        cds_url = f"{BASE_URL}/cds-api/bettingoffer/fixtures?{params}"
-        logger.info("[Bwin] %s → %s", league_name, cds_url)
-
-        try:
-            body = await self._page.evaluate(f"""
-                async () => {{
-                    try {{
-                        const resp = await fetch({_json.dumps(cds_url)}, {{
-                            headers: {{
-                                'Accept': 'application/json',
-                                'Accept-Language': 'it-IT,it;q=0.9',
-                                'x-bwin-accessid': {_json.dumps(self._access_id)}
-                            }},
-                            credentials: 'include'
-                        }});
-                        if (!resp.ok) return {{'_error': resp.status}};
-                        return resp.json();
-                    }} catch(e) {{
-                        return {{'_error': String(e)}};
-                    }}
-                }}
-            """)
-        except Exception as exc:
-            logger.error("[Bwin] %s page.evaluate failed: %s", league_name, exc)
-            return []
-
-        if isinstance(body, dict) and "_error" in body:
-            logger.warning("[Bwin] %s CDS error: %s", league_name, body)
-            return []
-
-        preview = _json.dumps(body, ensure_ascii=False)[:500] if body else "empty"
-        logger.info("[Bwin] %s response preview: %s", league_name, preview)
-
-        rows = _parse_cds_fixtures(body, league_name, sport_key)
-        logger.info("[Bwin] %s: %d rows", league_name, len(rows))
-        return rows
+        self._log.info("[Bwin] Total match+market rows: %d", len(filtered))
+        return filtered
