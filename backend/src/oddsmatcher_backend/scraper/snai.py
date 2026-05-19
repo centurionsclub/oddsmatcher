@@ -323,29 +323,78 @@ class SnaiScraper:
 
         # ── Phase 1: intercept alberaturaPrematch ─────────────────────
         captured_alberatura: dict = {}
+        intercepted_urls: list[str] = []
 
         async def on_response(response):
             nonlocal captured_alberatura
-            if API_HOST not in response.url:
+            url = response.url
+            # Log ALL snai/flutterseatech responses for diagnostics
+            if "snai" in url.lower() or API_HOST in url:
+                logger.info("[Snai] RESP %d: %s", response.status, url)
+                intercepted_urls.append(url)
+            if API_HOST not in url:
                 return
-            if "alberatura" not in response.url.lower():
+            if "alberatura" not in url.lower():
                 return
             try:
-                body = await response.json()
+                body_bytes = await response.body()
+                body = _json.loads(body_bytes)
                 captured_alberatura = body
-                logger.info("[Snai] alberaturaPrematch captured: top_keys=%s", list(body.keys()))
+                logger.info("[Snai] alberaturaPrematch captured! keys=%s", list(body.keys()))
             except Exception as e:
-                logger.warning("[Snai] Could not parse alberaturaPrematch: %s", e)
+                logger.warning("[Snai] Could not parse alberaturaPrematch body: %s", e)
 
         page.on("response", on_response)
+
+        # ── Step 1: load homepage first (warms up session cookies) ───
+        logger.info("[Snai] Navigating to homepage...")
+        try:
+            await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30_000)
+            await page.wait_for_timeout(2000)
+        except Exception as e:
+            logger.info("[Snai] Homepage: %s", type(e).__name__)
+
+        # ── Step 2: accept cookie consent if present ──────────────────
+        COOKIE_SELECTORS = [
+            "#onetrust-accept-btn-handler",
+            "button:has-text('Accetta tutti')",
+            "button:has-text('Accetta')",
+            "button:has-text('Consenti tutto')",
+            "button:has-text('Consenti')",
+            "[data-testid='cookie-accept']",
+            ".accept-cookies-button",
+        ]
+        for sel in COOKIE_SELECTORS:
+            try:
+                await page.click(sel, timeout=3000)
+                logger.info("[Snai] Cookie consent clicked: %s", sel)
+                await page.wait_for_timeout(1500)
+                break
+            except Exception:
+                pass
+
+        # ── Step 3: navigate to scommesse to trigger API calls ────────
+        logger.info("[Snai] Navigating to /scommesse...")
         try:
             await page.goto(BASE_URL + "/scommesse", wait_until="networkidle", timeout=40_000)
+            logger.info("[Snai] /scommesse loaded")
         except Exception as e:
-            logger.info("[Snai] /scommesse networkidle timeout (expected): %s", type(e).__name__)
-        # Give JS time to complete all initial API calls
-        await page.wait_for_timeout(4000)
-        page.remove_listener("response", on_response)
+            logger.info("[Snai] /scommesse: %s", type(e).__name__)
 
+        await page.wait_for_timeout(5000)
+
+        # ── Diagnostics ───────────────────────────────────────────────
+        try:
+            title = await page.title()
+            final_url = page.url
+            logger.info("[Snai] Page title: %s | URL: %s", title, final_url)
+            body_html = await page.evaluate("document.body ? document.body.innerHTML : 'NO BODY'")
+            logger.info("[Snai] Body snippet: %.3000s", body_html)
+        except Exception as ex:
+            logger.warning("[Snai] Could not read DOM: %s", ex)
+        logger.info("[Snai] intercepted_urls (%d): %s", len(intercepted_urls), intercepted_urls[:30])
+
+        page.remove_listener("response", on_response)
         logger.info("[Snai] alberatura captured: %s", bool(captured_alberatura))
 
         # ── Find wanted competitions ───────────────────────────────────
