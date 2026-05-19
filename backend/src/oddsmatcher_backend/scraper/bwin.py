@@ -262,6 +262,73 @@ class BwinScraper(BasePlaywrightScraper):
         super().__init__()
         self._access_id: str = ""  # x-bwin-accessid extracted from intercepted URLs
 
+    async def _start(self) -> None:
+        """Override: intercept CDS responses during warmup to capture x-bwin-accessid."""
+        import asyncio as _asyncio
+        from playwright.async_api import Response as _Response
+
+        # Start playwright + browser but don't warmup yet
+        self._playwright = await __import__("playwright.async_api", fromlist=["async_playwright"]).async_playwright().start()
+        import os, urllib.parse
+        proxy_url = os.environ.get("PROXY_URL")
+        proxy = None
+        if proxy_url:
+            p = urllib.parse.urlparse(proxy_url)
+            proxy = {
+                "server": f"{p.scheme}://{p.hostname}:{p.port}",
+                "username": p.username or "",
+                "password": p.password or "",
+            }
+            self._log.info("[Bwin] Usando proxy: %s:%s", p.hostname, p.port)
+
+        self._browser = await self._playwright.chromium.launch(
+            headless=False,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            proxy=proxy,
+        )
+        _UA = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        )
+        self._context = await self._browser.new_context(
+            user_agent=_UA,
+            locale="it-IT",
+            timezone_id="Europe/Rome",
+            viewport={"width": 1280, "height": 800},
+        )
+        self._page = await self._context.new_page()
+
+        try:
+            from playwright_stealth import stealth_async as _stealth_async
+            await _stealth_async(self._page)
+            self._log.info("[Bwin] playwright-stealth applied")
+        except ImportError:
+            self._log.warning("[Bwin] playwright-stealth not installed")
+
+        # Set up response listener BEFORE the warmup navigation
+        async def _capture_access_id(resp: _Response) -> None:
+            if "cds-api" in resp.url and not self._access_id:
+                m = re.search(r"x-bwin-accessid=([A-Za-z0-9+/=_-]+)", resp.url)
+                if m:
+                    self._access_id = m.group(1)
+                    self._log.info("[Bwin] Captured x-bwin-accessid from warmup: %s", self._access_id)
+
+        self._page.on("response", _capture_access_id)
+
+        # Warmup navigation — triggers CDS API calls which contain the access_id
+        warmup_url = self.base_url + self.warmup_path
+        self._log.info("[Bwin] Navigating to warmup: %s", warmup_url)
+        try:
+            await self._page.goto(warmup_url, wait_until="networkidle", timeout=45_000)
+            self._log.info("[Bwin] Warmup networkidle")
+        except Exception as e:
+            self._log.info("[Bwin] Warmup timeout: %s", type(e).__name__)
+        await self._page.wait_for_timeout(3000)
+
+        self._page.remove_listener("response", _capture_access_id)
+        self._log.info("[Bwin] Warmup done — access_id captured: %s", bool(self._access_id))
+
     def parse_response(self, url: str, body: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
         """Try to parse intercepted responses — logs CDS URLs, tries CDS format."""
         # Log any CDS-related URL for discovery
