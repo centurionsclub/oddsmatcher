@@ -9,6 +9,7 @@ from oddsmatcher_backend.db.pipeline import OddsPipeline
 from oddsmatcher_backend.db.supabase_client import SupabaseWriter
 from oddsmatcher_backend.scraper.browser import BrowserManager
 from oddsmatcher_backend.scraper.centroquote import CentroQuoteScraper
+from oddsmatcher_backend.scraper.eurobet import EurobetScraper
 from oddsmatcher_backend.scraper.lottomatica import LottomaticaScraper
 from oddsmatcher_backend.scraper.sisal import SisalScraper
 
@@ -20,7 +21,7 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
 
     Args:
         sport:      Scrape only this sport, or all if None.
-        bookmaker:  'centroquote' | 'lottomatica' | None (= entrambi)
+        bookmaker:  'centroquote' | 'lottomatica' | 'sisal' | 'eurobet' | None (= tutti)
 
     Returns:
         Stats from the pipeline.
@@ -83,6 +84,18 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
         except Exception as exc:
             logger.error("Lottomatica scrape cycle failed: %s", exc, exc_info=True)
 
+    # Eurobet scraping — Playwright browser + network interception
+    eurobet_live_inserted = 0
+    if bookmaker in (None, "eurobet"):
+        try:
+            eurobet_scraper = EurobetScraper()
+            eurobet_results = await (eurobet_scraper.scrape_sport(sport) if sport else eurobet_scraper.scrape_all())
+            eurobet_writer = SupabaseWriter()
+            eurobet_live_inserted = eurobet_writer.write_direct_live_odds("Eurobet", eurobet_results)
+            logger.info("Eurobet done: %d match-market results → %d live_odds rows", len(eurobet_results), eurobet_live_inserted)
+        except Exception as exc:
+            logger.error("Eurobet scrape cycle failed: %s", exc, exc_info=True)
+
     logger.info("Scrape phase done: %d CentroQuote match-market results", len(results))
 
     # Pipeline: write CentroQuote results to odds_events + odds_data
@@ -90,6 +103,7 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
     pipeline = OddsPipeline(writer)
     stats = pipeline.process(results)
     stats["lotto_live_rows"] = lotto_live_inserted
+    stats["eurobet_live_rows"] = eurobet_live_inserted
 
     # Cleanup stale data
     cleaned = writer.cleanup_stale_odds(hours=48)

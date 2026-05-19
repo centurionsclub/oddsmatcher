@@ -67,6 +67,45 @@ def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", ascii_str.lower()).strip("-")
 
 
+def _parse_sisal_date(date_str: str) -> str | None:
+    """Normalise a Sisal date string to a UTC ISO-8601 string.
+
+    Sisal's API returns dates in Italian local time (CEST = UTC+2 in summer,
+    CET = UTC+1 in winter) in various formats.  We try the known patterns and
+    fall back to returning the original string unchanged.
+    """
+    if not date_str:
+        return None
+    from datetime import datetime, timezone, timedelta
+
+    FORMATS = [
+        "%d/%m/%Y %H:%M:%S",   # "20/05/2026 20:30:00"
+        "%d/%m/%Y %H:%M",      # "20/05/2026 20:30"
+        "%Y-%m-%dT%H:%M:%S",   # "2026-05-20T20:30:00"
+        "%Y-%m-%d %H:%M:%S",   # "2026-05-20 20:30:00"
+        "%Y-%m-%d %H:%M",      # "2026-05-20 20:30"
+    ]
+    for fmt in FORMATS:
+        try:
+            dt_naive = datetime.strptime(date_str.strip(), fmt)
+            # Treat as Italian local time → convert to UTC
+            italy_offset = 2 if 3 <= dt_naive.month <= 10 else 1
+            dt_local = dt_naive.replace(tzinfo=timezone(timedelta(hours=italy_offset)))
+            return dt_local.astimezone(timezone.utc).isoformat()
+        except ValueError:
+            continue
+
+    # Already has TZ info (e.g. "2026-05-20T18:30:00Z" or "+02:00") — return as-is
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return dt.astimezone(timezone.utc).isoformat()
+    except Exception:
+        pass
+
+    return date_str  # unknown format — return unchanged
+
+
 class SisalScraper:
     """Scrapes pregame odds from Sisal via Playwright network interception."""
 
@@ -275,7 +314,7 @@ def _parse_scheda(
             continue
 
         event_name = f"{home} - {away}"
-        event_time = data if data else None
+        event_time = _parse_sisal_date(data) if data else None
         home_slug = _slugify(home)
         away_slug = _slugify(away)
         match_url = f"{BASE_URL}/scommesse-matchpoint/evento/{sisal_slug}/{home_slug}-{away_slug}"

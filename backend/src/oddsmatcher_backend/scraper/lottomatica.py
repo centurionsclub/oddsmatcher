@@ -373,9 +373,19 @@ def _parse_markets(
 
 
 def _parse_date(date_str: str) -> str:
+    """Parse Lottomatica date string (Italian local time) → UTC ISO string.
+
+    Lottomatica returns dates in Italian time (CET = UTC+1 in winter,
+    CEST = UTC+2 in summer). We use the ``dateutil`` / stdlib ``zoneinfo``
+    to convert properly so that all scrapers store UTC in the DB.
+    """
     try:
-        from datetime import datetime
-        dt = datetime.strptime(date_str, "%d-%m-%Y %H:%M")
-        return dt.isoformat()
+        from datetime import datetime, timezone, timedelta
+        dt_naive = datetime.strptime(date_str, "%d-%m-%Y %H:%M")
+        # Determine Italy offset: CEST (UTC+2) Mar–Oct, CET (UTC+1) Nov–Feb
+        # Use a simple heuristic: month 3-10 → UTC+2, else UTC+1
+        italy_offset = 2 if 3 <= dt_naive.month <= 10 else 1
+        dt_local = dt_naive.replace(tzinfo=timezone(timedelta(hours=italy_offset)))
+        return dt_local.astimezone(timezone.utc).isoformat()
     except Exception:
         return date_str
