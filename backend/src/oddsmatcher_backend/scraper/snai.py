@@ -285,12 +285,26 @@ EVENTS_API = (
 )
 
 
+_SNAI_HEADERS = {
+    "User-Agent": _UA,
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "it-IT,it;q=0.9",
+    "Referer": "https://www.snai.it/",
+    "Origin": "https://www.snai.it",
+}
+
+ALBERATURA_URL = (
+    "https://" + API_HOST
+    + "/api/lettura-palinsesto-sport/palinsesto/prematch/alberaturaPrematch"
+)
+
+
 class SnaiScraper:
-    """Snai scraper — two-phase:
-    1. Navigate to /scommesse to trigger alberaturaPrematch (intercepted).
-    2. For each wanted competition, use page.evaluate(fetch(...)) to fetch
-       events directly from the page JS context — this carries the
-       flutterseatech.it session cookies that the page JS already set.
+    """Snai scraper — direct httpx calls to betting-snai.flutterseatech.it.
+
+    No browser needed: the Snai API endpoints are publicly accessible.
+    1. GET alberaturaPrematch → parse competition list
+    2. For each wanted competition: GET live-ora-for-cards/{manif_id}
     """
 
     bookmaker_name = BOOKMAKER
@@ -302,195 +316,56 @@ class SnaiScraper:
         return await self._run(sport=sport)
 
     async def _run(self, sport: str | None) -> list[MatchOdds]:
-        pw = await async_playwright().start()
+        import httpx
         proxy_url = os.environ.get("PROXY_URL")
-        proxy = None
         if proxy_url:
             import urllib.parse
             p = urllib.parse.urlparse(proxy_url)
-            proxy = {
-                "server": f"{p.scheme}://{p.hostname}:{p.port}",
-                "username": p.username or "",
-                "password": p.password or "",
-            }
             logger.info("[Snai] Using proxy: %s:%s", p.hostname, p.port)
 
-        browser = await pw.chromium.launch(
-            headless=False,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
-            proxy=proxy,
-        )
-        context = await browser.new_context(
-            user_agent=_UA, locale="it-IT", timezone_id="Europe/Rome",
-            viewport={"width": 1280, "height": 800},
-        )
-        page = await context.new_page()
-        if _STEALTH_AVAILABLE:
-            await _stealth_async(page)
-            logger.info("[Snai] playwright-stealth applied")
         results: list[MatchOdds] = []
 
-        # ── Phase 1: intercept ALL API responses ──────────────────────
-        captured_alberatura: dict = {}
-        # Each entry: (manif_id, body)
-        captured_events: list[tuple[int, Any]] = []
-        # manif_id → body already captured (deduplicate)
-        seen_manif: set[int] = set()
-
-        async def on_response(response):
-            nonlocal captured_alberatura
-            url = response.url
-            if API_HOST not in url:
-                return
-            # Capture alberaturaPrematch
-            if "alberatura" in url.lower() and "prematch" in url.lower():
-                try:
-                    body_bytes = await response.body()
-                    body = _json.loads(body_bytes)
-                    if isinstance(body, dict) and body:
-                        captured_alberatura = body
-                        logger.info("[Snai] alberaturaPrematch captured! keys=%s", list(body.keys()))
-                except Exception as e:
-                    logger.warning("[Snai] Could not parse alberaturaPrematch: %s", e)
-                return
-            # Capture per-competition event responses
-            if "live-ora-for-cards" in url or "schedaManifestazione" in url or "avvenimentiPrematch" in url:
-                # Extract manif_id from URL
-                m = re.search(r"/(\d+)(?:\?|$)", url)
-                manif_id = int(m.group(1)) if m else -1
-                if manif_id in seen_manif:
-                    return
-                try:
-                    body_bytes = await response.body()
-                    body = _json.loads(body_bytes)
-                    if body:
-                        seen_manif.add(manif_id)
-                        logger.info("[Snai] Event data captured: manif=%d url=%s", manif_id, url[:100])
-                        captured_events.append((manif_id, body))
-                except Exception:
-                    pass
-
-        page.on("response", on_response)
-
-        # ── Step 1: load homepage — warms up session + triggers alberaturaPrematch ──
-        logger.info("[Snai] Navigating to homepage...")
-        try:
-            await page.goto(BASE_URL, wait_until="networkidle", timeout=40_000)
-            logger.info("[Snai] Homepage: networkidle")
-        except Exception as e:
-            logger.info("[Snai] Homepage: %s", type(e).__name__)
-        await page.wait_for_timeout(4000)
-
-        # ── Step 2: accept cookie consent if present ──────────────────
-        COOKIE_SELECTORS = [
-            "#onetrust-accept-btn-handler",
-            "button:has-text('Accetta tutti')",
-            "button:has-text('Accetta')",
-            "button:has-text('Consenti tutto')",
-            "button:has-text('Consenti')",
-            "[data-testid='cookie-accept']",
-            ".accept-cookies-button",
-        ]
-        for sel in COOKIE_SELECTORS:
+        async with httpx.AsyncClient(
+            headers=_SNAI_HEADERS,
+            timeout=30,
+            follow_redirects=True,
+            proxy=proxy_url,
+        ) as client:
+            # ── Phase 1: fetch alberaturaPrematch ─────────────────────
+            logger.info("[Snai] Fetching alberaturaPrematch…")
             try:
-                await page.click(sel, timeout=3000)
-                logger.info("[Snai] Cookie consent clicked: %s", sel)
-                await page.wait_for_timeout(1500)
-                break
-            except Exception:
-                pass
+                resp = await client.get(ALBERATURA_URL)
+                resp.raise_for_status()
+                alberatura = resp.json()
+                logger.info("[Snai] alberaturaPrematch: keys=%s", list(alberatura.keys())[:8])
+            except Exception as exc:
+                logger.error("[Snai] alberaturaPrematch failed: %s", exc)
+                return results
 
-        # ── Step 3: navigate sport landing pages to trigger event API calls ──
-        # Each page load triggers the Snai JS to fetch competition event data
-        # which we capture via on_response.
-        # Note: /scommesse crashes via proxy (ERR_HTTP2_PROTOCOL_ERROR) but
-        # /scommesse/calcio and sport subpaths work.
-        sport_pages_to_visit: list[str] = []
-        if not sport or sport == "calcio":
-            sport_pages_to_visit.append("/scommesse/calcio")
-        if not sport or sport == "tennis":
-            sport_pages_to_visit.append("/scommesse/tennis")
-        if not sport or sport == "basket":
-            sport_pages_to_visit.append("/scommesse/basket")
-        # Always visit calcio if alberatura not yet captured
-        if not captured_alberatura and "/scommesse/calcio" not in sport_pages_to_visit:
-            sport_pages_to_visit.insert(0, "/scommesse/calcio")
+            # ── Phase 2: find competitions + fetch events ──────────────
+            competitions = self._find_competitions(alberatura, sport)
+            logger.info("[Snai] %d competitions found", len(competitions))
 
-        for sport_path in sport_pages_to_visit:
-            logger.info("[Snai] Navigating to %s…", sport_path)
-            try:
-                await page.goto(BASE_URL + sport_path, wait_until="networkidle", timeout=40_000)
-                logger.info("[Snai] %s: networkidle", sport_path)
-            except Exception as e:
-                logger.info("[Snai] %s: %s — continuing", sport_path, type(e).__name__)
-            await page.wait_for_timeout(4000)
-
-        page.remove_listener("response", on_response)
-        logger.info("[Snai] alberatura captured: %s, event bodies: %d",
-                    bool(captured_alberatura), len(captured_events))
-
-        # ── Phase 2: parse intercepted event data ────────────────────────
-        # We build a map from manif_id → (league_name, sport_key) from
-        # the alberatura, then match against captured event bodies.
-        competitions = self._find_competitions(captured_alberatura, sport)
-        logger.info("[Snai] %d competitions found in alberatura", len(competitions))
-        manif_to_league: dict[int, tuple[str, str]] = {
-            manif_id: (league_name, sport_key)
-            for league_name, sport_key, disc_id, manif_id in competitions
-        }
-
-        # Parse directly from intercepted bodies
-        for manif_id, body in captured_events:
-            league_name_sk = manif_to_league.get(manif_id)
-            if not league_name_sk:
-                # Try to match via alberatura even if not in our wanted list
-                # (log for diagnostics, skip parsing)
-                logger.info("[Snai] Intercepted manif=%d (not in wanted leagues — skip)", manif_id)
-                continue
-            league_name, sport_key = league_name_sk
-            preview = _json.dumps(body, ensure_ascii=False)[:200] if body else "empty"
-            logger.info("[Snai] %s (manif=%d) response preview: %s", league_name, manif_id, preview)
-            rows = _parse_snai_events(body, league_name, sport_key)
-            logger.info("[Snai] %s: %d rows", league_name, len(rows))
-            results.extend(rows)
-
-        # Fallback: if no event bodies were intercepted, try page.evaluate() for
-        # each competition using the betting-snai API via browser context.
-        if not captured_events and competitions:
-            logger.info("[Snai] No event bodies intercepted — trying page.evaluate() fallback")
             for league_name, sport_key, disc_id, manif_id in competitions:
                 url = EVENTS_API.format(manif_id=manif_id)
-                logger.info("[Snai] Fetching %s (manif=%d) via page.evaluate…", league_name, manif_id)
+                logger.info("[Snai] Fetching %s (manif=%d)…", league_name, manif_id)
                 try:
-                    body = await page.evaluate(f"""
-                        async () => {{
-                            try {{
-                                const resp = await fetch({_json.dumps(url)}, {{
-                                    headers: {{
-                                        'Accept': 'application/json, text/plain, */*',
-                                        'Accept-Language': 'it-IT,it;q=0.9',
-                                    }},
-                                    credentials: 'include'
-                                }});
-                                if (!resp.ok) return {{'_error': resp.status, '_url': resp.url}};
-                                return resp.json();
-                            }} catch(e) {{
-                                return {{'_error': String(e)}};
-                            }}
-                        }}
-                    """)
+                    resp = await client.get(url)
+                    if resp.status_code == 404:
+                        logger.info("[Snai] %s: 404 (no events)", league_name)
+                        continue
+                    resp.raise_for_status()
+                    body = resp.json()
                 except Exception as exc:
-                    logger.error("[Snai] page.evaluate failed for %s: %s", league_name, exc)
+                    logger.error("[Snai] %s: request failed: %s", league_name, exc)
                     continue
-                if isinstance(body, dict) and "_error" in body:
-                    logger.warning("[Snai] %s fetch error: %s", league_name, body)
-                    continue
+
+                preview = _json.dumps(body, ensure_ascii=False)[:300] if body else "empty"
+                logger.info("[Snai] %s preview: %s", league_name, preview)
+
                 rows = _parse_snai_events(body, league_name, sport_key)
                 logger.info("[Snai] %s: %d rows", league_name, len(rows))
                 results.extend(rows)
-
-        await browser.close()
-        await pw.stop()
 
         logger.info("[Snai] Total rows: %d", len(results))
         return results

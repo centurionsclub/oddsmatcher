@@ -84,14 +84,52 @@ def _parse_date(s: str) -> str | None:
         return s
 
 
+def _get_name_str(obj: Any) -> str:
+    """Extract name string from a Bwin CDS name field (may be str or {"value": "..."})."""
+    if isinstance(obj, dict):
+        return str(obj.get("value", obj.get("name", ""))).strip()
+    return str(obj).strip() if obj else ""
+
+
+def _get_odds_float(r: dict) -> float | None:
+    """Extract decimal odds from a Bwin CDS result/option."""
+    # Direct odds field
+    v = r.get("odds")
+    if v is not None:
+        try:
+            f = float(v)
+            return f if f > 1.0 else None
+        except (TypeError, ValueError):
+            pass
+    # price sub-object
+    price = r.get("price")
+    if isinstance(price, dict):
+        v = price.get("odds", price.get("decimalOdds"))
+        if v is not None:
+            try:
+                f = float(v)
+                return f if f > 1.0 else None
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
 def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
-    """Parse Entain CDS bettingoffer/fixtures response into MatchOdds."""
+    """Parse Entain CDS bettingoffer/fixtures response into MatchOdds.
+
+    Bwin CDS responses come in two forms:
+    A) List of fixture objects (old format)
+    B) {"fixtures": [...]} with each fixture having:
+       - optionMarkets: [{"name": {"value": "1X2"}, "options": [...], ...}]  (soccer)
+       - games: [{"name": {"value": "Vincitore"}, "results": [...], ...}]   (tennis/basket)
+       Each fixture has "name" (match name) and "startDate".
+    """
     results: list[MatchOdds] = []
     if not data:
         return results
 
-    # CDS fixtures endpoint returns a list of fixture objects
-    fixtures: list = data if isinstance(data, list) else data.get("fixtures", [])
+    # Normalise to a list of fixture dicts
+    fixtures: list = data if isinstance(data, list) else (data.get("fixtures") or [])
     if not fixtures:
         return results
 
@@ -99,64 +137,87 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
         if not isinstance(fix, dict):
             continue
 
-        # The fixture info is either at top level or under 'fixture' key
-        fobj = fix.get("fixture", fix)
-        if not isinstance(fobj, dict):
-            continue
+        # ── Extract event name and time ────────────────────────────────
+        name_obj = fix.get("name") or fix.get("fixture", {}).get("name", "")
+        name_raw = _get_name_str(name_obj)
+        if not name_raw:
+            name_raw = str(fix.get("fixture", {}).get("name", ""))
 
-        name_raw = fobj.get("name", "") or ""
-        # Parse home/away from participants
-        participants = fobj.get("participants", [])
+        raw_time = fix.get("startDate") or fix.get("startTime") or fix.get("fixture", {}).get("startDate", "")
+        event_time = _parse_date(str(raw_time)) if raw_time else None
+        murl = f"{BASE_URL}/it/sports/"
+
+        # ── Extract home/away from participants ────────────────────────
+        participants = fix.get("participants") or fix.get("fixture", {}).get("participants", [])
         home, away = "", ""
-        for p in participants:
+        for p in (participants or []):
             if not isinstance(p, dict):
                 continue
-            if p.get("homeAway", "").lower() in ("home", "1"):
-                home = p.get("name", "")
-            elif p.get("homeAway", "").lower() in ("away", "2"):
-                away = p.get("name", "")
+            ha = str(p.get("homeAway", p.get("type", ""))).lower()
+            pname = _get_name_str(p.get("name", ""))
+            if ha in ("home", "1") and not home:
+                home = pname
+            elif ha in ("away", "2") and not away:
+                away = pname
         if not home:
-            parts = re.split(r"\s+v[s]?\s+|\s+-\s+", str(name_raw))
-            home = parts[0].strip() if len(parts) >= 2 else str(name_raw).strip()
+            parts = re.split(r"\s+v[s]?\s+|\s+-\s+", name_raw)
+            home = parts[0].strip() if len(parts) >= 2 else name_raw.strip()
             away = parts[1].strip() if len(parts) >= 2 else ""
         if not home:
             continue
 
         event_name = f"{home} - {away}" if away else home
-        raw_time = fobj.get("startDate", fobj.get("startTime", ""))
-        event_time = _parse_date(str(raw_time)) if raw_time else None
-        murl = f"{BASE_URL}/it/sports/"
 
-        # Collect markets: mainEventMarket + markets list
-        all_markets: list[dict] = []
-        main_mkt = fix.get("mainEventMarket")
-        if isinstance(main_mkt, dict):
-            all_markets.append(main_mkt)
-        for m in (fix.get("markets") or []):
-            if isinstance(m, dict):
-                all_markets.append(m)
+        # ── Collect all market objects ─────────────────────────────────
+        # optionMarkets = soccer markets (with "options" as selections)
+        # games = tennis/basket markets (with "results" as selections)
+        # mainEventMarket, markets = legacy/alternative keys
+        all_markets: list[tuple[str, list]] = []  # (market_name, selections_list)
 
-        for mkt in all_markets:
-            mname = str(mkt.get("name", mkt.get("typeName", mkt.get("marketType", "")))).strip()
-            canonical = SIMPLE_MARKET_MAP.get(mname)
-            results_list = mkt.get("results", mkt.get("selections", mkt.get("outcomes", [])))
-            if not isinstance(results_list, list):
+        for mkt in (fix.get("optionMarkets") or []):
+            if not isinstance(mkt, dict):
                 continue
+            mname = _get_name_str(mkt.get("name", ""))
+            sels = mkt.get("options") or []
+            all_markets.append((mname, sels))
+
+        for mkt in (fix.get("games") or []):
+            if not isinstance(mkt, dict):
+                continue
+            mname = _get_name_str(mkt.get("name", ""))
+            sels = mkt.get("results") or []
+            all_markets.append((mname, sels))
+
+        # Legacy keys
+        for key in ("mainEventMarket", "markets", "market"):
+            val = fix.get(key)
+            if isinstance(val, dict):
+                mname = _get_name_str(val.get("name", ""))
+                sels = val.get("results", val.get("selections", val.get("outcomes", [])))
+                if isinstance(sels, list):
+                    all_markets.append((mname, sels))
+            elif isinstance(val, list):
+                for m in val:
+                    if isinstance(m, dict):
+                        mname = _get_name_str(m.get("name", ""))
+                        sels = m.get("results", m.get("selections", m.get("outcomes", m.get("options", []))))
+                        if isinstance(sels, list):
+                            all_markets.append((mname, sels))
+
+        # ── Parse markets ──────────────────────────────────────────────
+        for mname, sels_raw in all_markets:
+            canonical = SIMPLE_MARKET_MAP.get(mname)
 
             if canonical:
                 odds_dict: dict[str, float] = {}
-                for r in results_list:
+                for r in sels_raw:
                     if not isinstance(r, dict):
                         continue
-                    lbl_raw = str(r.get("name", r.get("originId", r.get("outcome", "")))).strip()
+                    lbl_raw = _get_name_str(r.get("name") or r.get("sourceName", ""))
                     lbl = OUTCOME_MAP.get(lbl_raw, lbl_raw)
-                    price = r.get("odds", r.get("price", r.get("value", 0)))
-                    try:
-                        f = float(price)
-                        if f > 1.0 and lbl:
-                            odds_dict[lbl] = f
-                    except (TypeError, ValueError):
-                        pass
+                    f = _get_odds_float(r)
+                    if f and lbl:
+                        odds_dict[lbl] = f
                 if odds_dict:
                     results.append(MatchOdds(
                         sport=sport_key, league=league_name,
@@ -168,22 +229,22 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                 continue
 
             # Over/Under detection
-            if any(kw in mname for kw in ("Over/Under", "Total Goals", "Over Under", "Totale Reti")):
+            if any(kw in mname for kw in ("Over/Under", "Total Goals", "Over Under", "Totale Reti", "Totale gol")):
                 sp_m = re.search(r"(\d+[.,]\d+)", mname)
                 if sp_m:
                     sp = sp_m.group(1).replace(",", ".")
                     if sp in UO_SPREADS_WANTED:
                         odds_uo: dict[str, float] = {}
-                        for r in results_list:
-                            lbl = str(r.get("name", r.get("originId", ""))).strip()
-                            if lbl in ("Over", "Under"):
-                                price = r.get("odds", r.get("price", 0))
-                                try:
-                                    f = float(price)
-                                    if f > 1.0:
-                                        odds_uo[f"{lbl} {sp}"] = f
-                                except (TypeError, ValueError):
-                                    pass
+                        for r in sels_raw:
+                            if not isinstance(r, dict):
+                                continue
+                            lbl = _get_name_str(r.get("name") or r.get("sourceName", ""))
+                            side = "Over" if "over" in lbl.lower() else ("Under" if "under" in lbl.lower() else None)
+                            if not side:
+                                continue
+                            f = _get_odds_float(r)
+                            if f:
+                                odds_uo[f"{side} {sp}"] = f
                         if odds_uo:
                             results.append(MatchOdds(
                                 sport=sport_key, league=league_name,

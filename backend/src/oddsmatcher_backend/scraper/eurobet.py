@@ -41,10 +41,39 @@ _HEADERS = {
     "Referer": "https://www.eurobet.it/",
 }
 
-# Kambi sport path → (our sport_key, our league_name, kambi group path)
-# Kambi uses "football" for soccer, "basketball" for basket, "tennis" for tennis
+# Sport-level Kambi paths — one request per sport gets all competitions.
+# This avoids per-league rate limiting (16 requests → 3 requests).
+SPORT_PATHS: list[tuple[str, str]] = [
+    ("calcio",  "football"),
+    ("tennis",  "tennis"),
+    ("basket",  "basketball"),
+]
+
+# Competition group name → canonical league name (from Kambi group data)
+# Kambi returns group names like "Italy - Serie A", "England - Premier League" etc.
+LEAGUE_FROM_GROUP: dict[str, str] = {
+    "Italy - Serie A": "Serie A",
+    "Italy - Serie B": "Serie B",
+    "Europe - Champions League": "Champions League",
+    "Europe - Europa League": "Europa League",
+    "Europe - Conference League": "Conference League",
+    "England - Premier League": "Premier League",
+    "Spain - Primera División": "La Liga",
+    "Spain - Primera Division": "La Liga",
+    "Germany - Bundesliga": "Bundesliga",
+    "France - Ligue 1": "Ligue 1",
+    "France - Roland Garros": "Roland Garros",
+    "Great Britain - Wimbledon": "Wimbledon",
+    "USA - US Open": "US Open",
+    "Australia - Australian Open": "Australian Open",
+    "USA - NBA": "NBA",
+    "Europe - Euroleague": "Eurolega",
+    "Italy - Serie A (Basket)": "Serie A Basket",
+    "Italy - Lega Basket Serie A": "Serie A Basket",
+}
+
+# Keep the old per-league list for fallback filtering
 LEAGUES: list[tuple[str, str, str]] = [
-    # (league_name, sport_key, kambi_listView_path)
     ("Serie A",           "calcio", "football/italy/serie_a"),
     ("Serie B",           "calcio", "football/italy/serie_b"),
     ("Champions League",  "calcio", "football/europe/champions_league"),
@@ -81,6 +110,69 @@ def _parse_date(ts_ms: int | None) -> str | None:
         return dt.isoformat()
     except Exception:
         return None
+
+
+def _parse_kambi_events_sport(data: Any, sport_key: str, wanted_leagues: set[str]) -> list[MatchOdds]:
+    """Parse a sport-level Kambi listView response (contains multiple competitions).
+
+    The sport-level response groups events by path — the event's path contains
+    country and competition info. We use the group name from the event to assign
+    a league name.
+    """
+    results: list[MatchOdds] = []
+    if not isinstance(data, dict):
+        return results
+
+    events = data.get("events") or []
+    for ev_wrapper in events:
+        if not isinstance(ev_wrapper, dict):
+            continue
+
+        event = ev_wrapper.get("event") or ev_wrapper
+        if not isinstance(event, dict):
+            continue
+
+        # Determine league from event group/path
+        group = event.get("group") or ""
+        path = event.get("path") or []
+        # Try to find league name from LEAGUE_FROM_GROUP
+        league_name: str | None = None
+
+        # Try direct group match
+        league_name = LEAGUE_FROM_GROUP.get(group)
+
+        # Try from path elements
+        if not league_name and isinstance(path, list):
+            # path is usually [{id, name, termKey}, ...] for country, competition
+            if len(path) >= 2:
+                country = path[0].get("name", "")
+                comp = path[-1].get("name", "")
+                combo = f"{country} - {comp}"
+                league_name = LEAGUE_FROM_GROUP.get(combo)
+            if not league_name and path:
+                # Try competition name alone
+                for seg in path:
+                    seg_name = seg.get("name", "")
+                    league_name = LEAGUE_FROM_GROUP.get(seg_name)
+                    if league_name:
+                        break
+
+        # If still not found, try fuzzy matching against wanted_leagues
+        if not league_name:
+            group_lower = group.lower()
+            for lg in wanted_leagues:
+                if lg.lower() in group_lower or group_lower in lg.lower():
+                    league_name = lg
+                    break
+
+        if not league_name:
+            continue  # Not a league we track
+
+        # Parse the event using the existing per-event parser
+        rows = _parse_kambi_events({"events": [ev_wrapper]}, league_name, sport_key)
+        results.extend(rows)
+
+    return results
 
 
 def _parse_kambi_events(data: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
@@ -222,6 +314,12 @@ class EurobetScraper:
             logger.info("[Eurobet] Using proxy: %s", proxy_url.split("@")[-1] if "@" in proxy_url else proxy_url)
 
         all_results: list[MatchOdds] = []
+        import json as _json
+
+        # Wanted league names per sport_key (for filtering sport-level responses)
+        wanted_leagues: dict[str, set[str]] = {}
+        for lg_name, sp_key, _ in LEAGUES:
+            wanted_leagues.setdefault(sp_key, set()).add(lg_name)
 
         async with httpx.AsyncClient(
             headers=_HEADERS,
@@ -229,39 +327,41 @@ class EurobetScraper:
             follow_redirects=True,
             proxy=proxy_url,
         ) as client:
-            for league_name, sport_key, kambi_path in LEAGUES:
+            # Fetch sport-level (3 requests total instead of 16)
+            for sport_key, kambi_sport in SPORT_PATHS:
                 if sport_filter and sport_key != sport_filter:
                     continue
 
-                url = f"{KAMBI_BASE}/listView/{kambi_path}.json?{KAMBI_PARAMS}"
-                logger.info("[Eurobet] Fetching %s — %s", league_name, url)
+                url = f"{KAMBI_BASE}/listView/{kambi_sport}.json?{KAMBI_PARAMS}"
+                logger.info("[Eurobet] Fetching sport %s — %s", sport_key, url)
 
-                # Rate-limit: 1 request/second to avoid 429 from Kambi
-                await asyncio.sleep(1.0)
+                # Small delay to be respectful
+                await asyncio.sleep(2.0)
                 try:
                     resp = await client.get(url)
                     if resp.status_code == 404:
-                        logger.info("[Eurobet] %s: 404 (no events)", league_name)
+                        logger.info("[Eurobet] %s: 404 (no events)", sport_key)
                         continue
                     if resp.status_code == 429:
-                        logger.warning("[Eurobet] %s: 429 rate-limited — waiting 5s", league_name)
-                        await asyncio.sleep(5.0)
+                        logger.warning("[Eurobet] %s: 429 — waiting 10s and retrying", sport_key)
+                        await asyncio.sleep(10.0)
                         resp = await client.get(url)
+                    if resp.status_code == 429:
+                        logger.error("[Eurobet] %s: 429 again — skipping", sport_key)
+                        continue
                     resp.raise_for_status()
                     data = resp.json()
                 except Exception as exc:
-                    logger.error("[Eurobet] %s: request failed: %s", league_name, exc)
+                    logger.error("[Eurobet] %s: request failed: %s", sport_key, exc)
                     continue
 
-                rows = _parse_kambi_events(data, league_name, sport_key)
+                rows = _parse_kambi_events_sport(data, sport_key, wanted_leagues.get(sport_key, set()))
                 if not rows:
-                    # Log a preview of the response to calibrate parsing
-                    import json as _json
-                    preview = _json.dumps(data, ensure_ascii=False)[:600]
-                    logger.info("[Eurobet] %s: 0 rows — response preview: %s", league_name, preview)
+                    preview = _json.dumps(data, ensure_ascii=False)[:400]
+                    logger.info("[Eurobet] %s: 0 rows — response preview: %s", sport_key, preview)
                 else:
                     n_events = len({r.event_name for r in rows})
-                    logger.info("[Eurobet] %s: %d events, %d market rows", league_name, n_events, len(rows))
+                    logger.info("[Eurobet] %s: %d events, %d market rows", sport_key, n_events, len(rows))
 
                 all_results.extend(rows)
 
