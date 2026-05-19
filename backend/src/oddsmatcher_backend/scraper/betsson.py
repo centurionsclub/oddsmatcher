@@ -1,11 +1,19 @@
-"""Betsson pregame odds scraper — Playwright + network interception."""
+"""Betsson Italy pregame odds scraper — direct REST API (no browser needed).
+
+Betsson's XSportDatastore API is accessible with standard HTTP headers.
+Key endpoint: /XSportDatastore/getWidgetCentrali
+Returns 'tms' list — all upcoming matches across all sports with 1X2 odds.
+
+Odds format: q/100 → decimal (e.g. q=450 → 4.50)
+Market key: sc.d='1X2', sc.eqs[{ce:1→home, ce:2→draw, ce:3→away}]
+"""
 
 import logging
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from oddsmatcher_backend.scraper._base_playwright import BasePlaywrightScraper
+import httpx
+
 from oddsmatcher_backend.scraper.centroquote import MatchOdds
 
 logger = logging.getLogger(__name__)
@@ -13,169 +21,198 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://www.betsson.it"
 BOOKMAKER = "Betsson"
 
-# fmt: off
-LEAGUES: list[tuple[str, str, str]] = [
-    ("Serie A",           "calcio", "/scommesse/sport/calcio/italia/serie-a/"),
-    ("Serie B",           "calcio", "/scommesse/sport/calcio/italia/serie-b/"),
-    ("Premier League",    "calcio", "/scommesse/sport/calcio/inghilterra/premier-league/"),
-    ("La Liga",           "calcio", "/scommesse/sport/calcio/spagna/la-liga/"),
-    ("Bundesliga",        "calcio", "/scommesse/sport/calcio/germania/bundesliga/"),
-    ("Ligue 1",           "calcio", "/scommesse/sport/calcio/francia/ligue-1/"),
-    ("Champions League",  "calcio", "/scommesse/sport/calcio/europa/champions-league/"),
-    ("Europa League",     "calcio", "/scommesse/sport/calcio/europa/europa-league/"),
-    ("Conference League", "calcio", "/scommesse/sport/calcio/europa/conference-league/"),
-    ("NBA",               "basket", "/scommesse/sport/basket/usa/nba/"),
-    ("Serie A Basket",    "basket", "/scommesse/sport/basket/italia/serie-a/"),
-    ("ATP",               "tennis", "/scommesse/sport/tennis/"),
-]
-# fmt: on
-
-SIMPLE_MARKET_MAP: dict[str, str] = {
-    "1X2": "1X2", "Match Result": "1X2", "Esito Finale": "1X2",
-    "Moneyline": "1X2", "Result": "1X2",
-    "Double Chance": "DC", "Doppia Chance": "DC",
-    "Both Teams to Score": "BTTS", "Goal/No Goal": "BTTS",
-}
-UO_SPREADS_WANTED: set[str] = {"1.5", "2.5", "3.5"}
-OUTCOME_MAP: dict[str, str] = {
-    "1": "1", "Home": "1", "Casa": "1",
-    "X": "X", "Draw": "X", "Pareggio": "X",
-    "2": "2", "Away": "2", "Ospite": "2",
-    "1X": "1X", "X2": "X2", "12": "12",
-    "Yes": "Goal", "Goal": "Goal", "GG": "Goal",
-    "No": "No Goal", "No Goal": "No Goal", "NG": "No Goal",
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept-Language": "it-IT,it;q=0.9",
+    "X-Requested-With": "XMLHttpRequest",
+    "Referer": "https://www.betsson.it/scommesse",
+    "Origin": "https://www.betsson.it",
 }
 
+# Sport mapping: Betsson name → our sport key
+SPORT_MAP = {
+    "CALCIO": "calcio",
+    "TENNIS": "tennis",
+    "BASKET": "basket",
+}
 
-def _parse_date(s: str) -> str | None:
-    if not s:
+# Leagues we want to track (subset — Betsson returns all, we filter)
+WANTED_LEAGUES = {
+    "calcio": {
+        "Serie A", "Serie B", "Premier League", "La Liga",
+        "Bundesliga", "Ligue 1", "Champions League", "Europa League",
+        "Conference League",
+    },
+    "tennis": {
+        "Roland Garros", "Wimbledon", "US Open", "Australian Open",
+        "Ginevra", "Amburgo", "Rabat", "Strasburgo",
+        "Roland Garros Femminile", "Wimbledon Femminile",
+        "US Open Femminile", "Australian Open Femminile",
+    },
+    "basket": {
+        "NBA", "Serie A", "Serie A Basket", "Eurolega",
+    },
+}
+
+# CE (outcome code) → canonical outcome name for 1X2
+CE_TO_OUTCOME = {1: "1", 2: "X", 3: "2"}
+
+# CE → canonical outcome name for Double Chance (sc2)
+CE_TO_DC = {1: "1X", 2: "X2", 3: "12"}
+
+
+def _parse_date(ts: str) -> str | None:
+    """Parse Betsson timestamp 'YYYYMMDD HH:MM:SS' → UTC ISO string."""
+    if not ts:
         return None
-    FMTS = ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
-            "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M"]
+    FMTS = ["%Y%m%d %H:%M:%S", "%Y%m%d %H:%M", "%Y-%m-%dT%H:%M:%S"]
     for fmt in FMTS:
         try:
-            dt = datetime.strptime(s.strip(), fmt)
+            dt = datetime.strptime(ts.strip(), fmt)
+            # Betsson times are in Italian timezone (CEST/CET)
             off = 2 if 3 <= dt.month <= 10 else 1
             return dt.replace(tzinfo=timezone(timedelta(hours=off))).astimezone(timezone.utc).isoformat()
         except ValueError:
             continue
     try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc).isoformat()
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc).isoformat()
     except Exception:
-        return s
+        return ts
 
 
-def _v(d: dict, *keys: str) -> Any:
-    for k in keys:
-        v = d.get(k)
-        if v is not None:
-            return v
-    return None
-
-
-def _odds_val(sel: dict) -> float | None:
-    v = _v(sel, "price", "odds", "quota", "value", "odd")
-    if v is None:
-        return None
+def _q_to_decimal(q: Any) -> float | None:
+    """Convert Betsson integer quota (q*100) to decimal odds."""
     try:
-        f = float(v)
+        f = float(q) / 100.0
         return f if f > 1.0 else None
     except (TypeError, ValueError):
         return None
 
 
-def _label(sel: dict) -> str:
-    v = _v(sel, "name", "selectionDescription", "description", "outcome", "label")
-    return str(v).strip() if v else ""
-
-
-def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchOdds]:
+def _parse_tms(tms: list) -> list[MatchOdds]:
+    """Parse 'tms' array from getWidgetCentrali into MatchOdds list."""
     results: list[MatchOdds] = []
-    for ev in events:
-        if not isinstance(ev, dict):
+
+    for item in tms:
+        if not isinstance(item, dict):
             continue
-        name_raw = _v(ev, "name", "eventDescription", "description", "EventName", "eventName") or ""
-        name = re.sub(r"\s+v\s+", " - ", str(name_raw)).strip()
-        if not name:
+
+        # Sport filter
+        ds = item.get("ds", "")
+        sport_key = SPORT_MAP.get(ds)
+        if not sport_key:
             continue
-        raw_time = _v(ev, "startDate", "eventDate", "date", "startTime") or ""
-        etime = _parse_date(str(raw_time)) if raw_time else None
-        murl = str(_v(ev, "url", "deepLink", "link") or f"{BASE_URL}/scommesse/")
-        if not murl.startswith("http"):
-            murl = BASE_URL + murl
-        parts = name.split(" - ", 1)
-        home = parts[0].strip() if len(parts) == 2 else name
+
+        # League name
+        league = item.get("dt", "")
+
+        # Check if we want this league
+        wanted = WANTED_LEAGUES.get(sport_key, set())
+        if league not in wanted:
+            continue
+
+        # Event info
+        event_name = item.get("da", "").strip()
+        if not event_name:
+            continue
+
+        ts = item.get("ts", "")
+        event_time = _parse_date(ts)
+
+        # Build match URL from seom if available
+        seot = item.get("seot") or ""
+        try:
+            import json as _json
+            seot_data = _json.loads(seot) if isinstance(seot, str) and seot else {}
+            url_path = (
+                seot_data.get("DEFAULT", {}).get("IT", "")
+                if isinstance(seot_data, dict) else ""
+            )
+            match_url = f"{BASE_URL}/{url_path}" if url_path else f"{BASE_URL}/scommesse"
+        except Exception:
+            match_url = f"{BASE_URL}/scommesse"
+
+        parts = event_name.split(" - ", 1)
+        home = parts[0].strip() if len(parts) == 2 else event_name
         away = parts[1].strip() if len(parts) == 2 else ""
 
-        mkts_raw = _v(ev, "markets", "market", "Markets", "odds") or []
-        if isinstance(mkts_raw, dict):
-            mkts_raw = list(mkts_raw.values())
+        # ── 1X2 from sc ──────────────────────────────────────────────
+        sc = item.get("sc")
+        if isinstance(sc, dict) and sc.get("d") == "1X2":
+            eqs = sc.get("eqs", [])
+            odds_dict: dict[str, float] = {}
+            for eq in eqs:
+                ce = eq.get("ce")
+                q = eq.get("q")
+                outcome = CE_TO_OUTCOME.get(ce)
+                val = _q_to_decimal(q)
+                if outcome and val:
+                    odds_dict[outcome] = val
+            if odds_dict:
+                results.append(MatchOdds(
+                    sport=sport_key, league=league,
+                    home_team=home, away_team=away,
+                    event_name=event_name, event_time=event_time,
+                    match_url=match_url, market="1X2",
+                    bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
+                ))
 
-        for mkt in mkts_raw:
-            if not isinstance(mkt, dict):
-                continue
-            mname = str(_v(mkt, "name", "marketDescription", "marketName", "description") or "").strip()
-            canonical = SIMPLE_MARKET_MAP.get(mname)
-            sels_raw = _v(mkt, "selections", "outcomes", "odds", "runners", "Selections") or []
-            if isinstance(sels_raw, dict):
-                sels_raw = list(sels_raw.values())
+        # ── Double Chance from sc2 (if present and has 3 outcomes) ───
+        sc2 = item.get("sc2")
+        if isinstance(sc2, dict):
+            eqs2 = sc2.get("eqs", [])
+            if len(eqs2) >= 3:  # Full DC has 3 outcomes
+                odds_dc: dict[str, float] = {}
+                for eq in eqs2:
+                    ce = eq.get("ce")
+                    q = eq.get("q")
+                    outcome = CE_TO_DC.get(ce)
+                    val = _q_to_decimal(q)
+                    if outcome and val:
+                        odds_dc[outcome] = val
+                if odds_dc:
+                    results.append(MatchOdds(
+                        sport=sport_key, league=league,
+                        home_team=home, away_team=away,
+                        event_name=event_name, event_time=event_time,
+                        match_url=match_url, market="DC",
+                        bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dc}],
+                    ))
 
-            if canonical:
-                odds_dict = {OUTCOME_MAP.get(_label(s), _label(s)): v
-                             for s in sels_raw if isinstance(s, dict) and (v := _odds_val(s)) and _label(s)}
-                if odds_dict:
-                    results.append(MatchOdds(sport=sport_key, league=league_name, home_team=home, away_team=away,
-                                             event_name=name, event_time=etime, match_url=murl, market=canonical,
-                                             bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}]))
-                continue
-
-            if any(kw in mname for kw in ("Over/Under", "Total Goals", "Goals", "Over Under")):
-                sp_m = re.search(r"(\d+[.,]\d+)", mname)
-                if sp_m:
-                    sp = sp_m.group(1).replace(",", ".")
-                    if sp in UO_SPREADS_WANTED:
-                        SIDE = {"Over": "Over", "Under": "Under"}
-                        odds_dict = {}
-                        for s in sels_raw:
-                            if not isinstance(s, dict):
-                                continue
-                            side = SIDE.get(_label(s))
-                            v = _odds_val(s)
-                            if side and v:
-                                odds_dict[f"{side} {sp}"] = v
-                        if odds_dict:
-                            results.append(MatchOdds(sport=sport_key, league=league_name, home_team=home, away_team=away,
-                                                     event_name=name, event_time=etime, match_url=murl,
-                                                     market=f"Over/Under {sp}",
-                                                     bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}]))
     return results
 
 
-class BetssonScraper(BasePlaywrightScraper):
-    bookmaker_name = BOOKMAKER
-    base_url = BASE_URL
-    warmup_path = "/scommesse/"
-    leagues = LEAGUES
+class BetssonScraper:
+    """Direct REST API scraper for Betsson — no browser needed."""
 
-    def parse_response(self, url: str, body: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
+    bookmaker_name = BOOKMAKER
+
+    async def scrape_all(self) -> list[MatchOdds]:
+        return await self._fetch_and_parse()
+
+    async def scrape_sport(self, sport: str) -> list[MatchOdds]:
+        all_results = await self._fetch_and_parse()
+        return [r for r in all_results if r.sport == sport]
+
+    async def _fetch_and_parse(self) -> list[MatchOdds]:
+        url = f"{BASE_URL}/XSportDatastore/getWidgetCentrali?systemCode=BETSSON&lingua=IT&hash="
         try:
-            if isinstance(body, dict):
-                for key in ("events", "data", "fixtures", "matches", "results", "items",
-                            "EventList", "eventList", "matchList"):
-                    val = body.get(key)
-                    if isinstance(val, list) and val:
-                        rows = _parse_events(val, league_name, sport_key)
-                        if rows:
-                            return rows
-                    if isinstance(val, dict):
-                        for k2 in ("events", "fixtures", "matches"):
-                            v2 = val.get(k2)
-                            if isinstance(v2, list) and v2:
-                                rows = _parse_events(v2, league_name, sport_key)
-                                if rows:
-                                    return rows
-            if isinstance(body, list) and body and isinstance(body[0], dict):
-                return _parse_events(body, league_name, sport_key)
-        except Exception as e:
-            logger.debug("[Betsson] parse error for %s: %s", url, e)
-        return []
+            async with httpx.AsyncClient(headers=_HEADERS, timeout=30, follow_redirects=True) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            logger.error("[Betsson] API request failed: %s", exc)
+            return []
+
+        tms = data.get("tms", [])
+        logger.info("[Betsson] getWidgetCentrali: %d tms items", len(tms))
+
+        results = _parse_tms(tms)
+        logger.info("[Betsson] Parsed %d MatchOdds rows", len(results))
+        return results
