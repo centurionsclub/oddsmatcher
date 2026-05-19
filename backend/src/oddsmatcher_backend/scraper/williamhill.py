@@ -280,9 +280,15 @@ class WilliamHillScraper:
         return [r for r in all_results if r.sport == sport]
 
     async def _fetch_and_parse(self) -> list[MatchOdds]:
+        import os
         url = f"{BASE_URL}/XSportDatastore/getWidgetCentrali?systemCode=WILLIAMHILL&lingua=IT&hash="
+        proxy_url = os.environ.get("PROXY_URL")
+        proxy = {"http://": proxy_url, "https://": proxy_url} if proxy_url else None
+        if proxy_url:
+            logger.info("[WilliamHill] Using proxy")
         try:
-            async with httpx.AsyncClient(headers=_HEADERS, timeout=30, follow_redirects=True) as client:
+            async with httpx.AsyncClient(headers=_HEADERS, timeout=30, follow_redirects=True,
+                                         proxies=proxy) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
                 data = resp.json()
