@@ -26,20 +26,11 @@ BOOKMAKER = "Bet365"
 # Bet365 uses a hash-based URL scheme with numeric codes.
 # We start from sport-level pages which load all competitions.
 LEAGUES: list[tuple[str, str, str]] = [
-    # Calcio — page per singola lega (codici comuni Bet365)
-    ("Serie A",           "calcio", "/#/IP/B1/C1/D13/E107601003/F2/"),
-    ("Serie B",           "calcio", "/#/IP/B1/C1/D13/E107601004/F2/"),
-    ("Premier League",    "calcio", "/#/IP/B1/C1/D13/E107601001/F2/"),
-    ("La Liga",           "calcio", "/#/IP/B1/C1/D13/E107601002/F2/"),
-    ("Bundesliga",        "calcio", "/#/IP/B1/C1/D13/E107601005/F2/"),
-    ("Ligue 1",           "calcio", "/#/IP/B1/C1/D13/E107601006/F2/"),
-    ("Champions League",  "calcio", "/#/IP/B1/C1/D13/E107601014/F2/"),
-    # Fallback: landing page calcio (cattura tutte le leghe in un colpo)
-    ("Calcio Landing",    "calcio", "/#/IP/B1/"),
-    # Basket
-    ("NBA",               "basket", "/#/IP/B18/"),
-    # Tennis
-    ("ATP",               "tennis", "/#/IP/B13/"),
+    # Use sport-level landing pages — loads all competitions at once.
+    # Specific competition codes change over time; landing pages are stable.
+    ("Calcio",  "calcio", "/#/IP/B1/"),
+    ("Basket",  "basket", "/#/IP/B18/"),
+    ("Tennis",  "tennis", "/#/IP/B13/"),
 ]
 # fmt: on
 
@@ -252,106 +243,145 @@ class Bet365Scraper(BasePlaywrightScraper):
             logger.debug("[Bet365] parse error for %s: %s", url, e)
         return []
 
+    async def _start(self) -> None:
+        """Override to accept cookie consent after warmup."""
+        await super()._start()
+        assert self._page is not None
+
+        # Accept cookie/GDPR consent — Bet365 shows a consent dialog
+        # that must be dismissed before odds content loads
+        COOKIE_SELECTORS = [
+            "button:has-text('Accetta')",
+            "button:has-text('Accept')",
+            "button:has-text('Agree')",
+            "[data-test-id='cookie-policy-dialog'] button",
+            ".ccm-OverlayAccept",
+            ".ccm-Overlay_Accept",
+            "#onetrust-accept-btn-handler",
+        ]
+        for sel in COOKIE_SELECTORS:
+            try:
+                await self._page.click(sel, timeout=3000)
+                logger.info("[Bet365] Cookie consent clicked: %s", sel)
+                await self._page.wait_for_timeout(1500)
+                break
+            except Exception:
+                pass
+
     async def _scrape_league(
         self,
         league_name: str,
         sport_key: str,
         page_path: str,
     ) -> list[MatchOdds]:
-        """Override: first try JSON interception, then fall back to DOM scraping.
+        """Override: JSON interception → wait for odds in DOM → extract.
 
-        Bet365 delivers odds via WebSocket (binary), so the base interceptor
-        captures 0 JSON responses. We fall back to reading the rendered DOM.
+        Bet365 delivers odds via WebSocket (binary), so JSON interception
+        captures nothing. We wait for decimal-looking text to appear in the
+        DOM (up to 60s), then extract the full class map for calibration.
         """
-        # Step 1: let base handle navigation + response interception
+        # Step 1: base navigation + response interception (captures JSON if any)
         results = await super()._scrape_league(league_name, sport_key, page_path)
         if results:
             return results
 
-        # Step 2: DOM scraping fallback (Bet365 uses WebSocket for odds)
         assert self._page is not None
-        logger.info("[Bet365] %s: 0 JSON captured → trying DOM extraction", league_name)
+        logger.info("[Bet365] %s: trying DOM extraction (60s timeout)", league_name)
 
-        # Wait for WebSocket data to populate the DOM
-        # Try to wait for a known Bet365 odds element to appear
-        for ws_selector in [
-            "[class*='gl-MarketGroup']",
-            "[class*='Participant_Name']",
-            "[class*='OddsLabel']",
-            "[class*='couponRow']",
-            "[class*='EventRow']",
-        ]:
-            try:
-                await self._page.wait_for_selector(ws_selector, timeout=8000)
-                logger.info("[Bet365] %s: found selector %s", league_name, ws_selector)
-                break
-            except Exception:
-                pass
+        # Step 2: wait until decimal odds (e.g. "1.85") appear anywhere in the DOM.
+        # Bet365 renders odds as plain text inside deeply nested divs.
+        try:
+            await self._page.wait_for_function(
+                """() => {
+                    const text = document.body.innerText || '';
+                    // Look for decimal odds pattern like 1.20 – 50.00
+                    return /\\b[1-9]\\d?(?:\\.\\d{2})?\\b/.test(text) &&
+                           document.querySelectorAll('div[class]').length > 20;
+                }""",
+                timeout=60_000,
+            )
+            logger.info("[Bet365] %s: odds detected in DOM", league_name)
+        except Exception:
+            logger.info("[Bet365] %s: 60s elapsed — no odds text found", league_name)
 
         await self._page.wait_for_timeout(2000)
 
         try:
             dom_data = await self._page.evaluate("""
                 () => {
-                    // Collect all CSS classes for diagnostics
-                    const relClasses = new Set();
+                    // Gather ALL unique class names for diagnostics
+                    const allClasses = new Set();
                     document.querySelectorAll('[class]').forEach(el => {
-                        String(el.className).split(' ').forEach(c => {
-                            if (c && /Market|Participant|Coupon|Event|Fixture|gl-|sl-|sc-|cl-|OddsLabel|Price/i.test(c))
-                                relClasses.add(c);
+                        String(el.className).split(/\\s+/).forEach(c => {
+                            if (c) allClasses.add(c);
                         });
                     });
 
-                    // Try known Bet365 selectors (tried in priority order)
-                    const SELECTORS = [
-                        '.gl-MarketGroup_Wrapper',
-                        '.gl-MarketGroup',
-                        '[class*="MarketGroup_Wrapper"]',
-                        '[class*="MarketColumnHeader"]',
-                        '[class*="couponRow"]',
-                        '[class*="EventRow"]',
-                        '[class*="Fixture"]',
-                    ];
-                    let rows = [];
-                    let usedSel = '';
-                    for (const sel of SELECTORS) {
-                        const found = document.querySelectorAll(sel);
-                        if (found.length) { rows = Array.from(found); usedSel = sel; break; }
+                    // Find elements that contain decimal odds text (e.g. "1.85")
+                    // These are typically small leaf nodes inside the odds grid
+                    const oddsRe = /^[1-9]\\d?(?:\\.\\d{1,3})?$/;
+                    const oddsEls = Array.from(document.querySelectorAll('div,span'))
+                        .filter(el =>
+                            el.children.length === 0 &&
+                            oddsRe.test((el.textContent || '').trim())
+                        );
+
+                    // Walk up to find a common ancestor that groups one fixture/row
+                    // (ancestor that contains ≥2 such elements and team names)
+                    const DEPTH_LIMIT = 8;
+                    function ancestor(el, depth) {
+                        let node = el;
+                        for (let i = 0; i < depth; i++) {
+                            if (!node.parentElement) break;
+                            node = node.parentElement;
+                        }
+                        return node;
                     }
 
-                    const events = rows.map(row => {
-                        const names = Array.from(
-                            row.querySelectorAll('[class*="Participant_Name"],[class*="participantName"],[class*="TeamName"]')
-                        ).map(el => el.textContent.trim()).filter(Boolean);
+                    // Collect unique row candidates (groups of odds at depth 5-6)
+                    const seen = new Set();
+                    const rows = [];
+                    for (const el of oddsEls) {
+                        const row = ancestor(el, 6);
+                        if (!seen.has(row) && row !== document.body) {
+                            seen.add(row);
+                            rows.push(row);
+                        }
+                    }
 
-                        const odds = Array.from(
-                            row.querySelectorAll('[class*="OddsLabel"],[class*="oddsLabel"],[class*="Price"],[class*="price"]')
-                        ).map(el => el.textContent.trim()).filter(Boolean);
-
-                        const timeEl = row.querySelector('[class*="Time"],[class*="time"],[class*="StartTime"],[class*="date"]');
-                        return { names, odds, time: timeEl ? timeEl.textContent.trim() : '' };
+                    const events = rows.slice(0, 10).map(row => {
+                        const texts = Array.from(row.querySelectorAll('*'))
+                            .filter(e => e.children.length === 0)
+                            .map(e => (e.textContent || '').trim())
+                            .filter(t => t.length > 0);
+                        const odds = texts.filter(t => oddsRe.test(t));
+                        const names = texts.filter(t =>
+                            !oddsRe.test(t) && t.length > 2 && t.length < 60 &&
+                            !/^\\d+$/.test(t)
+                        );
+                        return { names: names.slice(0, 4), odds: odds.slice(0, 6) };
                     });
 
                     return {
                         rowCount: rows.length,
-                        usedSelector: usedSel,
-                        events: events.slice(0, 5),
-                        relevantClasses: Array.from(relClasses).sort().slice(0, 80),
-                        bodySnippet: document.body.innerHTML.substring(0, 5000),
+                        oddsElCount: oddsEls.length,
+                        events: events,
+                        sampleClasses: Array.from(allClasses).sort().slice(0, 120),
+                        bodySnippet: document.body.innerHTML.substring(0, 6000),
                     };
                 }
             """)
 
             if isinstance(dom_data, dict):
-                logger.info("[Bet365] %s DOM: rowCount=%s selector=%s classes=%s",
-                            league_name,
-                            dom_data.get("rowCount"),
-                            dom_data.get("usedSelector"),
-                            dom_data.get("relevantClasses", [])[:30])
-                logger.info("[Bet365] %s DOM events preview: %s",
+                logger.info("[Bet365] %s DOM: rowCount=%s oddsEls=%s",
+                            league_name, dom_data.get("rowCount"), dom_data.get("oddsElCount"))
+                logger.info("[Bet365] %s DOM events: %s",
                             league_name, dom_data.get("events", []))
-                logger.info("[Bet365] %s body snippet: %.4000s",
+                logger.info("[Bet365] %s sampleClasses (first 80): %s",
+                            league_name, dom_data.get("sampleClasses", [])[:80])
+                logger.info("[Bet365] %s body snippet: %.6000s",
                             league_name, dom_data.get("bodySnippet", ""))
+
                 if dom_data.get("rowCount", 0) > 0:
                     return _parse_dom_events(dom_data.get("events", []), league_name, sport_key)
 
