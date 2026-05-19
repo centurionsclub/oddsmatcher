@@ -225,7 +225,7 @@ def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchO
 class Bet365Scraper(BasePlaywrightScraper):
     bookmaker_name = BOOKMAKER
     base_url = BASE_URL
-    warmup_path = "/"  # hash routing: warmup on root, then navigate to hash URLs
+    warmup_path = "/#/HO/"  # Bet365 homepage — hash routing, root alone has no content
     leagues = LEAGUES
 
     def parse_response(self, url: str, body: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
@@ -268,77 +268,92 @@ class Bet365Scraper(BasePlaywrightScraper):
         if results:
             return results
 
-        # Step 2: DOM scraping fallback
+        # Step 2: DOM scraping fallback (Bet365 uses WebSocket for odds)
         assert self._page is not None
         logger.info("[Bet365] %s: 0 JSON captured → trying DOM extraction", league_name)
 
-        # Extra wait for WebSocket-driven content to render
-        await self._page.wait_for_timeout(4000)
+        # Wait for WebSocket data to populate the DOM
+        # Try to wait for a known Bet365 odds element to appear
+        for ws_selector in [
+            "[class*='gl-MarketGroup']",
+            "[class*='Participant_Name']",
+            "[class*='OddsLabel']",
+            "[class*='couponRow']",
+            "[class*='EventRow']",
+        ]:
+            try:
+                await self._page.wait_for_selector(ws_selector, timeout=8000)
+                logger.info("[Bet365] %s: found selector %s", league_name, ws_selector)
+                break
+            except Exception:
+                pass
+
+        await self._page.wait_for_timeout(2000)
 
         try:
             dom_data = await self._page.evaluate("""
                 () => {
-                    // Inspect what CSS classes related to odds exist
+                    // Collect all CSS classes for diagnostics
                     const relClasses = new Set();
                     document.querySelectorAll('[class]').forEach(el => {
                         String(el.className).split(' ').forEach(c => {
-                            if (c && /Market|Participant|Coupon|Event|Fixture|gl-|sl-|sc-|cl-/i.test(c))
+                            if (c && /Market|Participant|Coupon|Event|Fixture|gl-|sl-|sc-|cl-|OddsLabel|Price/i.test(c))
                                 relClasses.add(c);
                         });
                     });
 
-                    // Try known Bet365 selectors for event rows
+                    // Try known Bet365 selectors (tried in priority order)
                     const SELECTORS = [
                         '.gl-MarketGroup_Wrapper',
                         '.gl-MarketGroup',
-                        '.cl-CouponLink',
                         '[class*="MarketGroup_Wrapper"]',
-                        '[class*="Coupon_Row"]',
+                        '[class*="MarketColumnHeader"]',
+                        '[class*="couponRow"]',
                         '[class*="EventRow"]',
+                        '[class*="Fixture"]',
                     ];
                     let rows = [];
+                    let usedSel = '';
                     for (const sel of SELECTORS) {
                         const found = document.querySelectorAll(sel);
-                        if (found.length) { rows = Array.from(found); break; }
+                        if (found.length) { rows = Array.from(found); usedSel = sel; break; }
                     }
 
                     const events = rows.map(row => {
-                        // Participant names (teams)
                         const names = Array.from(
-                            row.querySelectorAll('[class*="Participant_Name"],[class*="participant"],[class*="name"]')
+                            row.querySelectorAll('[class*="Participant_Name"],[class*="participantName"],[class*="TeamName"]')
                         ).map(el => el.textContent.trim()).filter(Boolean);
 
-                        // Odds labels
                         const odds = Array.from(
-                            row.querySelectorAll('[class*="OddsLabel"],[class*="odds"],[class*="price"],[class*="Price"]')
+                            row.querySelectorAll('[class*="OddsLabel"],[class*="oddsLabel"],[class*="Price"],[class*="price"]')
                         ).map(el => el.textContent.trim()).filter(Boolean);
 
-                        // Date/time
-                        const time = row.querySelector('[class*="Time"],[class*="time"],[class*="date"]');
-
-                        return { names, odds, time: time ? time.textContent.trim() : '' };
+                        const timeEl = row.querySelector('[class*="Time"],[class*="time"],[class*="StartTime"],[class*="date"]');
+                        return { names, odds, time: timeEl ? timeEl.textContent.trim() : '' };
                     });
 
                     return {
                         rowCount: rows.length,
-                        events: events.slice(0, 5),  // preview first 5
-                        relevantClasses: Array.from(relClasses).sort().slice(0, 60),
-                        bodySnippet: document.body.innerHTML.substring(0, 4000),
+                        usedSelector: usedSel,
+                        events: events.slice(0, 5),
+                        relevantClasses: Array.from(relClasses).sort().slice(0, 80),
+                        bodySnippet: document.body.innerHTML.substring(0, 5000),
                     };
                 }
             """)
-            logger.info("[Bet365] %s DOM: rowCount=%s relevantClasses=%s",
-                        league_name,
-                        dom_data.get("rowCount") if isinstance(dom_data, dict) else "?",
-                        (dom_data.get("relevantClasses") or [])[:20] if isinstance(dom_data, dict) else "")
-            logger.info("[Bet365] %s DOM events preview: %s",
-                        league_name, (dom_data.get("events") or []) if isinstance(dom_data, dict) else dom_data)
-            logger.info("[Bet365] %s body snippet: %.3000s",
-                        league_name, dom_data.get("bodySnippet", "") if isinstance(dom_data, dict) else "")
 
-            # Parse DOM events if we found rows
-            if isinstance(dom_data, dict) and dom_data.get("rowCount", 0) > 0:
-                return _parse_dom_events(dom_data.get("events", []), league_name, sport_key)
+            if isinstance(dom_data, dict):
+                logger.info("[Bet365] %s DOM: rowCount=%s selector=%s classes=%s",
+                            league_name,
+                            dom_data.get("rowCount"),
+                            dom_data.get("usedSelector"),
+                            dom_data.get("relevantClasses", [])[:30])
+                logger.info("[Bet365] %s DOM events preview: %s",
+                            league_name, dom_data.get("events", []))
+                logger.info("[Bet365] %s body snippet: %.4000s",
+                            league_name, dom_data.get("bodySnippet", ""))
+                if dom_data.get("rowCount", 0) > 0:
+                    return _parse_dom_events(dom_data.get("events", []), league_name, sport_key)
 
         except Exception as exc:
             logger.warning("[Bet365] %s DOM extraction failed: %s", league_name, exc)
