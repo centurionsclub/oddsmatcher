@@ -486,14 +486,22 @@ class BwinScraper(BasePlaywrightScraper):
         assert self._page is not None
         captured: list[MatchOdds] = []
 
+        _cds_urls_seen: set = set()
+
         async def _on_response(resp: _Response) -> None:
+            # Log any CDS API URL we haven't seen before (for discovery)
+            if "cds-api" in resp.url:
+                path = resp.url.split("?")[0].split("cds-api/")[-1][:80]
+                if path not in _cds_urls_seen:
+                    _cds_urls_seen.add(path)
+                    logger.info("[Bwin] CDS endpoint: %s", path)
+
             if "cds-api/bettingoffer/fixtures" not in resp.url:
                 return
             try:
                 body = await resp.json()
                 rows = _parse_cds_fixtures(body, sport_key, sport_key)
                 if rows:
-                    # Count rows per league for diagnostics
                     from collections import Counter
                     leagues = Counter(r.league for r in rows)
                     logger.info("[Bwin] Intercepted %s: %d rows %s",
