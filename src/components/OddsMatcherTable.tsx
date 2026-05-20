@@ -928,113 +928,100 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     return Array.from(dedupMap.values()).sort((a, b) => b.rating - a.rating);
   }, [data, commission, committedExchanges, isPuntaPuntaMode, committedFilters.freebet]);
 
-  // ═══ MULTIPLA BASE: sempre punta-punta calcio (book vs book, niente exchange) ═══
-  // La multipla usa SEMPRE la modalità punta-punta indipendentemente da ciò che
-  // l'utente ha selezionato come exchange — ha senso coprire una gamba di multipla
-  // su un altro bookmaker, non con un lay su exchange.
+  // ═══ MULTIPLA BASE: book vs exchange (back-lay per ogni gamba) ═══
+  // Ogni gamba della multipla viene coperta con un lay su exchange reale (Betfair
+  // Exchange, ecc.) — stesso identico calcolo usato per la singola back-lay.
   const multiplaBaseOpps = useMemo((): Opportunity[] => {
     if (!data?.data || data.data.length === 0) return [];
     const opps: Opportunity[] = [];
+    const commissionRate = commission / 100;
 
-    // Pool: solo bookmaker tradizionali (no exchange), solo calcio, solo 1X2
-    const pool = data.data.filter(
-      odd => !isRealExchange(odd.bookmaker) && odd.sport === "calcio"
+    // Bookmaker side: non-exchange, calcio, 1X2
+    const bookmakerPool = data.data.filter(
+      odd => !isRealExchange(odd.bookmaker) && odd.sport === "calcio" && odd.market === "1X2"
     );
 
-    if (pool.length === 0) return [];
+    // Exchange side: solo exchange reali (Betfair Exchange, BetFlag Exchange…)
+    // Rispetta la selezione dell'utente se ha scelto exchange specifici
+    const exchangePool = data.data.filter(odd => {
+      if (!isRealExchange(odd.bookmaker)) return false;
+      if (committedExchanges && committedExchanges.length > 0) {
+        return committedExchanges.some(ex =>
+          odd.bookmaker.toLowerCase().includes(ex.toLowerCase()) ||
+          ex.toLowerCase().includes(odd.bookmaker.toLowerCase())
+        );
+      }
+      return true;
+    });
 
-    // Build a canonical event_time map: for each normalised event name, use the
-    // earliest event_time found across all bookmakers. This prevents the same
-    // match appearing with two different kick-off times when scrapers store
-    // times in different formats/timezones.
+    if (bookmakerPool.length === 0 || exchangePool.length === 0) return [];
+
+    // Canonical event_time map: usa il timestamp più basso per lo stesso evento
     const canonicalTime = new Map<string, string>();
-    for (const ev of pool) {
+    for (const ev of bookmakerPool) {
       const nk = normalizeEventName(ev.eventName);
       const existing = canonicalTime.get(nk);
-      if (!existing || ev.eventTime < existing) {
-        canonicalTime.set(nk, ev.eventTime);
-      }
+      if (!existing || ev.eventTime < existing) canonicalTime.set(nk, ev.eventTime);
     }
 
-    const DC_COUNTER: Record<string, string> = { "1": "X2", "2": "1X", "X": "12" };
-
-    pool.forEach(bmEvent => {
-      // Solo mercato 1X2 con 3 esiti (calcio)
-      if (bmEvent.market !== "1X2") return;
+    bookmakerPool.forEach(bmEvent => {
       const outcomes = getOutcomes(bmEvent);
       const hasDrawKey = "X" in bmEvent.odds || "draw" in bmEvent.odds;
-      if (!hasDrawKey || outcomes.length !== 3) return;
+      if (!hasDrawKey || outcomes.length !== 3) return; // solo 1X2 a 3 vie (calcio)
 
-      const matchingCounters = findMatchingEvents(bmEvent, pool);
-      if (matchingCounters.length === 0) return;
+      const matchingExchanges = findMatchingEvents(bmEvent, exchangePool);
+      if (matchingExchanges.length === 0) return;
 
-      const dcCounters = matchingCounters.filter(e => e.market === "DC");
-      const sameMarket1x2 = matchingCounters.filter(e => e.market === "1X2");
+      const canonicalEventTime = canonicalTime.get(normalizeEventName(bmEvent.eventName)) ?? bmEvent.eventTime;
 
       outcomes.forEach(outcome => {
         const backOdds = bmEvent.odds[outcome.key];
         if (!backOdds || backOdds <= 1) return;
-        const dcKey = DC_COUNTER[outcome.key];
-        if (!dcKey) return;
 
-        const canonicalEventTime = canonicalTime.get(normalizeEventName(bmEvent.eventName)) ?? bmEvent.eventTime;
-
-        // ── Primary: DC counter ──
-        dcCounters.forEach(dcEvent => {
-          if (dcEvent.bookmaker === bmEvent.bookmaker) return;
-          const counterOdds = dcEvent.odds[dcKey];
-          if (!counterOdds || counterOdds <= 1) return;
-          const stake2 = backOdds / counterOdds;
-          const profitIf1 = (backOdds - 1) - stake2;
-          const profitIf2 = stake2 * (counterOdds - 1) - 1;
-          const rating = 100 + Math.min(profitIf1, profitIf2) * 100;
-          if (rating >= 80 && rating < 120) {
-            opps.push({
-              eventTime: canonicalEventTime, sport: "calcio",
-              eventName: cleanEventName(bmEvent.eventName), league: bmEvent.league,
-              market: bmEvent.market,
-              scommessa: `${outcome.label} vs ${dcKey}`,
-              rating, bookmaker: bmEvent.bookmaker, quotaBook: backOdds,
-              exchange: dcEvent.bookmaker, quotaExchange: counterOdds,
-              isBookVsBook: true,
-              bookmakerUrl: bmEvent.centroquoteUrl,
-            });
+        // Trova il lay migliore (quota più bassa) tra gli exchange corrispondenti
+        let bestLayOdds = Infinity;
+        let bestExchange = "";
+        let bestVolume: number | undefined;
+        let bestMarketId: string | undefined;
+        let bestEventId: string | undefined;
+        matchingExchanges.forEach(exEvent => {
+          const layOdds = exEvent.odds[outcome.key];
+          if (layOdds && layOdds > 1 && layOdds < bestLayOdds) {
+            bestLayOdds = layOdds;
+            bestExchange = exEvent.bookmaker;
+            bestVolume = exEvent.volume?.[outcome.key];
+            bestMarketId = exEvent.marketId;
+            bestEventId = exEvent.eventId;
           }
         });
+        if (bestLayOdds === Infinity) return;
 
-        // ── Fallback: Dutch su 1X2 ──
-        if (dcCounters.length === 0) {
-          const compOutcomes = outcomes.filter(o => o.key !== outcome.key);
-          sameMarket1x2.forEach(exEvent => {
-            if (exEvent.bookmaker === bmEvent.bookmaker) return;
-            const compOdds = compOutcomes.map(o => ({ key: o.key, label: o.label, odds: exEvent.odds[o.key] }));
-            if (compOdds.some(o => !o.odds || o.odds <= 1)) return;
-            const dutchMargin = compOdds.reduce((sum, o) => sum + 1 / o.odds!, 0);
-            const effectiveCounterOdds = 1 / dutchMargin;
-            if (effectiveCounterOdds <= 1) return;
-            const stake2 = backOdds / effectiveCounterOdds;
-            const profitIf1 = (backOdds - 1) - stake2;
-            const profitIf2 = stake2 * (effectiveCounterOdds - 1) - 1;
-            const rating = 100 + Math.min(profitIf1, profitIf2) * 100;
-            if (rating >= 80 && rating < 120) {
-              const compLabel = compOutcomes.map(o => o.label).join("+");
-              opps.push({
-                eventTime: canonicalEventTime, sport: "calcio",
-                eventName: cleanEventName(bmEvent.eventName), league: bmEvent.league,
-                market: bmEvent.market,
-                scommessa: `${outcome.label} vs ${compLabel}`,
-                rating, bookmaker: bmEvent.bookmaker, quotaBook: backOdds,
-                exchange: exEvent.bookmaker, quotaExchange: effectiveCounterOdds,
-                isBookVsBook: true,
-                bookmakerUrl: bmEvent.centroquoteUrl,
-              });
-            }
+        // Calcolo back-lay (identico alla singola, senza freebet)
+        const layStake = backOdds / (bestLayOdds - commissionRate);
+        const profitIfWin = (backOdds - 1) - layStake * (bestLayOdds - 1);
+        const profitIfLose = layStake * (1 - commissionRate) - 1;
+        const worstProfit = Math.min(profitIfWin, profitIfLose);
+        const rating = 100 + worstProfit * 100;
+
+        if (rating >= 80 && rating < 120) {
+          opps.push({
+            eventTime: canonicalEventTime, sport: "calcio",
+            eventName: cleanEventName(bmEvent.eventName), league: bmEvent.league,
+            market: bmEvent.market,
+            scommessa: outcome.label,
+            rating, bookmaker: bmEvent.bookmaker, quotaBook: backOdds,
+            exchange: bestExchange, quotaExchange: bestLayOdds,
+            isBookVsBook: false,
+            volumeExchange: bestVolume,
+            marketId: bestMarketId,
+            eventId: bestEventId,
+            bookmakerUrl: bmEvent.centroquoteUrl,
           });
         }
       });
     });
 
-    // Deduplication: keep best rating per (eventName, scommessa, bookmaker)
+    // Deduplication: per (eventName, esito, bookmaker) tieni il rating migliore
     const dedupMap = new Map<string, Opportunity>();
     for (const opp of opps) {
       const key = `${normalizeEventName(opp.eventName)}|${opp.scommessa}|${opp.bookmaker}`;
@@ -1042,7 +1029,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       if (!existing || opp.rating > existing.rating) dedupMap.set(key, opp);
     }
     return Array.from(dedupMap.values()).sort((a, b) => b.rating - a.rating);
-  }, [data]);
+  }, [data, commission, committedExchanges]);
 
   // ═══ TRE VIE: Dutch 3-way — Bookmaker Principale + Secondari ═══
   const trevieOpps = useMemo((): TreVieGroup[] => {
