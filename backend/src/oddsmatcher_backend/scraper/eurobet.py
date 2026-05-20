@@ -489,103 +489,73 @@ class EurobetScraper:
                     except Exception as wup_e:
                         logger.warning("[Eurobet] Warmup navigation error: %s", wup_e)
 
+                    async def _browser_fetch(url: str) -> Any:
+                        """Fetch URL from within browser context (uses CF session cookies)."""
+                        js = f"""
+                        async () => {{
+                            try {{
+                                const r = await fetch('{url}', {{
+                                    credentials: 'include',
+                                    headers: {{ 'Accept': 'application/json, */*' }}
+                                }});
+                                if (!r.ok) return {{_status: r.status, _error: 'http_error'}};
+                                const ct = r.headers.get('content-type') || '';
+                                if (!ct.includes('json')) return {{_status: r.status, _error: 'not_json', _ct: ct}};
+                                return await r.json();
+                            }} catch(e) {{
+                                return {{_error: String(e)}};
+                            }}
+                        }}
+                        """
+                        return await page.evaluate(js)
+
                     async def _fetch_league(league_name: str, discipline: str, alias: str) -> list[MatchOdds]:
-                        """Navigate to league page; extract data from __NEXT_DATA__ or intercepted API."""
+                        """Navigate to league page (establishes CF context), then fetch detail-service via JS."""
                         bet_url = f"https://www.eurobet.it/it/scommesse/{discipline}/{alias}"
-                        captured: dict[str, Any] = {}
-                        captured_lock = asyncio.Lock()
-                        all_urls_seen: list[str] = []
-
-                        async def on_response(response) -> None:
-                            url = response.url
-                            ct = response.headers.get("content-type", "")
-                            # Log ALL non-static responses for diagnostics
-                            if not any(ext in url for ext in (".js", ".css", ".png", ".svg", ".woff", ".ico")):
-                                all_urls_seen.append(f"{response.status} {url[:120]}")
-                            # Capture any JSON response that might have betting data
-                            if "json" in ct or any(kw in url for kw in (
-                                "detail-service", "sport-schedule", "_next/data", "api/", "meeting",
-                                "prematch", "scommesse", "palinsesto"
-                            )):
-                                try:
-                                    body = await response.json()
-                                    async with captured_lock:
-                                        captured[url] = body
-                                    if isinstance(body, dict) and any(kw in str(body) for kw in (
-                                        "betGroupList", "eventList", "betGroups", "descrizione",
-                                        "startDate", "dataOra", "avveniment",
-                                    )):
-                                        logger.info("[Eurobet] %s MATCH url=%s code=%s keys=%s",
-                                                    league_name, url[:100],
-                                                    body.get("code") if isinstance(body, dict) else "?",
-                                                    list(body.keys())[:8] if isinstance(body, dict) else "?")
-                                    elif "detail-service" in url or "_next/data" in url:
-                                        logger.info("[Eurobet] %s API url=%s status=%d keys=%s preview=%.200s",
-                                                    league_name, url[:100], response.status,
-                                                    list(body.keys())[:8] if isinstance(body, dict) else type(body).__name__,
-                                                    str(body)[:200])
-                                except Exception:
-                                    pass
-
-                        page.on("response", on_response)
+                        # Navigate — page may be CF-challenged (403), that's OK;
+                        # the browser context still holds valid CF cookies from warmup.
                         try:
-                            await page.goto(bet_url, wait_until="networkidle", timeout=45_000)
-                            await page.wait_for_timeout(3000)
+                            await page.goto(bet_url, wait_until="domcontentloaded", timeout=30_000)
+                            await page.wait_for_timeout(1000)
                         except Exception as e:
                             logger.warning("[Eurobet] %s navigation error: %s", league_name, e)
-                        finally:
-                            page.remove_listener("response", on_response)
 
-                        # Diagnostic: log all URLs seen (first league only)
-                        if league_name == meetings[0][0]:
-                            logger.info("[Eurobet] %s all responses (%d): %s",
-                                        league_name, len(all_urls_seen),
-                                        " | ".join(all_urls_seen[:30]))
+                        # Call detail-service via same-origin fetch from within the browser.
+                        # Relative URL → same origin → CF cookies included → bypasses CF for API.
+                        api_url = (f"/detail-service/sport-schedule/services/meeting"
+                                   f"/{discipline}/{alias}?prematch=1&live=0")
+                        result = await _browser_fetch(api_url)
 
-                        # Strategy 1: Check captured JSON responses for event data
-                        for cap_url, cap_data in captured.items():
-                            if isinstance(cap_data, dict) and cap_data.get("code") in (1, "1"):
-                                events = _extract_events(cap_data)
-                                if events:
-                                    rows = _parse_events(events, league_name, discipline)
-                                    logger.info("[Eurobet] %s: %d events, %d rows (from API)", league_name, len(events), len(rows))
-                                    return rows
+                        if not isinstance(result, dict):
+                            logger.info("[Eurobet] %s: unexpected result type %s", league_name, type(result).__name__)
+                            return []
 
-                        # Strategy 2: Extract __NEXT_DATA__ from page HTML
-                        try:
-                            html = await page.content()
-                            nd_m = re.search(r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
-                            if nd_m:
-                                nd_text = nd_m.group(1)
-                                nd_data = _json.loads(nd_text)
-                                props = nd_data.get("props", {}).get("pageProps", {})
-                                is_fallback = nd_data.get("isFallback", False)
-                                logger.info("[Eurobet] %s NEXT_DATA: isFallback=%s pageProps keys=%s",
-                                            league_name, is_fallback, list(props.keys())[:10])
-                                if props and any(kw in str(props) for kw in (
-                                    "betGroupList", "eventList", "betGroups", "avveniment"
-                                )):
-                                    events = _extract_events(props)
-                                    if events:
-                                        rows = _parse_events(events, league_name, discipline)
-                                        logger.info("[Eurobet] %s: %d events, %d rows (from NEXT_DATA)", league_name, len(events), len(rows))
-                                        return rows
-                                    else:
-                                        logger.info("[Eurobet] %s NEXT_DATA has event keywords but extract failed | preview=%.400s",
-                                                    league_name, str(props)[:400])
-                                elif is_fallback:
-                                    logger.info("[Eurobet] %s NEXT_DATA: isFallback=True, page not yet hydrated | pageProps=%.200s",
-                                                league_name, str(props)[:200])
-                                else:
-                                    logger.info("[Eurobet] %s NEXT_DATA: no event data | pageProps preview=%.300s",
-                                                league_name, str(props)[:300])
-                            else:
-                                logger.info("[Eurobet] %s: no __NEXT_DATA__ found in HTML (len=%d)", league_name, len(html))
-                        except Exception as nd_err:
-                            logger.warning("[Eurobet] %s NEXT_DATA extraction error: %s", league_name, nd_err)
+                        if "_error" in result:
+                            status = result.get("_status", "?")
+                            logger.info("[Eurobet] %s: fetch error status=%s err=%s",
+                                        league_name, status, result.get("_error"))
+                            return []
 
-                        logger.info("[Eurobet] %s: 0 rows", league_name)
-                        return []
+                        code = result.get("code")
+                        desc = str(result.get("description") or "")[:80]
+                        logger.info("[Eurobet] %s: code=%s desc=%s keys=%s",
+                                    league_name, code, desc, list(result.keys())[:8])
+
+                        if code not in (1, "1"):
+                            logger.info("[Eurobet] %s: non-success code=%s | preview=%.300s",
+                                        league_name, code, _json.dumps(result, ensure_ascii=False)[:300])
+                            return []
+
+                        events = _extract_events(result)
+                        if not events:
+                            logger.info("[Eurobet] %s: code=1 but no events extracted | keys=%s | preview=%.400s",
+                                        league_name, list(result.keys())[:10],
+                                        _json.dumps(result, ensure_ascii=False)[:400])
+                            return []
+
+                        rows = _parse_events(events, league_name, discipline)
+                        logger.info("[Eurobet] %s: %d events, %d rows", league_name, len(events), len(rows))
+                        return rows
 
                     for league_name, discipline, alias in meetings:
                         rows = await _fetch_league(league_name, discipline, alias)
