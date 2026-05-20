@@ -294,36 +294,64 @@ class EurobetScraper:
 
         # Probe candidates on web.eurobet.it (not Cloudflare-protected)
         # integration-bridge is confirmed as a real Spring Boot API (returns JSON 404 on wrong paths)
-        probe_candidates: list[tuple[str, str]] = [
-            # integration-bridge — same sub-path as detail-service on www.eurobet.it
+        get_probe_candidates: list[tuple[str, str]] = [
+            # ── integration-bridge: sport-schedule paths ──
             (f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
              f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
-            (f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1",
-             f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1"),
-            # integration-bridge — other path patterns
+            (f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{{disc}}/{{alias}}"),
             (f"{WEB_BASE}/integration-bridge/sport-schedule/services/sport/{first_disc}?prematch=1&live=0",
              f"{WEB_BASE}/integration-bridge/sport-schedule/services/sport/{{disc}}?prematch=1&live=0"),
-            (f"{WEB_BASE}/integration-bridge/api/v1/sport/{first_disc}/meeting/{first_alias}?prematch=1",
-             f"{WEB_BASE}/integration-bridge/api/v1/sport/{{disc}}/meeting/{{alias}}?prematch=1"),
+            # ── integration-bridge: api/v* paths ──
+            (f"{WEB_BASE}/integration-bridge/api/v1/sport/{first_disc}/meeting/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/api/v1/sport/{{disc}}/meeting/{{alias}}"),
             (f"{WEB_BASE}/integration-bridge/api/v1/events?sport={first_disc}&meeting={first_alias}&prematch=1",
              f"{WEB_BASE}/integration-bridge/api/v1/events?sport={{disc}}&meeting={{alias}}&prematch=1"),
-            (f"{WEB_BASE}/integration-bridge/api/sports/{first_disc}/meetings/{first_alias}/events?prematch=1",
-             f"{WEB_BASE}/integration-bridge/api/sports/{{disc}}/meetings/{{alias}}/events?prematch=1"),
+            (f"{WEB_BASE}/integration-bridge/api/v2/sport/{first_disc}/meeting/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/api/v2/sport/{{disc}}/meeting/{{alias}}"),
+            (f"{WEB_BASE}/integration-bridge/api/sports/{first_disc}/meetings/{first_alias}/events",
+             f"{WEB_BASE}/integration-bridge/api/sports/{{disc}}/meetings/{{alias}}/events"),
+            # ── integration-bridge: simplified paths ──
+            (f"{WEB_BASE}/integration-bridge/meeting/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/meeting/{{disc}}/{{alias}}"),
+            (f"{WEB_BASE}/integration-bridge/events/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/events/{{disc}}/{{alias}}"),
+            (f"{WEB_BASE}/integration-bridge/sport/{first_disc}/meeting/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/sport/{{disc}}/meeting/{{alias}}"),
             (f"{WEB_BASE}/integration-bridge/v1/{first_disc}/{first_alias}",
              f"{WEB_BASE}/integration-bridge/v1/{{disc}}/{{alias}}"),
             (f"{WEB_BASE}/integration-bridge/prematch/sport-schedule/{first_disc}/{first_alias}",
              f"{WEB_BASE}/integration-bridge/prematch/sport-schedule/{{disc}}/{{alias}}"),
-            # integration-bridge — log all paths for discovery
-            (f"{WEB_BASE}/integration-bridge",
-             f"{WEB_BASE}/integration-bridge"),
-            (f"{WEB_BASE}/integration-bridge/",
-             f"{WEB_BASE}/integration-bridge/"),
-            # webeb/rest — try POST-compatible alternative paths
+            (f"{WEB_BASE}/integration-bridge/prematch/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/prematch/{{disc}}/{{alias}}"),
+            (f"{WEB_BASE}/integration-bridge/prematch/events?sport={first_disc}&meeting={first_alias}",
+             f"{WEB_BASE}/integration-bridge/prematch/events?sport={{disc}}&meeting={{alias}}"),
+            # ── webeb/rest paths ──
             (f"{WEB_BASE}/webeb/rest/api/prematch/{first_disc}/{first_alias}",
              f"{WEB_BASE}/webeb/rest/api/prematch/{{disc}}/{{alias}}"),
-            # www.eurobet.it detail-service via httpx (might bypass Cloudflare for non-browser)
+            (f"{WEB_BASE}/webeb/rest/prematch/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/webeb/rest/prematch/{{disc}}/{{alias}}"),
+            (f"{WEB_BASE}/webeb/rest/sport/{first_disc}/meeting/{first_alias}",
+             f"{WEB_BASE}/webeb/rest/sport/{{disc}}/meeting/{{alias}}"),
+            # ── www.eurobet.it detail-service (might bypass Cloudflare for API calls) ──
             (f"{BASE_URL}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
              f"{BASE_URL}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
+        ]
+
+        # POST probe paths for webeb/rest
+        post_probe_paths: list[str] = [
+            f"{WEB_BASE}/webeb/rest",
+            f"{WEB_BASE}/webeb/rest/meeting",
+            f"{WEB_BASE}/webeb/rest/prematch",
+            f"{WEB_BASE}/webeb/rest/sport/{first_disc}/meeting/{first_alias}",
+            f"{WEB_BASE}/webeb/rest/api/events",
+            f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{first_disc}/{first_alias}",
+        ]
+        post_bodies: list[dict] = [
+            {},
+            {"sport": first_disc, "meeting": first_alias, "prematch": True},
+            {"discipline": first_disc, "alias": first_alias},
+            {"codiceDisciplina": first_disc, "alias": first_alias},
         ]
 
         async with httpx.AsyncClient(
@@ -333,31 +361,59 @@ class EurobetScraper:
             try:
                 ping = await client.get(f"{WEB_BASE}/webeb/rest")
                 logger.info("[Eurobet] web.eurobet.it ping → %d | %s",
-                            ping.status_code, ping.text[:100])
+                            ping.status_code, ping.text[:150])
             except Exception as e:
                 logger.warning("[Eurobet] web.eurobet.it not reachable: %s", e)
 
-            for probe_url, url_template in probe_candidates:
+            # ── GET probes ──
+            for probe_url, url_template in get_probe_candidates:
+                if working_url_template:
+                    break
                 try:
                     resp = await client.get(probe_url)
                     text = resp.text[:300]
-                    logger.info("[Eurobet] PROBE %s → %d | %s",
-                                probe_url[:100], resp.status_code, text)
+                    logger.info("[Eurobet] GET PROBE %s → %d | %s",
+                                probe_url[:110], resp.status_code, text)
 
                     if resp.status_code == 200:
                         if any(kw in resp.text for kw in (
                             "eventList", "events", "betGroupList", "betGroups",
                             "description", "descrizione", "startDate", "dataOra",
+                            "avveniment", "incontro", "partita",
                         )):
-                            logger.info("[Eurobet] ✅ Working API: %s", probe_url)
+                            logger.info("[Eurobet] ✅ Working API (GET): %s", probe_url)
                             working_url_template = url_template
-                            break
                         else:
-                            # Log full structure for non-event 200
-                            logger.info("[Eurobet] 200 but no event keywords | full=%s",
-                                        resp.text[:500])
+                            logger.info("[Eurobet] 200 but no event keywords | full=%.600s",
+                                        resp.text)
+                    elif resp.status_code not in (404, 403, 520):
+                        logger.info("[Eurobet] Unexpected %d for %s | body=%.300s",
+                                    resp.status_code, probe_url[:100], resp.text)
                 except Exception as exc:
-                    logger.info("[Eurobet] PROBE error %s: %s", probe_url[:80], str(exc)[:100])
+                    logger.info("[Eurobet] GET PROBE error %s: %s", probe_url[:80], str(exc)[:100])
+
+            # ── POST probes (webeb/rest accepts POST) ──
+            if not working_url_template:
+                for post_url in post_probe_paths:
+                    if working_url_template:
+                        break
+                    for body in post_bodies[:2]:  # limit to first 2 bodies per path
+                        try:
+                            resp = await client.post(post_url, json=body)
+                            text = resp.text[:300]
+                            logger.info("[Eurobet] POST PROBE %s body=%s → %d | %s",
+                                        post_url[:90], body, resp.status_code, text)
+                            if resp.status_code == 200 and any(kw in resp.text for kw in (
+                                "eventList", "events", "betGroupList", "description",
+                                "descrizione", "startDate", "avveniment",
+                            )):
+                                logger.info("[Eurobet] ✅ Working API (POST): %s", post_url)
+                                # POST not usable as a template — keep probing GET
+                                logger.info("[Eurobet] POST full response: %.1000s", resp.text)
+                                break
+                        except Exception as exc:
+                            logger.info("[Eurobet] POST PROBE error %s: %s",
+                                        post_url[:80], str(exc)[:100])
 
         if working_url_template is None:
             logger.warning("[Eurobet] No working API found — all probes failed")

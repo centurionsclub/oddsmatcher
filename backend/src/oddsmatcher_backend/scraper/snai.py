@@ -367,13 +367,31 @@ class SnaiScraper:
                 resp = await client.get(EVENTS_URL)
                 resp.raise_for_status()
                 data = resp.json()
+
+                # ── CRITICAL: log ALL top-level keys to discover co-returned odds data ──
+                if isinstance(data, dict):
+                    logger.info("[Snai] avvenimentiPrematch ALL top-level keys: %s", list(data.keys()))
+                    for k, v in list(data.items())[:25]:
+                        if isinstance(v, dict):
+                            first_val = next(iter(v.values()), None) if v else None
+                            fkeys = list(first_val.keys())[:8] if isinstance(first_val, dict) else str(type(first_val))
+                            logger.info("[Snai] top[%r] = dict(%d entries) | first-entry keys=%s",
+                                        k, len(v), fkeys)
+                        elif isinstance(v, list):
+                            logger.info("[Snai] top[%r] = list(%d items)", k, len(v))
+                        else:
+                            logger.info("[Snai] top[%r] = %s: %s", k, type(v).__name__, str(v)[:100])
+
                 avm = data.get("avvenimentoFeMap") or {}
                 all_events = list(avm.values()) if isinstance(avm, dict) else []
-                logger.info("[Snai] Got %d total events", len(all_events))
+                logger.info("[Snai] Got %d total events from avvenimentoFeMap", len(all_events))
                 if all_events:
-                    logger.info("[Snai] First event keys: %s | preview=%.400s",
+                    logger.info("[Snai] First event keys: %s | preview=%.600s",
                                 list(all_events[0].keys()),
-                                _json.dumps(all_events[0], ensure_ascii=False)[:400])
+                                _json.dumps(all_events[0], ensure_ascii=False)[:600])
+
+                # Stash full data for potential co-returned odds parsing
+                self._avvenimenti_data = data  # type: ignore[attr-defined]
             except Exception as exc:
                 logger.error("[Snai] events fetch failed: %s", exc)
                 return []
@@ -412,37 +430,73 @@ class SnaiScraper:
         logger.info("[Snai] Probing odds endpoints for event codicePalinsesto=%s codiceAvvenimento=%s eventId=%s",
                     codice_palinsesto, codice_avvenimento, event_id)
 
+        # Derive key and discipline from event
+        event_key = first_ev_for_odds.get("key", f"{codice_palinsesto}-{codice_avvenimento}")
+        codice_disciplina = first_ev_for_odds.get("codiceDisciplina", 1)
+        codice_manifestazione = first_ev_for_odds.get("codiceManifestazione")
+
         odds_probe_candidates: list[tuple[str, str]] = [
-            # scommessePrematch with both palinsesto+avvenimento
+            # ── scommessePrematch (plural) ──
             (f"{PFX}/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
              f"{PFX}/palinsesto/prematch/scommessePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            # scommessePrematch with just palinsesto
             (f"{PFX}/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}",
              f"{PFX}/palinsesto/prematch/scommessePrematch?codicePalinsesto={{palinsesto}}"),
-            # scommessePrematch with just avvenimento
             (f"{PFX}/palinsesto/prematch/scommessePrematch?codiceAvvenimento={codice_avvenimento}",
              f"{PFX}/palinsesto/prematch/scommessePrematch?codiceAvvenimento={{avvenimento}}"),
-            # scommessePrematch with eventId
             (f"{PFX}/palinsesto/prematch/scommessePrematch?eventId={event_id}",
              f"{PFX}/palinsesto/prematch/scommessePrematch?eventId={{eventId}}"),
-            # scommessa service
-            (f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            (f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessePrematch?codiceAvvenimento={codice_avvenimento}",
-             f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessePrematch?codiceAvvenimento={{avvenimento}}"),
-            # quota service
-            (f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            # dettaglio endpoint
-            (f"{PFX}/palinsesto/prematch/dettaglioPrematch?codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/dettaglioPrematch?codiceAvvenimento={{avvenimento}}"),
-            (f"{PFX}/palinsesto/prematch/dettaglioPrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/dettaglioPrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            # path-based
+            (f"{PFX}/palinsesto/prematch/scommessePrematch?key={event_key}",
+             f"{PFX}/palinsesto/prematch/scommessePrematch?key={{key}}"),
+            # with discipline code
+            (f"{PFX}/palinsesto/prematch/scommessePrematch?codiceDisciplina={codice_disciplina}&codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"{PFX}/palinsesto/prematch/scommessePrematch?codiceDisciplina={{disc}}&codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            # ── avvenimentoPrematch (singular — event detail with odds?) ──
+            (f"{PFX}/palinsesto/prematch/avvenimentoPrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"{PFX}/palinsesto/prematch/avvenimentoPrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            (f"{PFX}/palinsesto/prematch/avvenimentoPrematch?eventId={event_id}",
+             f"{PFX}/palinsesto/prematch/avvenimentoPrematch?eventId={{eventId}}"),
+            # ── Fe (frontend) variants ──
+            (f"{PFX}/palinsesto/prematch/scommessaFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"{PFX}/palinsesto/prematch/scommessaFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            (f"{PFX}/palinsesto/prematch/quotaFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"{PFX}/palinsesto/prematch/quotaFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            (f"{PFX}/palinsesto/prematch/dettaglioFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"{PFX}/palinsesto/prematch/dettaglioFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            (f"{PFX}/palinsesto/prematch/avvenimentoFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"{PFX}/palinsesto/prematch/avvenimentoFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            # ── path-based with key ──
+            (f"{PFX}/palinsesto/prematch/scommessePrematch/{event_key}",
+             f"{PFX}/palinsesto/prematch/scommessePrematch/{{key}}"),
+            (f"{PFX}/palinsesto/prematch/dettaglioPrematch/{event_key}",
+             f"{PFX}/palinsesto/prematch/dettaglioPrematch/{{key}}"),
+            (f"{PFX}/palinsesto/prematch/{event_key}",
+             f"{PFX}/palinsesto/prematch/{{key}}"),
+            # ── path-based numeric ──
             (f"{PFX}/palinsesto/prematch/scommessePrematch/{codice_palinsesto}/{codice_avvenimento}",
              f"{PFX}/palinsesto/prematch/scommessePrematch/{{palinsesto}}/{{avvenimento}}"),
             (f"{PFX}/palinsesto/prematch/dettaglioPrematch/{codice_palinsesto}/{codice_avvenimento}",
              f"{PFX}/palinsesto/prematch/dettaglioPrematch/{{palinsesto}}/{{avvenimento}}"),
+            # ── lettura-scommessa-sport service ──
+            (f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            (f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessaFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessaFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            # ── lettura-quota-sport service ──
+            (f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            (f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/quotaFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/quotaFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            # ── dettaglio (without palinsesto/prematch middle path) ──
+            (f"{PFX}/palinsesto/prematch/dettaglioPrematch?codiceAvvenimento={codice_avvenimento}",
+             f"{PFX}/palinsesto/prematch/dettaglioPrematch?codiceAvvenimento={{avvenimento}}"),
+            (f"{PFX}/palinsesto/prematch/dettaglioPrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"{PFX}/palinsesto/prematch/dettaglioPrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            # ── top-level service paths (without intermediate palinsesto/prematch) ──
+            (f"https://{API_HOST}/api/lettura-palinsesto-sport/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"https://{API_HOST}/api/lettura-palinsesto-sport/scommessePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
+            # ── with codiceManifestazione ──
+            (f"{PFX}/palinsesto/prematch/scommessePrematch?codiceManifestazione={codice_manifestazione}&codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+             f"{PFX}/palinsesto/prematch/scommessePrematch?codiceManifestazione={{manif}}&codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
         ]
 
         async with httpx.AsyncClient(
@@ -451,16 +505,25 @@ class SnaiScraper:
             for probe_url, url_template in odds_probe_candidates:
                 try:
                     resp = await client.get(probe_url)
-                    text = resp.text[:300]
+                    status = resp.status_code
+                    text = resp.text[:400]
                     logger.info("[Snai] ODDS PROBE %s → %d | %s",
-                                probe_url[:100], resp.status_code, text)
-                    if resp.status_code == 200 and any(kw in resp.text for kw in (
-                        "scommesse", "quota", "betGroup", "mercato", "market",
-                        "esito", "outcome", "odds", "price",
-                    )):
-                        logger.info("[Snai] ✅ Odds URL found: %s", probe_url)
-                        working_odds_template = url_template
-                        break
+                                probe_url[:120], status, text)
+                    if status == 200:
+                        if any(kw in resp.text for kw in (
+                            "scommesse", "quota", "betGroup", "mercato", "market",
+                            "esito", "outcome", "odds", "price", "infoTipoScommessa",
+                            "quotaMap", "scommessaMap",
+                        )):
+                            logger.info("[Snai] ✅ Odds URL found: %s", probe_url)
+                            working_odds_template = url_template
+                            break
+                        else:
+                            # 200 but no odds keywords — log full body for analysis
+                            logger.info("[Snai] 200 but no odds keywords | full=%.800s", resp.text)
+                    elif status not in (404, 403):
+                        # Unexpected status — might be useful
+                        logger.info("[Snai] Unexpected status %d for %s", status, probe_url[:100])
                 except Exception as exc:
                     logger.info("[Snai] ODDS PROBE error %s: %s", probe_url[:80], str(exc)[:100])
 
@@ -485,8 +548,12 @@ class SnaiScraper:
                     palinsesto = ev.get("codicePalinsesto")
                     avvenimento = ev.get("codiceAvvenimento")
                     ev_id = ev.get("eventId")
+                    ev_key = ev.get("key", f"{palinsesto}-{avvenimento}")
+                    ev_disc = ev.get("codiceDisciplina", 1)
+                    ev_manif = ev.get("codiceManifestazione")
                     url = working_odds_template.format(
-                        palinsesto=palinsesto, avvenimento=avvenimento, eventId=ev_id
+                        palinsesto=palinsesto, avvenimento=avvenimento, eventId=ev_id,
+                        key=ev_key, disc=ev_disc, manif=ev_manif,
                     )
                     try:
                         resp = await client.get(url)
