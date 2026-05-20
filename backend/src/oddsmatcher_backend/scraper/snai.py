@@ -372,23 +372,11 @@ class SnaiScraper:
                         odds_data = resp.json()
 
                         if not first_event_logged and isinstance(odds_data, dict):
-                            scommessa_map = odds_data.get("scommessaMap") or {}
-                            info_agg_map = odds_data.get("infoAggiuntivaMap") or {}
-                            # Log first few market names for diagnosis
-                            market_names = [
-                                v.get("descrizioneScommessa", "?")
-                                for v in list(scommessa_map.values())[:5]
-                                if isinstance(v, dict)
-                            ]
-                            # Log first infoAggiuntiva entry structure
-                            first_ia = next(iter(info_agg_map.values()), {}) if info_agg_map else {}
-                            ia_keys = list(first_ia.keys())[:8] if isinstance(first_ia, dict) else "?"
-                            first_esito = next(iter((first_ia.get("esitoMap") or {}).values()), {})
+                            # Dump full response to understand structure (first event only)
+                            raw = _json.dumps(odds_data, ensure_ascii=False)
                             logger.info(
-                                "[Snai] %s first event=%s | scommessaMap markets=%s | "
-                                "infoAgg first keys=%s | first esito=%s",
-                                lg, ev_key, market_names, ia_keys,
-                                _json.dumps(first_esito, ensure_ascii=False)[:200]
+                                "[Snai] %s first event=%s FULL DUMP: %s",
+                                lg, ev_key, raw[:5000]
                             )
                             first_event_logged = True
 
