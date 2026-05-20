@@ -47,21 +47,33 @@ LEAGUES: list[tuple[str, str, str]] = [
 ]
 # fmt: on
 
-# Competition ID → our league name. IDs are taken from the trailing number in LEAGUES paths.
-# Used to determine real league from inside CDS fixture objects.
+# Competition ID → (league_name, sport_key).
+# Bwin uses internal CDS competition IDs that differ from URL path IDs.
+# Discovered by running the scraper with diagnostic logging.
+# NOTE: Calcio league IDs (Serie A, Premier League, etc.) may change between seasons —
+#       add them here once discovered from diagnostic logs when those leagues are active.
 _COMP_ID_TO_LEAGUE: dict[int, tuple[str, str]] = {
-    67:    ("Serie A",           "calcio"),
-    72:    ("Serie B",           "calcio"),
-    46:    ("Premier League",    "calcio"),
-    2687:  ("La Liga",           "calcio"),
-    65:    ("Bundesliga",        "calcio"),
-    55:    ("Ligue 1",           "calcio"),
-    7:     ("Champions League",  "calcio"),
-    379:   ("Europa League",     "calcio"),
-    18340: ("Conference League", "calcio"),
-    6004:  ("NBA",               "basket"),
-    596:   ("Serie A Basket",    "basket"),
+    # ── Calcio (current) ─────────────────────────────────────────────
+    102855: ("Champions League",  "calcio"),
+    102919: ("Conference League", "calcio"),
+    # Season IDs to be discovered when active (use diagnostic logs):
+    # ???: ("Serie A",           "calcio"),
+    # ???: ("Serie B",           "calcio"),
+    # ???: ("Premier League",    "calcio"),
+    # ???: ("La Liga",           "calcio"),
+    # ???: ("Bundesliga",        "calcio"),
+    # ???: ("Ligue 1",           "calcio"),
+    # ???: ("Europa League",     "calcio"),
+
+    # ── Basket ───────────────────────────────────────────────────────
+    8548: ("NBA",            "basket"),
+    8545: ("Eurolega",       "basket"),
+    8533: ("Serie A Basket", "basket"),
 }
+
+# For tennis we accept ALL competition IDs and label them "ATP"
+# (tournament-specific IDs change every week — no fixed mapping possible)
+_TENNIS_CATCHALL_LEAGUE = "ATP"
 
 # Market name → canonical key
 SIMPLE_MARKET_MAP: dict[str, str] = {
@@ -166,22 +178,24 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
             comp_id = comp_obj.get("id")
             if comp_id is not None:
                 try:
-                    mapping = _COMP_ID_TO_LEAGUE.get(int(comp_id))
+                    cid = int(comp_id)
+                    mapping = _COMP_ID_TO_LEAGUE.get(cid)
                     if mapping:
                         fix_league, fix_sport = mapping
+                    elif sport_key == "tennis":
+                        # Tennis: accept all tournaments, label as ATP
+                        fix_league = _TENNIS_CATCHALL_LEAGUE
+                        fix_sport = "tennis"
                     else:
-                        # Unknown competition — log once per comp_id, then skip
-                        cid = int(comp_id)
+                        # Calcio/basket: unknown competition — log once, skip
                         if cid not in _unknown_logged:
                             _unknown_logged.add(cid)
                             comp_name = _get_name_str(comp_obj.get("name", ""))
-                            logger.info("[Bwin] Unknown comp_id=%s name=%r — skipping", cid, comp_name)
+                            logger.info("[Bwin] Unknown comp_id=%s name=%r sport=%s — add to _COMP_ID_TO_LEAGUE",
+                                        cid, comp_name, sport_key)
                         continue
                 except (TypeError, ValueError):
                     pass
-        else:
-            # Log fixture structure if competition field missing/unexpected
-            logger.info("[Bwin] DIAG fix keys=%s comp_obj=%r", list(fix.keys())[:8], comp_obj)
 
         # ── Extract event name and time ────────────────────────────────
         name_obj = fix.get("name") or fix.get("fixture", {}).get("name", "")
