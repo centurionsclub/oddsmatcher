@@ -140,30 +140,16 @@ def _bf_headers(token: str) -> dict[str, str]:
     }
 
 
-# Competizioni target: (region, keyword_in_name) — almeno uno deve matchare
-# Le regioni UEFA/GBE/EUR coprono Champions/Europa/Conference League
-TARGET_COMPETITIONS: list[tuple[str, str]] = [
-    # Italy
-    ("ITA", "serie a"),
-    ("ITA", "serie b"),
-    ("ITA", "coppa italia"),
-    # England
-    ("GBR", "premier league"),
-    ("GBR", "championship"),
-    # Germany
-    ("DEU", "bundesliga"),
-    # Spain
-    ("ESP", "la liga"),
-    ("ESP", "laliga"),
-    # France
-    ("FRA", "ligue 1"),
-    # European cups (region can be GBE/INT/EUR/GBR depending on Betfair)
-    ("", "champions league"),
-    ("", "europa league"),
-    ("", "europa conference"),
-    ("", "conference league"),
-    ("", "uefa champions"),
-    ("", "uefa europa"),
+# Competizioni target — filtro SOLO per nome (region ignorata).
+# La competitionRegion su Betfair non è affidabile (Bundesliga può essere DEU/GER/EUR).
+TARGET_COMPETITION_KEYWORDS: list[str] = [
+    "serie a", "serie b", "coppa italia",
+    "premier league", "championship",
+    "bundesliga",
+    "la liga", "laliga", "primera division",
+    "ligue 1",
+    "champions league", "europa league", "europa conference",
+    "conference league", "uefa champions", "uefa europa",
 ]
 
 
@@ -193,17 +179,14 @@ async def get_target_competition_ids(
     comps = await list_competitions(client, token, "1")
     ids: list[str] = []
     for c in comps:
-        name = (c.get("competition", {}).get("name", "") or "").lower()
-        region = (c.get("competitionRegion", "") or "").upper()
+        name    = (c.get("competition", {}).get("name", "") or "").lower()
         comp_id = c.get("competition", {}).get("id")
         if not comp_id:
             continue
-        for req_region, req_kw in TARGET_COMPETITIONS:
-            region_ok = (not req_region) or (region == req_region)
-            name_ok = req_kw in name
-            if region_ok and name_ok:
+        for kw in TARGET_COMPETITION_KEYWORDS:
+            if kw in name:
                 ids.append(comp_id)
-                break  # don't add same comp twice
+                break
     return ids
 
 

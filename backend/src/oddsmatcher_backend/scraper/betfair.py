@@ -36,24 +36,23 @@ SPORT_IDS = {
 }
 BF_SPORT_NAME = {v: k for k, v in SPORT_IDS.items()}
 
-# Target competitions for football (to avoid Copa Libertadores etc.)
-# (required_region, keyword_in_name) — region="" means any region
-TARGET_COMPETITIONS: list[tuple[str, str]] = [
-    ("ITA", "serie a"),
-    ("ITA", "serie b"),
-    ("ITA", "coppa italia"),
-    ("GBR", "premier league"),
-    ("GBR", "championship"),
-    ("DEU", "bundesliga"),
-    ("ESP", "la liga"),
-    ("ESP", "laliga"),
-    ("FRA", "ligue 1"),
-    ("", "champions league"),
-    ("", "europa league"),
-    ("", "europa conference"),
-    ("", "conference league"),
-    ("", "uefa champions"),
-    ("", "uefa europa"),
+# Target competitions for football — filtro SOLO per nome (region ignorata).
+# La competitionRegion su Betfair varia (DEU/GER/EUR/GBR) e non è affidabile.
+# I nomi sono abbastanza specifici da non generare falsi positivi.
+TARGET_COMPETITION_KEYWORDS: list[str] = [
+    # Italy
+    "serie a", "serie b", "coppa italia",
+    # England
+    "premier league", "championship",
+    # Germany
+    "bundesliga",
+    # Spain
+    "la liga", "laliga", "primera division",
+    # France
+    "ligue 1",
+    # European cups
+    "champions league", "europa league", "europa conference",
+    "conference league", "uefa champions", "uefa europa",
 ]
 
 # Market types to fetch
@@ -140,7 +139,11 @@ async def _api_post(
 async def _get_football_comp_ids(
     client: httpx.AsyncClient, token: str, app_key: str
 ) -> list[str]:
-    """Return Betfair competition IDs matching our target leagues."""
+    """Return Betfair competition IDs matching our target leagues.
+
+    Filters by name only — competitionRegion is unreliable on Betfair
+    (German Bundesliga may come back as DEU, GER, EUR, or blank).
+    """
     comps = await _api_post(
         client, token, app_key,
         "listCompetitions/",
@@ -148,14 +151,14 @@ async def _get_football_comp_ids(
     )
     ids: list[str] = []
     for c in comps:
-        name   = (c.get("competition", {}).get("name", "") or "").lower()
-        region = (c.get("competitionRegion", "") or "").upper()
+        name    = (c.get("competition", {}).get("name", "") or "").lower()
+        region  = (c.get("competitionRegion", "") or "").upper()
         comp_id = c.get("competition", {}).get("id")
         if not comp_id:
             continue
-        for req_region, req_kw in TARGET_COMPETITIONS:
-            region_ok = (not req_region) or (region == req_region)
-            if region_ok and req_kw in name:
+        for kw in TARGET_COMPETITION_KEYWORDS:
+            if kw in name:
+                logger.debug("[Betfair] Comp: %s (region=%s) → ID %s", name, region, comp_id)
                 ids.append(comp_id)
                 break
     logger.info("[Betfair] %d competition IDs trovati", len(ids))
