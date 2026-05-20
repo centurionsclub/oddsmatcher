@@ -376,7 +376,11 @@ class SnaiScraper:
         async with _aplayw() as pw:
             browser = await pw.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-http2",  # proxy doesn't support HTTP/2 CONNECT tunneling
+                ],
                 proxy=proxy_dict_pw,
             )
             try:
