@@ -10,12 +10,12 @@ API base: https://betting-snai.flutterseatech.it/api/lettura-palinsesto-sport
 Response format (schedaAvvenimento):
   {
     "avvenimentoFe":    { "descrizione": "Team A - Team B", "data": "...", ... },
-    "scommessaMap":     { "3": { "codiceScommessa": 3, "descrizioneScommessa": "Esito Finale 1X2" }, ... },
-    "infoAggiuntivaMap":{ "key": { "codiceScommessa": 3, "esitoMap": {"1": {"quota": 1.85, ...}, ...} }, ... }
+    "scommessaMap":     { "36211-18742-3": { "codiceScommessa": 3, "descrizione": "Esito Finale 1X2" }, ... },
+    "infoAggiuntivaMap":{ "key": { "codiceScommessa": 3, "esitoList": [{"descrizione":"1","quota":185,"stato":0},...] }, ... }
   }
+  Note: quota is integer × 100 (185 → 1.85). stato: 0=active, 1=suspended.
 """
 
-import json as _json
 import logging
 import os
 import re
@@ -121,8 +121,11 @@ def _parse_schedaAvvenimento(
     """Parse schedaAvvenimento response (Sisal nested format).
 
     Top-level keys: avvenimentoFe, scommessaMap, infoAggiuntivaMap.
-    scommessaMap:     codiceScommessa → {descrizioneScommessa, ...}
-    infoAggiuntivaMap: key            → {codiceScommessa, esitoMap: {codiceEsito: {quota, descrizioneEsito}}}
+    scommessaMap key = "{codicePalinsesto}-{codiceAvvenimento}-{codiceScommessa}"
+      value: { "codiceScommessa": int, "descrizione": "Esito Finale 1X2", ... }
+    infoAggiuntivaMap key = "{palette}-{event}-{scommessa}-{infoAgg}"
+      value: { "codiceScommessa": int, "esitoList": [{"descrizione":"1","quota":185,"stato":0},...] }
+    quota is integer × 100 (e.g. 185 → 1.85), stato 0=active 1=suspended.
     """
     results: list[MatchOdds] = []
     if not isinstance(data, dict):
@@ -144,16 +147,19 @@ def _parse_schedaAvvenimento(
     away = parts[1].strip() if len(parts) == 2 else ""
 
     # ── Market name lookup ─────────────────────────────────────────────
+    # scommessaMap keys are "{codicePalinsesto}-{codiceAvvenimento}-{codiceScommessa}"
+    # but infoAggiuntivaMap.codiceScommessa is just the integer part → key by that
     scommessa_map = data.get("scommessaMap") or {}
     scommessa_names: dict[str, str] = {}
     for s_key, s_val in scommessa_map.items():
         if isinstance(s_val, dict):
             desc = str(
-                s_val.get("descrizioneScommessa") or
-                s_val.get("descrizione") or ""
+                s_val.get("descrizione") or
+                s_val.get("descrizioneScommessa") or ""
             ).strip()
-            if desc:
-                scommessa_names[str(s_key)] = desc
+            cod = s_val.get("codiceScommessa")
+            if desc and cod is not None:
+                scommessa_names[str(cod)] = desc
 
     # ── Iterate infoAggiuntivaMap (one entry per market × sub-market) ──
     info_agg_map = data.get("infoAggiuntivaMap") or {}
@@ -166,11 +172,8 @@ def _parse_schedaAvvenimento(
         if not mname:
             continue
 
-        esito_map = ia_val.get("esitoMap") or {}
-        if isinstance(esito_map, dict):
-            esiti = list(esito_map.values())
-        else:
-            esiti = list(esito_map)
+        # API returns esitoList (array), quota is integer × 100
+        esiti = ia_val.get("esitoList") or []
 
         OUTCOME_MAP = {
             "1": "1", "Casa": "1", "Home": "1",
@@ -187,14 +190,14 @@ def _parse_schedaAvvenimento(
                 if not isinstance(e, dict):
                     continue
                 lbl = str(
-                    e.get("descrizioneEsito") or e.get("esito") or
-                    e.get("descrizione") or ""
+                    e.get("descrizione") or e.get("descrizioneEsito") or
+                    e.get("esito") or ""
                 ).strip()
                 canonical = OUTCOME_MAP.get(lbl, lbl)
                 q_raw = e.get("quota")
                 stato = e.get("stato", 0)
                 try:
-                    q = float(q_raw) if q_raw is not None else None
+                    q = float(q_raw) / 100 if q_raw is not None else None
                     if q and q > 1.0 and stato == 0:
                         odds_dict[canonical] = q
                 except (TypeError, ValueError):
@@ -215,12 +218,12 @@ def _parse_schedaAvvenimento(
             for e in esiti:
                 if not isinstance(e, dict):
                     continue
-                lbl = str(e.get("descrizioneEsito") or e.get("esito") or "").strip()
+                lbl = str(e.get("descrizione") or e.get("descrizioneEsito") or e.get("esito") or "").strip()
                 canonical = DC_MAP.get(lbl, lbl)
                 q_raw = e.get("quota")
                 stato = e.get("stato", 0)
                 try:
-                    q = float(q_raw) if q_raw is not None else None
+                    q = float(q_raw) / 100 if q_raw is not None else None
                     if q and q > 1.0 and stato == 0:
                         odds_dc[canonical] = q
                 except (TypeError, ValueError):
@@ -247,12 +250,12 @@ def _parse_schedaAvvenimento(
             for e in esiti:
                 if not isinstance(e, dict):
                     continue
-                lbl = str(e.get("descrizioneEsito") or e.get("esito") or "").strip()
+                lbl = str(e.get("descrizione") or e.get("descrizioneEsito") or e.get("esito") or "").strip()
                 side = SIDE_MAP.get(lbl)
                 q_raw = e.get("quota")
                 stato = e.get("stato", 0)
                 try:
-                    q = float(q_raw) if q_raw is not None else None
+                    q = float(q_raw) / 100 if q_raw is not None else None
                     if side and q and q > 1.0 and stato == 0:
                         odds_uo[f"{side} {sp}"] = q
                 except (TypeError, ValueError):
@@ -356,7 +359,6 @@ class SnaiScraper:
             for mid, evs in our_events.items():
                 lg, sk = manif_to_league[mid]
                 league_rows: list[MatchOdds] = []
-                first_event_logged = False
 
                 for ev in evs[:40]:  # cap per league to avoid timeout
                     ev_key = ev.get("key") or (
@@ -370,15 +372,6 @@ class SnaiScraper:
                             continue
 
                         odds_data = resp.json()
-
-                        if not first_event_logged and isinstance(odds_data, dict):
-                            # Dump full response to understand structure (first event only)
-                            raw = _json.dumps(odds_data, ensure_ascii=False)
-                            logger.info(
-                                "[Snai] %s first event=%s FULL DUMP: %s",
-                                lg, ev_key, raw[:5000]
-                            )
-                            first_event_logged = True
 
                         rows = _parse_schedaAvvenimento(odds_data, lg, sk)
                         league_rows.extend(rows)
