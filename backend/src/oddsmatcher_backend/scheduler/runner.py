@@ -9,6 +9,7 @@ from oddsmatcher_backend.db.pipeline import OddsPipeline
 from oddsmatcher_backend.db.supabase_client import SupabaseWriter
 from oddsmatcher_backend.scraper.browser import BrowserManager
 from oddsmatcher_backend.scraper.bet365 import Bet365Scraper
+from oddsmatcher_backend.scraper.betfair import BetfairScraper
 from oddsmatcher_backend.scraper.betsson import BetssonScraper
 from oddsmatcher_backend.scraper.bwin import BwinScraper
 from oddsmatcher_backend.scraper.centroquote import CentroQuoteScraper
@@ -113,6 +114,18 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
     wh_rows        = await _run_direct("William Hill",  WilliamHillScraper,  "williamhill")
     bet365_rows    = await _run_direct("Bet365",        Bet365Scraper,       "bet365")
 
+    # Betfair Exchange — uses official API (httpx, no Playwright)
+    betfair_rows = 0
+    if bookmaker in (None, "betfair"):
+        try:
+            bf_scraper = BetfairScraper()
+            bf_results = await (bf_scraper.scrape_sport(sport) if sport else bf_scraper.scrape_all())
+            bf_writer = SupabaseWriter()
+            betfair_rows = bf_writer.write_betfair_live_odds(bf_results)
+            logger.info("Betfair Exchange done: %d quote → %d live_odds rows", len(bf_results), betfair_rows)
+        except Exception as exc:
+            logger.error("Betfair Exchange scrape cycle failed: %s", exc, exc_info=True)
+
     logger.info("Scrape phase done: %d CentroQuote match-market results", len(results))
 
     # Pipeline: write CentroQuote results to odds_events + odds_data
@@ -125,8 +138,9 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
     stats["snai_live_rows"]     = snai_rows
     stats["bwin_live_rows"]     = bwin_rows
     stats["betsson_live_rows"]  = betsson_rows
-    stats["wh_live_rows"]       = wh_rows
-    stats["bet365_live_rows"]   = bet365_rows
+    stats["wh_live_rows"]         = wh_rows
+    stats["bet365_live_rows"]     = bet365_rows
+    stats["betfair_live_rows"]    = betfair_rows
 
     # Cleanup stale data
     cleaned = writer.cleanup_stale_odds(hours=48)

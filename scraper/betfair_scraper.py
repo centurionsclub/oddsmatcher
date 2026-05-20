@@ -44,7 +44,10 @@ BETFAIR_PASSWORD = os.getenv("BETFAIR_PASSWORD", "")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 
-LOGIN_URL = "https://identitysso.betfair.it/api/login"
+LOGIN_URLS = [
+    "https://identitysso.betfair.com/api/login",   # global endpoint (works from non-IT IPs)
+    "https://identitysso.betfair.it/api/login",    # Italian endpoint (fallback)
+]
 BETTING_URL = "https://api.betfair.com/exchange/betting/rest/v1.0/"
 
 # Betfair eventTypeId per sport
@@ -96,24 +99,34 @@ EXPIRES_MINUTES = 1440  # 24 ore: dati visibili anche se il scraper salta molti 
 # ─── Auth ────────────────────────────────────────────────────────────────────
 
 async def betfair_login(client: httpx.AsyncClient) -> str:
-    """Esegue login non interattivo e restituisce il session token."""
-    resp = await client.post(
-        LOGIN_URL,
-        data={"username": BETFAIR_USERNAME, "password": BETFAIR_PASSWORD},
-        headers={
-            "X-Application": BETFAIR_APP_KEY,
-            "Accept": "application/json",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        timeout=20,
-    )
-    resp.raise_for_status()
-    body = resp.json()
-    if body.get("status") != "SUCCESS":
-        raise RuntimeError(f"Betfair login failed: {body}")
-    token = body["token"]
-    print(f"  [Betfair] Login OK — token ...{token[-6:]}")
-    return token
+    """Esegue login non interattivo e restituisce il session token.
+
+    Tries multiple login endpoints in order (global first, then Italian).
+    """
+    last_exc: Exception | None = None
+    for login_url in LOGIN_URLS:
+        try:
+            resp = await client.post(
+                login_url,
+                data={"username": BETFAIR_USERNAME, "password": BETFAIR_PASSWORD},
+                headers={
+                    "X-Application": BETFAIR_APP_KEY,
+                    "Accept": "application/json",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                timeout=20,
+            )
+            resp.raise_for_status()
+            body = resp.json()
+            if body.get("status") != "SUCCESS":
+                raise RuntimeError(f"Betfair login failed: {body}")
+            token = body["token"]
+            print(f"  [Betfair] Login OK via {login_url} — token ...{token[-6:]}")
+            return token
+        except Exception as exc:
+            print(f"  [Betfair] Login attempt {login_url} failed: {exc}")
+            last_exc = exc
+    raise RuntimeError(f"All Betfair login endpoints failed. Last error: {last_exc}")
 
 
 # ─── API helpers ─────────────────────────────────────────────────────────────

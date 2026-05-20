@@ -253,6 +253,45 @@ class SupabaseWriter:
         logger.info("Total inserted across Lottomatica+GoldBet+PlanetWin365: %d rows", total_inserted)
         return total_inserted
 
+    def write_betfair_live_odds(self, rows: list[dict[str, Any]]) -> int:
+        """Write Betfair Exchange rows to live_odds.
+
+        Deletes existing rows for affected event_names then inserts fresh ones.
+        Rows must already be fully formatted (bookmaker, sport, league, event_name,
+        event_time, market, outcome, odds, volume, expires_at, market_id, event_id).
+
+        Returns number of rows inserted.
+        """
+        if not rows:
+            return 0
+
+        bookmaker_name = "Betfair Exchange"
+        event_names = list({r["event_name"] for r in rows})
+
+        try:
+            (
+                self.client.table("live_odds")
+                .delete()
+                .eq("bookmaker", bookmaker_name)
+                .in_("event_name", event_names)
+                .execute()
+            )
+        except Exception as e:
+            logger.error("Failed to delete stale Betfair Exchange live_odds: %s", e)
+
+        BATCH = 500
+        inserted = 0
+        for i in range(0, len(rows), BATCH):
+            batch = rows[i : i + BATCH]
+            try:
+                result = self.client.table("live_odds").insert(batch).execute()
+                inserted += len(result.data) if result.data else 0
+            except Exception as e:
+                logger.error("Failed to insert Betfair Exchange live_odds batch %d: %s", i // BATCH, e)
+
+        logger.info("Betfair Exchange live_odds: %d rows for %d events", inserted, len(event_names))
+        return inserted
+
     def cleanup_stale_odds(self, hours: int = 24) -> int:
         """Delete odds for events that have already started (older than N hours).
 
