@@ -413,9 +413,8 @@ class BwinScraper(BasePlaywrightScraper):
         self._captured_rows: list[MatchOdds] = []  # responses captured during navigation
 
     async def _start(self) -> None:
-        """Override: navigate to sport pages, intercept CDS response bodies."""
-        from playwright.async_api import Response as _Response
-        import os, urllib.parse
+        """Override: warmup page → capture access token → fetch fixtures directly."""
+        import os, re, urllib.parse
 
         self._playwright = await __import__(
             "playwright.async_api", fromlist=["async_playwright"]
@@ -456,55 +455,92 @@ class BwinScraper(BasePlaywrightScraper):
         except ImportError:
             self._log.warning("[Bwin] playwright-stealth not installed")
 
-        # Calcio: navigate per-league so each league's fixtures are loaded.
-        # The calcio overview page only shows "featured" matches (CL, Conference League).
-        # League-specific pages load the actual Serie A / Premier League / etc. fixtures.
-        calcio_pages = [(name, path) for name, sport, path in LEAGUES if sport == "calcio"]
-        for league_name, league_path in calcio_pages:
-            rows = await self._navigate_and_capture("calcio", league_path)
-            self._captured_rows.extend(rows)
-            self._log.info("[Bwin] %s page: %d rows", league_name, len(rows))
+        # ── Step 1: warmup page to acquire session cookies + x-bwin-accessid ──
+        access_id: list[str] = []  # mutable for closure capture
 
-        # Basket + tennis: sport overview pages work fine (all leagues visible)
-        for sport_key, sport_path in [("basket", "/it/sports/basket-7/"),
-                                       ("tennis", "/it/sports/tennis-5/")]:
-            rows = await self._navigate_and_capture(sport_key, sport_path)
-            self._captured_rows.extend(rows)
-            self._log.info("[Bwin] %s: %d rows captured during navigation",
-                           sport_key, len(rows))
+        async def _capture_token(req) -> None:
+            if not access_id and "bettingoffer/fixtures" in req.url:
+                m = re.search(r"x-bwin-accessid=([^&]+)", req.url)
+                if m:
+                    access_id.append(m.group(1))
+                    self._log.info("[Bwin] Token: %s...", m.group(1)[:12])
+
+        self._page.on("request", _capture_token)
+        try:
+            await self._page.goto(
+                f"{BASE_URL}/it/sports/calcio-4/",
+                wait_until="networkidle", timeout=45_000,
+            )
+        except Exception as e:
+            self._log.info("[Bwin] Warmup: %s — continuing", type(e).__name__)
+        await self._page.wait_for_timeout(4000)
+        self._page.remove_listener("request", _capture_token)
+
+        if not access_id:
+            self._log.warning("[Bwin] access token not captured — falling back to nav")
+            # Fall back to navigation for all sports
+            for sport_key, sport_path in [("basket", "/it/sports/basket-7/"),
+                                           ("tennis", "/it/sports/tennis-5/")]:
+                rows = await self._navigate_and_capture(sport_key, sport_path)
+                self._captured_rows.extend(rows)
+            return
+
+        token = access_id[0]
+        cds = "https://www.bwin.it/cds-api"
+        common = (f"x-bwin-accessid={token}&lang=it&country=IT&userCountry=IT"
+                  f"&fixtureTypes=Standard&state=Latest"
+                  f"&offerMapping=Filtered&offerCategories=Gridable"
+                  f"&fixtureCategories=Gridable,NonGridable,Other"
+                  f"&isPriceBoost=false&statisticsModes=None&sortBy=Tags")
+
+        # ── Step 2: fetch all fixtures for each sport with large take ──────────
+        # take=500 returns all available fixtures globally. Name-based detection
+        # in _parse_cds_fixtures picks up Serie A, PL, Bundesliga, Ligue 1, etc.
+        # and skips Copa Libertadores / other unrecognised leagues.
+        for sport_key, sport_id in [("calcio", 4), ("basket", 7), ("tennis", 5)]:
+            for skip in (0, 500):  # paginate in case of many fixtures
+                url = (f"{cds}/bettingoffer/fixtures?{common}"
+                       f"&sportIds={sport_id}&skip={skip}&take=500")
+                # Use page.evaluate so same-origin cookies are included
+                js = f"""
+                    async () => {{
+                        try {{
+                            const r = await fetch("{url}", {{credentials: "include"}});
+                            if (!r.ok) return {{error: r.status}};
+                            return await r.json();
+                        }} catch(e) {{ return {{error: String(e)}}; }}
+                    }}
+                """
+                result = await self._page.evaluate(js)
+                if isinstance(result, dict) and "error" in result:
+                    self._log.warning("[Bwin] fetch %s skip=%d: %s",
+                                      sport_key, skip, result["error"])
+                    break
+                rows = _parse_cds_fixtures(result, sport_key, sport_key)
+                from collections import Counter
+                lc = Counter(r.league for r in rows)
+                self._log.info("[Bwin] %s skip=%d: %d rows %s",
+                               sport_key, skip, len(rows), dict(lc))
+                self._captured_rows.extend(rows)
+                # If fewer than 500 fixtures returned, no need to paginate
+                fixtures_list = result if isinstance(result, list) else (
+                    result.get("fixtures", []) if isinstance(result, dict) else [])
+                if len(fixtures_list) < 500:
+                    break
 
     async def _navigate_and_capture(
         self, sport_key: str, sport_path: str
     ) -> list[MatchOdds]:
-        """Navigate to a sport overview page and capture all CDS fixture responses.
+        """Navigate to a sport overview page and intercept CDS fixture responses.
 
-        League names are extracted from competition.id inside each fixture via
-        _COMP_ID_TO_LEAGUE — no need to infer league from the URL.
+        Used as fallback for basket/tennis when page.evaluate(fetch) isn't available.
         """
         from playwright.async_api import Response as _Response
 
         assert self._page is not None
         captured: list[MatchOdds] = []
 
-        _req_urls_seen: set = set()
-
-        async def _on_request(req) -> None:
-            """Log all unique request URLs for discovery."""
-            u = req.url
-            # Log every unique URL containing fixture-like keywords
-            key = u.split("?")[0]
-            if key not in _req_urls_seen and any(kw in u for kw in (
-                "fixture", "competition", "sport", "offer", "event", "match", "grid"
-            )):
-                _req_urls_seen.add(key)
-                # Include query string for bettingoffer/fixtures (contains competitionIds)
-                if "bettingoffer/fixtures" in u:
-                    logger.info("[Bwin] REQ fixtures: %s", u[:400])
-                else:
-                    logger.info("[Bwin] REQ: %s", key[:120])
-
         async def _on_response(resp: _Response) -> None:
-            # ── Parse CDS fixtures ────────────────────────────────────────
             if "cds-api/bettingoffer/fixtures" not in resp.url:
                 return
             try:
@@ -513,13 +549,12 @@ class BwinScraper(BasePlaywrightScraper):
                 if rows:
                     from collections import Counter
                     leagues = Counter(r.league for r in rows)
-                    logger.info("[Bwin] Intercepted %s: %d rows %s",
+                    logger.info("[Bwin] Nav %s: %d rows %s",
                                 sport_key, len(rows), dict(leagues))
                     captured.extend(rows)
             except Exception as exc:
                 logger.info("[Bwin] CDS resp parse error: %s", exc)
 
-        self._page.on("request", _on_request)
         self._page.on("response", _on_response)
         url = self.base_url + sport_path
         self._log.info("[Bwin] Navigating to %s", url)
@@ -529,36 +564,6 @@ class BwinScraper(BasePlaywrightScraper):
         except Exception as e:
             self._log.info("[Bwin] %s: %s — continuing", sport_key, type(e).__name__)
         await self._page.wait_for_timeout(3000)
-
-        # ── Extract fixture names from DOM (what is actually displayed) ───
-        try:
-            names = await self._page.evaluate("""
-                () => {
-                    // Try multiple selectors for event names
-                    const sels = [
-                        '[data-qa="event-name"]',
-                        '.KambiBC-event-item__participant-name',
-                        '.participant-name',
-                        '[class*="participant"]',
-                        '[class*="event-name"]',
-                        '[class*="fixture-name"]',
-                    ];
-                    for (const s of sels) {
-                        const els = document.querySelectorAll(s);
-                        if (els.length > 0)
-                            return [...els].slice(0, 10).map(e => e.textContent.trim());
-                    }
-                    return [];
-                }
-            """)
-            if names:
-                logger.info("[Bwin] DOM names on %s: %s", sport_path[:40], names[:10])
-            else:
-                logger.info("[Bwin] DOM: no event names found on %s", sport_path[:40])
-        except Exception as exc:
-            logger.info("[Bwin] DOM eval error: %s", exc)
-
-        self._page.remove_listener("request", _on_request)
         self._page.remove_listener("response", _on_response)
         return captured
 
