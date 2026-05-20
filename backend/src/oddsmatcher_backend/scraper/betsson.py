@@ -9,6 +9,7 @@ Market key: sc.d='1X2', sc.eqs[{ce:1→home, ce:2→draw, ce:3→away}]
 """
 
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -44,7 +45,7 @@ SPORT_MAP = {
 # Leagues we want to track (subset — Betsson returns all, we filter)
 WANTED_LEAGUES = {
     "calcio": {
-        "Serie A", "Serie B", "Premier League", "La Liga",
+        "Serie A", "Serie B", "Premier League", "La Liga", "LaLiga",
         "Bundesliga", "Ligue 1", "Champions League", "Europa League",
         "Conference League",
     },
@@ -201,8 +202,13 @@ class BetssonScraper:
 
     async def _fetch_and_parse(self) -> list[MatchOdds]:
         url = f"{BASE_URL}/XSportDatastore/getWidgetCentrali?systemCode=BETSSON&lingua=IT&hash="
+        proxy_url = os.environ.get("PROXY_URL")
+        client_kwargs: dict = {"headers": _HEADERS, "timeout": 30, "follow_redirects": True}
+        if proxy_url:
+            client_kwargs["proxy"] = proxy_url
+            logger.debug("[Betsson] Using proxy: %s", proxy_url)
         try:
-            async with httpx.AsyncClient(headers=_HEADERS, timeout=30, follow_redirects=True) as client:
+            async with httpx.AsyncClient(**client_kwargs) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
                 data = resp.json()

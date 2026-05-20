@@ -120,6 +120,7 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
     pipeline = OddsPipeline(writer)
     stats = pipeline.process(results)
     stats["lotto_live_rows"]    = lotto_live_inserted
+    stats["sisal_live_rows"]    = sisal_live_inserted
     stats["eurobet_live_rows"]  = eurobet_rows
     stats["snai_live_rows"]     = snai_rows
     stats["bwin_live_rows"]     = bwin_rows
