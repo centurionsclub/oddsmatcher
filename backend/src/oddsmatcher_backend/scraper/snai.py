@@ -177,17 +177,23 @@ def _parse_schedaAvvenimento(
         esiti = ia_val.get("esitoList") or []
 
         OUTCOME_MAP = {
-            "1": "1", "Casa": "1", "Home": "1",
-            "X": "X", "Pareggio": "X", "Draw": "X",
-            "2": "2", "Ospite": "2", "Away": "2",
+            "1": "1", "CASA": "1", "HOME": "1",
+            "X": "X", "PAREGGIO": "X", "DRAW": "X",
+            "2": "2", "OSPITE": "2", "AWAY": "2",
         }
 
-        # ── 1X2 ──────────────────────────────────────────────────────
+        # Use upper-case for case-insensitive matching
         _mname_up = mname.upper()
-        if any(kw in mname for kw in ("Esito Finale", "1X2", "Risultato Finale",
-                                       "Risultato 1X2", "1 X 2", "Match Result",
-                                       "Testa a Testa", "Head to Head")) and "COMBO" not in _mname_up:
-            logger.info("[Snai] 1X2 market found: event=%r mname=%r esiti=%d", name, mname, len(esiti))
+
+        # ── 1X2 (full-time result only) ───────────────────────────────
+        # Match "1X2 ESITO FINALE" / "ESITO FINALE 1X2" / "TESTA A TESTA RISULTATO"
+        # Exclude half-time, corners, handicap, combo (MARCATORE, SCARTO, HANDICAP, ANGOLO, CORNER)
+        _is_1x2 = (
+            ("ESITO FINALE" in _mname_up and "TEMPO" not in _mname_up)
+            or _mname_up in ("TESTA A TESTA RISULTATO", "TESTA A TESTA")
+            or (_mname_up == "ESITO INCONTRO 1X2 SENZA SCARTO")
+        )
+        if _is_1x2:
             odds_dict: dict[str, float] = {}
             for e in esiti:
                 if not isinstance(e, dict):
@@ -195,13 +201,14 @@ def _parse_schedaAvvenimento(
                 lbl = str(
                     e.get("descrizione") or e.get("descrizioneEsito") or
                     e.get("esito") or ""
-                ).strip()
-                canonical = OUTCOME_MAP.get(lbl, lbl)
+                ).strip().upper()
+                canonical = OUTCOME_MAP.get(lbl)
+                if not canonical:
+                    continue
                 q_raw = e.get("quota")
-                stato = e.get("stato", 0)
                 try:
                     q = float(q_raw) / 100 if q_raw is not None else None
-                    if q and q > 1.0:  # accept stato 0 (active) and 1 (suspended)
+                    if q and q > 1.0:
                         odds_dict[canonical] = q
                 except (TypeError, ValueError):
                     pass
@@ -215,19 +222,20 @@ def _parse_schedaAvvenimento(
                 ))
 
         # ── Double Chance ────────────────────────────────────────────
-        elif any(kw in mname for kw in ("Doppia Chance", "Double Chance")):
+        elif "DOPPIA CHANCE" in _mname_up or "DOUBLE CHANCE" in _mname_up:
             DC_MAP = {"1X": "1X", "X2": "X2", "12": "12"}
             odds_dc: dict[str, float] = {}
             for e in esiti:
                 if not isinstance(e, dict):
                     continue
-                lbl = str(e.get("descrizione") or e.get("descrizioneEsito") or e.get("esito") or "").strip()
-                canonical = DC_MAP.get(lbl, lbl)
+                lbl = str(e.get("descrizione") or e.get("descrizioneEsito") or e.get("esito") or "").strip().upper()
+                canonical = DC_MAP.get(lbl)
+                if not canonical:
+                    continue
                 q_raw = e.get("quota")
-                stato = e.get("stato", 0)
                 try:
                     q = float(q_raw) / 100 if q_raw is not None else None
-                    if q and q > 1.0:  # accept suspended too
+                    if q and q > 1.0:
                         odds_dc[canonical] = q
                 except (TypeError, ValueError):
                     pass
@@ -241,25 +249,25 @@ def _parse_schedaAvvenimento(
                 ))
 
         # ── Over/Under ───────────────────────────────────────────────
-        elif any(kw in mname for kw in ("Over/Under", "U/O", "Totale Gol", "Over Under")):
+        # Match "UNDER/OVER X.X" patterns; exclude COMBO, HANDICAP, QUARTO
+        elif ("OVER/UNDER" in _mname_up or "UNDER/OVER" in _mname_up) and "COMBO" not in _mname_up and "QUARTO" not in _mname_up:
             sp_m = re.search(r"(\d+[.,]\d+)", mname)
             if not sp_m:
                 continue
             sp = sp_m.group(1).replace(",", ".")
             if sp not in {"1.5", "2.5", "3.5"}:
                 continue
-            SIDE_MAP = {"Over": "Over", "Oltre": "Over", "Under": "Under", "Meno": "Under"}
+            SIDE_MAP = {"OVER": "Over", "OLTRE": "Over", "UNDER": "Under", "MENO": "Under"}
             odds_uo: dict[str, float] = {}
             for e in esiti:
                 if not isinstance(e, dict):
                     continue
-                lbl = str(e.get("descrizione") or e.get("descrizioneEsito") or e.get("esito") or "").strip()
+                lbl = str(e.get("descrizione") or e.get("descrizioneEsito") or e.get("esito") or "").strip().upper()
                 side = SIDE_MAP.get(lbl)
                 q_raw = e.get("quota")
-                stato = e.get("stato", 0)
                 try:
                     q = float(q_raw) / 100 if q_raw is not None else None
-                    if side and q and q > 1.0:  # accept suspended too
+                    if side and q and q > 1.0:
                         odds_uo[f"{side} {sp}"] = q
                 except (TypeError, ValueError):
                     pass
@@ -382,12 +390,15 @@ class SnaiScraper:
                             league_diag_done = True
                             s_map = odds_data.get("scommessaMap") or {}
                             ia_map = odds_data.get("infoAggiuntivaMap") or {}
-                            # Log markets matching our keywords (1X2, DC, OU)
+                            # Log markets matching our target keywords (case-insensitive)
                             kw_markets = {}
                             for k, v in (s_map.items() if isinstance(s_map, dict) else []):
-                                desc = str(v.get("descrizione") or "")
-                                if any(kw in desc for kw in ("Esito Finale", "1X2", "Doppia Chance", "Over/Under", "Testa a Testa")) and "COMBO" not in desc.upper():
-                                    kw_markets[k] = {"cod": v.get("codiceScommessa"), "desc": desc, "stato": v.get("stato")}
+                                desc = str(v.get("descrizione") or "").upper()
+                                if (("ESITO FINALE" in desc and "TEMPO" not in desc)
+                                        or "TESTA A TESTA RISULTATO" in desc
+                                        or "DOPPIA CHANCE" in desc
+                                        or ("OVER/UNDER" in desc and "COMBO" not in desc and "QUARTO" not in desc)):
+                                    kw_markets[k] = {"cod": v.get("codiceScommessa"), "desc": v.get("descrizione"), "stato": v.get("stato")}
                             ia_keys = list(ia_map.keys())[:2] if isinstance(ia_map, dict) else []
                             ia_first = {}
                             if ia_keys:
