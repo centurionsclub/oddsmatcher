@@ -47,6 +47,22 @@ LEAGUES: list[tuple[str, str, str]] = [
 ]
 # fmt: on
 
+# Competition ID → our league name. IDs are taken from the trailing number in LEAGUES paths.
+# Used to determine real league from inside CDS fixture objects.
+_COMP_ID_TO_LEAGUE: dict[int, tuple[str, str]] = {
+    67:    ("Serie A",           "calcio"),
+    72:    ("Serie B",           "calcio"),
+    46:    ("Premier League",    "calcio"),
+    2687:  ("La Liga",           "calcio"),
+    65:    ("Bundesliga",        "calcio"),
+    55:    ("Ligue 1",           "calcio"),
+    7:     ("Champions League",  "calcio"),
+    379:   ("Europa League",     "calcio"),
+    18340: ("Conference League", "calcio"),
+    6004:  ("NBA",               "basket"),
+    596:   ("Serie A Basket",    "basket"),
+}
+
 # Market name → canonical key
 SIMPLE_MARKET_MAP: dict[str, str] = {
     "1X2": "1X2", "Risultato 1 X 2": "1X2", "Match Result": "1X2",
@@ -140,6 +156,24 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
         if not isinstance(fix, dict):
             continue
 
+        # ── Determine real league from competition inside fixture ───────
+        fix_league = league_name
+        fix_sport = sport_key
+        comp_obj = (fix.get("competition") or
+                    fix.get("fixture", {}).get("competition") or {})
+        if isinstance(comp_obj, dict):
+            comp_id = comp_obj.get("id")
+            if comp_id is not None:
+                try:
+                    mapping = _COMP_ID_TO_LEAGUE.get(int(comp_id))
+                    if mapping:
+                        fix_league, fix_sport = mapping
+                    else:
+                        # Unknown competition — not in our watch list, skip
+                        continue
+                except (TypeError, ValueError):
+                    pass
+
         # ── Extract event name and time ────────────────────────────────
         name_obj = fix.get("name") or fix.get("fixture", {}).get("name", "")
         name_raw = _get_name_str(name_obj)
@@ -224,7 +258,7 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                         odds_dict[lbl] = f
                 if odds_dict:
                     results.append(MatchOdds(
-                        sport=sport_key, league=league_name,
+                        sport=fix_sport, league=fix_league,
                         home_team=home, away_team=away,
                         event_name=event_name, event_time=event_time,
                         match_url=murl, market=canonical,
@@ -251,7 +285,7 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                                 odds_uo[f"{side} {sp}"] = f
                         if odds_uo:
                             results.append(MatchOdds(
-                                sport=sport_key, league=league_name,
+                                sport=fix_sport, league=fix_league,
                                 home_team=home, away_team=away,
                                 event_name=event_name, event_time=event_time,
                                 match_url=murl, market=f"Over/Under {sp}",
@@ -371,30 +405,28 @@ class BwinScraper(BasePlaywrightScraper):
         except ImportError:
             self._log.warning("[Bwin] playwright-stealth not installed")
 
-        # Warm up on the main calcio page first (establishes session/cookies)
-        self._log.info("[Bwin] Warmup: navigating to /it/sports/calcio-4/")
-        try:
-            await self._page.goto(
-                BASE_URL + "/it/sports/calcio-4/",
-                wait_until="domcontentloaded",
-                timeout=30_000,
-            )
-            await self._page.wait_for_timeout(2000)
-        except Exception as e:
-            self._log.warning("[Bwin] Warmup failed: %s", e)
-
-        # Navigate to each individual league page so CDS calls include
-        # competitionIds=X in the URL — this is the only way to map
-        # intercepted responses back to real league names.
-        for league_name, sport_key, league_path in LEAGUES:
-            rows = await self._navigate_and_capture(sport_key, league_path, league_name)
+        # Navigate to each sport overview page.
+        # CDS fixture objects contain competition.id — _parse_cds_fixtures
+        # uses _COMP_ID_TO_LEAGUE to determine the real league per fixture.
+        SPORT_PAGES: list[tuple[str, str]] = [
+            ("calcio",  "/it/sports/calcio-4/"),
+            ("basket",  "/it/sports/basket-7/"),
+            ("tennis",  "/it/sports/tennis-5/"),
+        ]
+        for sport_key, sport_path in SPORT_PAGES:
+            rows = await self._navigate_and_capture(sport_key, sport_path)
             self._captured_rows.extend(rows)
-            self._log.info("[Bwin] %s: %d rows captured", league_name, len(rows))
+            self._log.info("[Bwin] %s: %d rows captured during navigation",
+                           sport_key, len(rows))
 
     async def _navigate_and_capture(
-        self, sport_key: str, sport_path: str, default_league: str | None = None
+        self, sport_key: str, sport_path: str
     ) -> list[MatchOdds]:
-        """Navigate to a league page and capture all CDS fixture responses."""
+        """Navigate to a sport overview page and capture all CDS fixture responses.
+
+        League names are extracted from competition.id inside each fixture via
+        _COMP_ID_TO_LEAGUE — no need to infer league from the URL.
+        """
         from playwright.async_api import Response as _Response
 
         assert self._page is not None
@@ -403,25 +435,16 @@ class BwinScraper(BasePlaywrightScraper):
         async def _on_response(resp: _Response) -> None:
             if "cds-api/bettingoffer/fixtures" not in resp.url:
                 return
-            # Determine league_name from competition ID in URL
-            m_comp = re.search(r"competitionIds=(\d+)", resp.url)
-            comp_id = m_comp.group(1) if m_comp else ""
-            league_name = default_league or sport_key  # use expected league as fallback
-            for lg_name, lg_sport, lg_path in LEAGUES:
-                if lg_sport == sport_key:
-                    ids = re.findall(r"-(\d+)", lg_path)
-                    if ids and ids[-1] == comp_id:
-                        league_name = lg_name
-                        break
             try:
                 body = await resp.json()
-                rows = _parse_cds_fixtures(body, league_name, sport_key)
+                rows = _parse_cds_fixtures(body, sport_key, sport_key)
                 if rows:
-                    logger.info("[Bwin] Intercepted %s (comp=%s): %d rows", league_name, comp_id, len(rows))
+                    # Count rows per league for diagnostics
+                    from collections import Counter
+                    leagues = Counter(r.league for r in rows)
+                    logger.info("[Bwin] Intercepted %s: %d rows %s",
+                                sport_key, len(rows), dict(leagues))
                     captured.extend(rows)
-                else:
-                    preview = _json.dumps(body, ensure_ascii=False)[:200] if body else "empty"
-                    logger.debug("[Bwin] CDS resp (comp=%s) 0 rows — preview: %s", comp_id, preview)
             except Exception as exc:
                 logger.debug("[Bwin] CDS resp parse error: %s", exc)
 
@@ -430,9 +453,9 @@ class BwinScraper(BasePlaywrightScraper):
         self._log.info("[Bwin] Navigating to %s", url)
         try:
             await self._page.goto(url, wait_until="networkidle", timeout=45_000)
-            self._log.info("[Bwin] %s: networkidle", default_league or sport_key)
+            self._log.info("[Bwin] %s: networkidle", sport_key)
         except Exception as e:
-            self._log.info("[Bwin] %s: %s — continuing", default_league or sport_key, type(e).__name__)
+            self._log.info("[Bwin] %s: %s — continuing", sport_key, type(e).__name__)
         await self._page.wait_for_timeout(3000)
         self._page.remove_listener("response", _on_response)
         return captured
