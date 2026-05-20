@@ -509,59 +509,57 @@ class EurobetScraper:
                         """
                         return await page.evaluate(js)
 
-                    async def _fetch_league(league_name: str, discipline: str, alias: str) -> list[MatchOdds]:
-                        """Navigate to league page (establishes CF context), then fetch detail-service via JS."""
-                        bet_url = f"https://www.eurobet.it/it/scommesse/{discipline}/{alias}"
-                        # Navigate — page may be CF-challenged (403), that's OK;
-                        # the browser context still holds valid CF cookies from warmup.
-                        try:
-                            await page.goto(bet_url, wait_until="domcontentloaded", timeout=30_000)
-                            await page.wait_for_timeout(1000)
-                        except Exception as e:
-                            logger.warning("[Eurobet] %s navigation error: %s", league_name, e)
-
-                        # Call detail-service via same-origin fetch from within the browser.
-                        # Relative URL → same origin → CF cookies included → bypasses CF for API.
-                        api_url = (f"/detail-service/sport-schedule/services/meeting"
-                                   f"/{discipline}/{alias}?prematch=1&live=0")
-                        result = await _browser_fetch(api_url)
-
+                    def _fetch_league_sync(result: Any, league_name: str, discipline: str, alias: str) -> list[MatchOdds]:
+                        """Parse a detail-service JSON response into MatchOdds rows."""
                         if not isinstance(result, dict):
                             logger.info("[Eurobet] %s: unexpected result type %s", league_name, type(result).__name__)
                             return []
-
                         if "_error" in result:
-                            status = result.get("_status", "?")
                             logger.info("[Eurobet] %s: fetch error status=%s err=%s",
-                                        league_name, status, result.get("_error"))
+                                        league_name, result.get("_status", "?"), result.get("_error"))
                             return []
-
                         code = result.get("code")
                         desc = str(result.get("description") or "")[:80]
                         logger.info("[Eurobet] %s: code=%s desc=%s keys=%s",
                                     league_name, code, desc, list(result.keys())[:8])
-
                         if code not in (1, "1"):
                             logger.info("[Eurobet] %s: non-success code=%s | preview=%.300s",
                                         league_name, code, _json.dumps(result, ensure_ascii=False)[:300])
                             return []
-
                         events = _extract_events(result)
                         if not events:
-                            logger.info("[Eurobet] %s: code=1 but no events extracted | keys=%s | preview=%.400s",
+                            logger.info("[Eurobet] %s: code=1 but no events | keys=%s | preview=%.600s",
                                         league_name, list(result.keys())[:10],
-                                        _json.dumps(result, ensure_ascii=False)[:400])
+                                        _json.dumps(result, ensure_ascii=False)[:600])
                             return []
-
+                        # Log first event structure to verify key names
+                        logger.info("[Eurobet] %s: first event keys=%s | preview=%.500s",
+                                    league_name, list(events[0].keys())[:15] if isinstance(events[0], dict) else "?",
+                                    _json.dumps(events[0], ensure_ascii=False)[:500])
                         rows = _parse_events(events, league_name, discipline)
                         logger.info("[Eurobet] %s: %d events, %d rows", league_name, len(events), len(rows))
                         return rows
 
+                    # Navigate to ONE betting page to establish CF context for detail-service.
+                    # After this, all _browser_fetch calls are made without re-navigating.
+                    # Navigating per-league invalidates the CF session after the first call.
+                    first_league, first_disc, first_alias = meetings[0]
+                    init_url = f"https://www.eurobet.it/it/scommesse/{first_disc}/{first_alias}"
+                    logger.info("[Eurobet] Establishing CF betting context: %s", init_url)
+                    try:
+                        await page.goto(init_url, wait_until="domcontentloaded", timeout=30_000)
+                        await page.wait_for_timeout(2000)
+                    except Exception as e:
+                        logger.warning("[Eurobet] CF context navigation error: %s", e)
+
                     for league_name, discipline, alias in meetings:
-                        rows = await _fetch_league(league_name, discipline, alias)
+                        api_url = (f"/detail-service/sport-schedule/services/meeting"
+                                   f"/{discipline}/{alias}?prematch=1&live=0")
+                        result = await _browser_fetch(api_url)
+                        rows = _fetch_league_sync(result, league_name, discipline, alias)
                         all_results.extend(rows)
                         if rows:
-                            working_url_template = "PLAYWRIGHT_INTERCEPT"
+                            working_url_template = "PLAYWRIGHT_BROWSER_FETCH"
 
                     await browser.close()
 
