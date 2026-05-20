@@ -495,14 +495,23 @@ class EurobetScraper:
 
                         async def on_response(response) -> None:
                             url = response.url
-                            # Capture /_next/data/ (Next.js ISR page data) and detail-service
-                            if "_next/data/" in url or "detail-service" in url:
+                            ct = response.headers.get("content-type", "")
+                            # Log ALL API calls (JSON responses) to discover betting data endpoint
+                            if "json" in ct and "eurobet.it" in url:
                                 try:
                                     body = await response.json()
-                                    async with captured_lock:
-                                        captured[url] = body
-                                    logger.info("[Eurobet] %s intercepted: %s (len=%d)",
-                                                league_name, url[-100:], len(str(body)))
+                                    body_str = str(body)
+                                    # Always log the URL and brief preview
+                                    logger.info("[Eurobet] API %s → len=%d | preview=%.200s",
+                                                url[-120:], len(body_str), body_str[:200])
+                                    # Check if it looks like event data
+                                    has_events = any(kw in body_str for kw in (
+                                        "betGroupList", "betGroups", "eventList",
+                                        "description", "startDate", "quota", "odds"
+                                    ))
+                                    if has_events or "_next/data/" in url:
+                                        async with captured_lock:
+                                            captured[url] = body
                                 except Exception:
                                     pass
 
@@ -520,33 +529,11 @@ class EurobetScraper:
 
                         # Try to parse each captured response
                         for cap_url, cap_data in captured.items():
-                            if "_next/data/" in cap_url:
-                                # Next.js data: wrap is {"pageProps": {...actual data...}}
-                                page_props = cap_data.get("pageProps") if isinstance(cap_data, dict) else None
-                                if page_props:
-                                    events = _extract_events(page_props)
-                                    if events:
-                                        rows = _parse_events(events, league_name, discipline)
-                                        logger.info("[Eurobet] %s: %d rows from /_next/data/", league_name, len(rows))
-                                        return rows
-                                    else:
-                                        pp_keys = list(page_props.keys())[:10] if isinstance(page_props, dict) else "?"
-                                        logger.info("[Eurobet] %s /_next/data/ pageProps keys=%s", league_name, pp_keys)
-                                        # Dump modules structure to understand event location
-                                        mods = page_props.get("modules") if isinstance(page_props, dict) else None
-                                        if mods is not None:
-                                            logger.info("[Eurobet] %s modules type=%s len=%s | preview=%.2000s",
-                                                        league_name, type(mods).__name__,
-                                                        len(mods) if hasattr(mods, '__len__') else '?',
-                                                        _json.dumps(mods, ensure_ascii=False)[:2000])
-                                        else:
-                                            logger.info("[Eurobet] %s full pageProps preview=%.2000s",
-                                                        league_name, _json.dumps(page_props, ensure_ascii=False)[:2000])
-                            elif "detail-service" in cap_url:
-                                events = _extract_events(cap_data)
-                                if events:
-                                    rows = _parse_events(events, league_name, discipline)
-                                    logger.info("[Eurobet] %s: %d rows from detail-service", league_name, len(rows))
+                            events = _extract_events(cap_data)
+                            if events:
+                                rows = _parse_events(events, league_name, discipline)
+                                logger.info("[Eurobet] %s: %d rows from %s", league_name, len(rows), cap_url[-80:])
+                                if rows:
                                     return rows
 
                         # No API data captured — check page state and __NEXT_DATA__ (may be updated)
