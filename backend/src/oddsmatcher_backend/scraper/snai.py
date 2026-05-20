@@ -2,12 +2,9 @@
 
 Strategy:
   Phase 1 — httpx to alberaturaPrematch → competition tree (disc/manif IDs). ✅
-  Phase 2 — httpx direct to betting-snai.flutterseatech.it events endpoints.
-
-Note: Playwright navigation to snai.it fails via the proxy (ERR_EMPTY_RESPONSE /
-ERR_PROXY_CONNECTION_FAILED). However, betting-snai.flutterseatech.it IS reachable
-via httpx through the proxy. We probe multiple endpoint patterns to find which one
-returns events data.
+  Phase 2 — httpx probe of many event endpoint patterns (no Playwright needed).
+             The first URL that returns a 200 with event-like content is used
+             for all remaining competitions.
 
 API base: https://betting-snai.flutterseatech.it/api/lettura-palinsesto-sport
 """
@@ -122,13 +119,13 @@ def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[Matc
     elif isinstance(data, dict):
         for key in ("avvenimenti", "eventi", "events", "data", "result",
                     "matches", "fixtures", "palinsesto", "avv",
-                    "avvenimentiList", "listaAvvenimenti"):
+                    "avvenimentiList", "listaAvvenimenti", "items"):
             val = data.get(key)
             if isinstance(val, list) and val:
                 events = val
                 break
             if isinstance(val, dict):
-                for k2 in ("avvenimenti", "eventi", "events", "avv", "list"):
+                for k2 in ("avvenimenti", "eventi", "events", "avv", "list", "items"):
                     v2 = val.get(k2)
                     if isinstance(v2, list) and v2:
                         events = v2
@@ -139,9 +136,10 @@ def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[Matc
         if not events:
             for val in data.values():
                 if isinstance(val, list) and val and isinstance(val[0], dict):
-                    # Heuristic: list with dict items that have event-like fields
                     sample = val[0]
-                    if any(k in sample for k in ("descrizione", "description", "name", "dataOra", "startDate")):
+                    if any(k in sample for k in ("descrizione", "description", "name",
+                                                   "dataOra", "startDate", "scommesse",
+                                                   "quota", "betGroupList")):
                         events = val
                         break
 
@@ -171,7 +169,7 @@ def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[Matc
 
         mkts_raw = (
             ev.get("scommesse") or ev.get("mercati") or ev.get("markets") or
-            ev.get("quote") or ev.get("odds") or []
+            ev.get("quote") or ev.get("odds") or ev.get("betGroupList") or []
         )
         if isinstance(mkts_raw, dict):
             mkts_raw = list(mkts_raw.values())
@@ -189,7 +187,8 @@ def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[Matc
                                            "1 X 2", "Match Result", "Testa a Testa")):
                 sels_raw = (
                     mkt.get("esiti") or mkt.get("selections") or
-                    mkt.get("outcomes") or mkt.get("quote") or []
+                    mkt.get("outcomes") or mkt.get("quote") or
+                    mkt.get("betList") or []
                 )
                 if isinstance(sels_raw, dict):
                     sels_raw = list(sels_raw.values())
@@ -285,13 +284,11 @@ def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[Matc
     return results
 
 
-
 class SnaiScraper:
-    """Snai scraper — httpx only (Playwright fails for snai.it via proxy).
+    """Snai scraper — httpx only.
 
     Phase 1: alberaturaPrematch → competition IDs ✅
-    Phase 2: probe multiple event endpoint patterns for first competition,
-             then use the working one for all remaining competitions.
+    Phase 2: probe event endpoint patterns via httpx (no Playwright — avoids timeout).
     """
 
     bookmaker_name = BOOKMAKER
@@ -312,16 +309,20 @@ class SnaiScraper:
         # ── Phase 1: Competition tree ────────────────────────────────────
         logger.info("[Snai] Fetching alberaturaPrematch…")
         competitions: list[tuple[str, str, int, int]] = []
+        alberatura_raw: dict = {}
         try:
             async with httpx.AsyncClient(
                 headers=_SNAI_HEADERS, timeout=30, follow_redirects=True, proxy=proxy_url,
             ) as client:
                 resp = await client.get(ALBERATURA_URL)
                 resp.raise_for_status()
-                alberatura = resp.json()
+                alberatura_raw = resp.json()
                 logger.info("[Snai] alberaturaPrematch ok, top keys: %s",
-                            list(alberatura.keys())[:6] if isinstance(alberatura, dict) else "?")
-                competitions = self._find_competitions(alberatura, sport)
+                            list(alberatura_raw.keys())[:8] if isinstance(alberatura_raw, dict) else "?")
+                # Log full alberatura structure for discovery
+                logger.info("[Snai] alberatura preview=%.3000s",
+                            _json.dumps(alberatura_raw, ensure_ascii=False)[:3000])
+                competitions = self._find_competitions(alberatura_raw, sport)
                 logger.info("[Snai] %d competitions found", len(competitions))
         except Exception as exc:
             logger.error("[Snai] alberaturaPrematch failed: %s", exc)
@@ -330,132 +331,110 @@ class SnaiScraper:
         if not competitions:
             return []
 
-        # ── Phase 2: Discover working events endpoint via Playwright ────────
-        # We navigate Playwright to betting-snai.flutterseatech.it (proxy-accessible)
-        # then use page.evaluate(fetch()) to probe event endpoints.
-        # All httpx candidates already returned 404 — maybe browser cookies help.
+        # ── Phase 2: Discover working events endpoint via httpx probe ───
         first_lg, first_sk, first_disc, first_manif = competitions[0]
-        working_url: str | None = None
+        working_url_template: str | None = None  # template with {disc} and {manif} placeholders
 
-        logger.info("[Snai] Probing event endpoints via browser for %r (disc=%d manif=%d)…",
+        logger.info("[Snai] Probing event endpoints for %r (disc=%d manif=%d)…",
                     first_lg, first_disc, first_manif)
 
-        from playwright.async_api import async_playwright as _aplayw
+        PFX = API_BASE  # https://betting-snai.flutterseatech.it/api/lettura-palinsesto-sport
 
-        # Candidate full URLs (browser fetch, same-origin cookies)
-        PFX = f"https://{API_HOST}/api/lettura-palinsesto-sport"
-        probe_urls: list[str] = [
-            # Paths under lettura-palinsesto-sport (previously all 404 via httpx)
-            f"{PFX}/palinsesto/prematch/avvenimentiList/{first_manif}",
-            f"{PFX}/palinsesto/prematch/avvenimentiList/{first_disc}/{first_manif}",
-            # Different sub-paths within lettura-palinsesto-sport
-            f"{PFX}/scommessa/prematch/avvenimentiList/{first_manif}",
-            f"{PFX}/scommessa/prematch/avvenimentiList/{first_disc}/{first_manif}",
-            f"{PFX}/palinsesto/avvenimentiList/{first_manif}",
-            f"{PFX}/palinsesto/avvenimentiList/{first_disc}/{first_manif}",
-            f"{PFX}/palinsesto/prematch/palinsestoScommesse/{first_disc}/{first_manif}",
-            # Completely different service names
-            f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/avvenimentiList/{first_manif}",
-            f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/avvenimentiList/{first_manif}",
-            f"https://{API_HOST}/api/lettura-scommessa-sport/scommessa/prematch/{first_disc}/{first_manif}",
-            f"https://{API_HOST}/api/scommessa/palinsesto/prematch/{first_disc}/{first_manif}",
-            # Try alberaturaPrematch variant that might include events
-            f"{PFX}/palinsesto/prematch/palinsestoPrematch/{first_disc}/{first_manif}",
+        # Build probe candidates — path variants AND query param variants
+        probe_candidates: list[tuple[str, str]] = [
+            # Path-based (manif only)
+            (f"{PFX}/palinsesto/prematch/avvenimentiList/{first_manif}",
+             f"{PFX}/palinsesto/prematch/avvenimentiList/{{manif}}"),
+            # Path-based (disc + manif)
+            (f"{PFX}/palinsesto/prematch/avvenimentiList/{first_disc}/{first_manif}",
+             f"{PFX}/palinsesto/prematch/avvenimentiList/{{disc}}/{{manif}}"),
+            # Query param: codiceManifestazione
+            (f"{PFX}/palinsesto/prematch/avvenimentiList?codiceManifestazione={first_manif}",
+             f"{PFX}/palinsesto/prematch/avvenimentiList?codiceManifestazione={{manif}}"),
+            # Query param: codiceDisciplina + codiceManifestazione
+            (f"{PFX}/palinsesto/prematch/avvenimentiList?codiceDisciplina={first_disc}&codiceManifestazione={first_manif}",
+             f"{PFX}/palinsesto/prematch/avvenimentiList?codiceDisciplina={{disc}}&codiceManifestazione={{manif}}"),
+            # Query param: disc + manif short names
+            (f"{PFX}/palinsesto/prematch/avvenimentiList?disc={first_disc}&manif={first_manif}",
+             f"{PFX}/palinsesto/prematch/avvenimentiList?disc={{disc}}&manif={{manif}}"),
+            # Different endpoint name: avvenimentiPrematch
+            (f"{PFX}/palinsesto/prematch/avvenimentiPrematch/{first_manif}",
+             f"{PFX}/palinsesto/prematch/avvenimentiPrematch/{{manif}}"),
+            (f"{PFX}/palinsesto/prematch/avvenimentiPrematch?codiceManifestazione={first_manif}",
+             f"{PFX}/palinsesto/prematch/avvenimentiPrematch?codiceManifestazione={{manif}}"),
+            # palinsestoPrematch
+            (f"{PFX}/palinsesto/prematch/palinsestoPrematch/{first_disc}/{first_manif}",
+             f"{PFX}/palinsesto/prematch/palinsestoPrematch/{{disc}}/{{manif}}"),
+            (f"{PFX}/palinsesto/prematch/palinsestoPrematch?codiceManifestazione={first_manif}",
+             f"{PFX}/palinsesto/prematch/palinsestoPrematch?codiceManifestazione={{manif}}"),
+            # palinsestoScommesse
+            (f"{PFX}/palinsesto/prematch/palinsestoScommesse/{first_disc}/{first_manif}",
+             f"{PFX}/palinsesto/prematch/palinsestoScommesse/{{disc}}/{{manif}}"),
+            # lettura-scommessa-sport service
+            (f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/avvenimentiList/{first_manif}",
+             f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/avvenimentiList/{{manif}}"),
+            (f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/avvenimentiList?codiceManifestazione={first_manif}",
+             f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/avvenimentiList?codiceManifestazione={{manif}}"),
+            # lettura-quota-sport service
+            (f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/avvenimentiList/{first_manif}",
+             f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/avvenimentiList/{{manif}}"),
+            # Without /api prefix
+            (f"https://{API_HOST}/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList/{first_manif}",
+             f"https://{API_HOST}/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList/{{manif}}"),
+            # Scommessa service
+            (f"https://{API_HOST}/api/scommessa/palinsesto/prematch/{first_disc}/{first_manif}",
+             f"https://{API_HOST}/api/scommessa/palinsesto/prematch/{{disc}}/{{manif}}"),
+            # Try just the alberatura path with manifestazione suffix (might redirect/contain events)
+            (f"{PFX}/palinsesto/prematch/avvenimento/{first_manif}",
+             f"{PFX}/palinsesto/prematch/avvenimento/{{manif}}"),
+            (f"{PFX}/palinsesto/prematch/manifestazione/{first_manif}",
+             f"{PFX}/palinsesto/prematch/manifestazione/{{manif}}"),
         ]
 
-        proxy_dict_pw = None
-        if proxy_url:
-            import urllib.parse as _up
-            p = _up.urlparse(proxy_url)
-            proxy_dict_pw = {
-                "server": f"{p.scheme}://{p.hostname}:{p.port}",
-                "username": p.username or "",
-                "password": p.password or "",
-            }
-
-        async with _aplayw() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-http2",  # proxy doesn't support HTTP/2 CONNECT tunneling
-                ],
-                proxy=proxy_dict_pw,
-            )
-            try:
-                context = await browser.new_context(
-                    user_agent=_UA, locale="it-IT",
-                    viewport={"width": 1280, "height": 800},
-                )
-                page = await context.new_page()
-
-                # Navigate to the working alberaturaPrematch URL to establish
-                # a session on betting-snai.flutterseatech.it
-                logger.info("[Snai] Navigating browser to flutterseatech domain…")
+        async with httpx.AsyncClient(
+            headers=_SNAI_HEADERS, timeout=15, follow_redirects=True, proxy=proxy_url,
+        ) as client:
+            for probe_url, url_template in probe_candidates:
                 try:
-                    await page.goto(
-                        ALBERATURA_URL, wait_until="domcontentloaded", timeout=20_000
-                    )
-                    logger.info("[Snai] flutterseatech domain loaded OK")
-                except Exception as e:
-                    logger.warning("[Snai] flutterseatech nav failed: %s", str(e)[:100])
+                    resp = await client.get(probe_url)
+                    text = resp.text[:300]
+                    logger.info("[Snai] PROBE %s → %d | %s", probe_url[:100], resp.status_code, text)
 
-                for candidate_url in probe_urls:
-                    try:
-                        result = await page.evaluate(f"""
-                            async () => {{
-                                try {{
-                                    const resp = await fetch('{candidate_url}', {{
-                                        credentials: 'include',
-                                        headers: {{
-                                            'Accept': 'application/json',
-                                            'Referer': 'https://www.snai.it/'
-                                        }}
-                                    }});
-                                    const text = await resp.text();
-                                    return {{status: resp.status, text: text.slice(0, 500)}};
-                                }} catch(e) {{
-                                    return {{status: 0, text: String(e)}};
-                                }}
-                            }}
-                        """)
-                    except Exception as exc:
-                        logger.info("[Snai] evaluate error for %s: %s", candidate_url[:80], exc)
-                        continue
+                    if resp.status_code == 200:
+                        # Check for event-like content
+                        if any(kw in resp.text for kw in (
+                            "avvenimento", "descrizione", "scommesse", "quota",
+                            "events", "startDate", "dataOra", "betGroup",
+                        )):
+                            logger.info("[Snai] ✅ Working URL found: %s (template: %s)",
+                                        probe_url, url_template)
+                            working_url_template = url_template
+                            break
+                        else:
+                            logger.info("[Snai] 200 but no event keywords in response")
+                except Exception as exc:
+                    logger.info("[Snai] PROBE error %s: %s", probe_url[:80], str(exc)[:100])
 
-                    status = result.get("status", 0) if isinstance(result, dict) else 0
-                    text = result.get("text", "") if isinstance(result, dict) else ""
-                    logger.info("[Snai] %s → %d | %s", candidate_url[:90], status, text[:200])
-
-                    if status == 200 and any(kw in text for kw in (
-                        "avvenimento", "descrizione", "scommesse", "quota",
-                        "events", "startDate", "dataOra",
-                    )):
-                        logger.info("[Snai] ✅ Working URL found: %s", candidate_url)
-                        working_url = candidate_url
-                        break
-            finally:
-                await browser.close()
-
-        if working_url is None:
-            logger.warning("[Snai] No working events endpoint found after browser probe")
+        if working_url_template is None:
+            logger.warning("[Snai] No working events endpoint found — all probes failed")
+            # Log alberatura avvenimentiMap keys if present, for clues
+            if isinstance(alberatura_raw, dict):
+                for key in ("avvenimentiMap", "disciplinaMap", "eventoMap", "listaAvvenimenti"):
+                    val = alberatura_raw.get(key)
+                    if val is not None:
+                        logger.info("[Snai] alberatura[%s] preview=%.500s", key,
+                                    _json.dumps(val, ensure_ascii=False)[:500])
             return []
 
-        # ── Phase 3: Fetch events for all competitions via httpx ─────────
-        # Derive the URL template from the working URL by replacing first IDs
+        # ── Phase 3: Fetch events for all competitions ────────────────────
         all_results: list[MatchOdds] = []
 
         async with httpx.AsyncClient(
             headers=_SNAI_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
         ) as client:
             for lg, sk, disc, manif in competitions:
-                url = working_url.replace(
-                    str(first_manif), str(manif)
-                ).replace(
-                    str(first_disc), str(disc)
-                )
-                logger.info("[Snai] Fetching %s (%d/%d)…", lg, disc, manif)
+                url = working_url_template.format(disc=disc, manif=manif)
+                logger.info("[Snai] Fetching %s (disc=%d manif=%d)…", lg, disc, manif)
                 try:
                     resp = await client.get(url)
                     if resp.status_code != 200:
