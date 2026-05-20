@@ -338,20 +338,17 @@ class EurobetScraper:
              f"{BASE_URL}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
         ]
 
-        # POST probe paths for webeb/rest
-        post_probe_paths: list[str] = [
-            f"{WEB_BASE}/webeb/rest",
-            f"{WEB_BASE}/webeb/rest/meeting",
-            f"{WEB_BASE}/webeb/rest/prematch",
-            f"{WEB_BASE}/webeb/rest/sport/{first_disc}/meeting/{first_alias}",
-            f"{WEB_BASE}/webeb/rest/api/events",
-            f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{first_disc}/{first_alias}",
-        ]
-        post_bodies: list[dict] = [
-            {},
-            {"sport": first_disc, "meeting": first_alias, "prematch": True},
-            {"discipline": first_disc, "alias": first_alias},
-            {"codiceDisciplina": first_disc, "alias": first_alias},
+        # webeb/rest is a JBoss action-based API at /webeb/rest (POST, requires 'action' param)
+        # Common action names for Italian betting platform APIs
+        _WEBEB_ACTIONS: list[str] = [
+            "getPalinsestoPrematch", "getAvvenimentiPrematch", "getScommessePrematch",
+            "getCalendarioPrematch", "getOddsPrematch", "getQuotePrematch",
+            "getListaAvvenimentiPrematch", "getAvvenimentiByManifestazione",
+            "getScommesseByAvvenimento", "getDettaglioAvvenimento",
+            "getPalinsesto", "getAvvenimenti", "getScommesse", "getOdds",
+            "getCalendario", "getQuote", "getMeeting", "getSchedula",
+            "getListaEventi", "getEventiPrematch", "getMultiSessione",
+            "getPreMatchEvents", "getPreMatchOdds", "getPreMatchSchedule",
         ]
 
         async with httpx.AsyncClient(
@@ -392,28 +389,52 @@ class EurobetScraper:
                 except Exception as exc:
                     logger.info("[Eurobet] GET PROBE error %s: %s", probe_url[:80], str(exc)[:100])
 
-            # ── POST probes (webeb/rest accepts POST) ──
+            # ── POST action probes for webeb/rest (JBoss action-based API) ──
+            # Confirmed: POST /webeb/rest → 200 with "Please specify a valid 'action' parameter"
+            # So we try POST /webeb/rest with {"action": "..."} in JSON body
             if not working_url_template:
-                for post_url in post_probe_paths:
-                    if working_url_template:
-                        break
-                    for body in post_bodies[:2]:  # limit to first 2 bodies per path
-                        try:
-                            resp = await client.post(post_url, json=body)
-                            text = resp.text[:300]
-                            logger.info("[Eurobet] POST PROBE %s body=%s → %d | %s",
-                                        post_url[:90], body, resp.status_code, text)
-                            if resp.status_code == 200 and any(kw in resp.text for kw in (
-                                "eventList", "events", "betGroupList", "description",
-                                "descrizione", "startDate", "avveniment",
-                            )):
-                                logger.info("[Eurobet] ✅ Working API (POST): %s", post_url)
-                                # POST not usable as a template — keep probing GET
-                                logger.info("[Eurobet] POST full response: %.1000s", resp.text)
-                                break
-                        except Exception as exc:
-                            logger.info("[Eurobet] POST PROBE error %s: %s",
-                                        post_url[:80], str(exc)[:100])
+                webeb_post_headers = {**_HEADERS, "Content-Type": "application/json"}
+                for action in _WEBEB_ACTIONS:
+                    try:
+                        body = {
+                            "action": action,
+                            "sport": first_disc,
+                            "meeting": first_alias,
+                            "prematch": True,
+                        }
+                        resp = await client.post(
+                            f"{WEB_BASE}/webeb/rest", json=body,
+                            headers=webeb_post_headers,
+                        )
+                        text = resp.text[:300]
+                        logger.info("[Eurobet] POST action=%s → %d | %s",
+                                    action, resp.status_code, text)
+                        if resp.status_code == 200 and '"result":"ok"' in resp.text:
+                            logger.info("[Eurobet] ✅ webeb/rest action=%s WORKS!", action)
+                            logger.info("[Eurobet] Full response: %.2000s", resp.text)
+                            break
+                        elif resp.status_code == 200 and "result" in resp.text:
+                            logger.info("[Eurobet] action=%s got 200 (not ok) | full=%.500s",
+                                        action, resp.text)
+                    except Exception as exc:
+                        logger.info("[Eurobet] POST action=%s error: %s",
+                                    action, str(exc)[:80])
+
+            # ── Also try GET /webeb/rest?action=... (some JBoss APIs accept GET too) ──
+            if not working_url_template:
+                for action in _WEBEB_ACTIONS[:8]:  # try first 8 via GET
+                    try:
+                        params = {"action": action, "sport": first_disc, "meeting": first_alias}
+                        resp = await client.get(f"{WEB_BASE}/webeb/rest", params=params)
+                        if resp.status_code == 200 and '"result":"ok"' in resp.text:
+                            logger.info("[Eurobet] ✅ GET webeb/rest?action=%s WORKS! full=%.2000s",
+                                        action, resp.text)
+                            break
+                        elif resp.status_code == 200:
+                            logger.info("[Eurobet] GET action=%s → 200 | %s",
+                                        action, resp.text[:200])
+                    except Exception as exc:
+                        logger.info("[Eurobet] GET action=%s error: %s", action, str(exc)[:60])
 
         if working_url_template is None:
             logger.warning("[Eurobet] No working API found — all probes failed")

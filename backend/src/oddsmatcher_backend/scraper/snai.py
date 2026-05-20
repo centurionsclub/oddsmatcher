@@ -527,6 +527,55 @@ class SnaiScraper:
                 except Exception as exc:
                     logger.info("[Snai] ODDS PROBE error %s: %s", probe_url[:80], str(exc)[:100])
 
+        # ── Phase 3b: Discovery probes (find other available endpoints) ──────
+        if working_odds_template is None:
+            logger.warning("[Snai] No odds endpoint found — trying discovery probes")
+            async with httpx.AsyncClient(
+                headers=_SNAI_HEADERS, timeout=15, follow_redirects=True, proxy=proxy_url,
+            ) as client:
+                discovery_urls = [
+                    # Spring Boot actuator (would list ALL endpoints)
+                    f"https://{API_HOST}/actuator",
+                    f"https://{API_HOST}/actuator/mappings",
+                    f"https://{API_HOST}/api/lettura-palinsesto-sport/actuator",
+                    f"https://{API_HOST}/api/lettura-palinsesto-sport/actuator/mappings",
+                    # Service roots (might return endpoint listings)
+                    f"https://{API_HOST}/api/",
+                    f"https://{API_HOST}/api/lettura-palinsesto-sport/",
+                    f"https://{API_HOST}/api/lettura-palinsesto-sport/palinsesto/prematch/",
+                    # Different service names at the API gateway level
+                    f"https://{API_HOST}/api/scommessa/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+                    f"https://{API_HOST}/api/quota/palinsesto/prematch/quotePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+                    f"https://{API_HOST}/api/lettura-palinsesto-sport/scommessa/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+                    f"https://{API_HOST}/api/lettura-palinsesto-sport/quota/prematch/quotePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+                    # Different top-level path components
+                    f"{PFX}/palinsesto/prematch/palinsestoPrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+                    f"{PFX}/palinsesto/prematch/infoAvvenimentoPrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+                    f"{PFX}/palinsesto/prematch/quotePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+                    f"{PFX}/palinsesto/prematch/infoTipoScommessaPrematch",
+                    # avvenimentiPrematch for a SPECIFIC manifestazione (Serie A = 209)
+                    f"{PFX}/palinsesto/prematch/avvenimentiPrematch?codiceManifestazione=209",
+                    # Different host variants
+                    f"https://snai.flutterseatech.it/api/lettura-palinsesto-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+                    f"https://api-snai.flutterseatech.it/api/lettura-palinsesto-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
+                ]
+                for disc_url in discovery_urls:
+                    try:
+                        resp = await client.get(disc_url)
+                        logger.info("[Snai] DISCOVERY %s → %d | %.400s",
+                                    disc_url[:120], resp.status_code, resp.text)
+                        if resp.status_code == 200:
+                            if any(kw in resp.text for kw in (
+                                "scommesse", "quota", "betGroup", "mercato",
+                                "esito", "outcome", "odds", "infoTipoScommessa",
+                                "quotaMap", "scommessaMap", "mappings",
+                            )):
+                                logger.info("[Snai] ✅ DISCOVERY hit: %s | %.800s",
+                                            disc_url, resp.text)
+                    except Exception as exc:
+                        logger.info("[Snai] DISCOVERY error %s: %s",
+                                    disc_url[:80], str(exc)[:80])
+
         if working_odds_template is None:
             logger.warning("[Snai] No working odds endpoint found — logging full first event for analysis")
             if first_ev_for_odds:
