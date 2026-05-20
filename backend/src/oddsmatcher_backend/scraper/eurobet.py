@@ -366,46 +366,76 @@ class EurobetScraper:
                     page = await context.new_page()
                     logger.warning("[Eurobet] playwright-stealth not installed")
 
-                for sport_key, sport_url in self.SPORT_PAGES:
+                # Kambi API paths per sport (for page.evaluate() calls)
+                KAMBI_SPORT_PATHS: dict[str, str] = {
+                    "calcio":  "football",
+                    "tennis":  "tennis",
+                    "basket":  "basketball",
+                }
+
+                # Navigate to calcio page once to establish eurobet.it session/cookies
+                logger.info("[Eurobet] Navigating to calcio page to establish session…")
+                try:
+                    await page.goto(
+                        "https://www.eurobet.it/it/scommesse/sport/calcio/",
+                        wait_until="domcontentloaded",
+                        timeout=45_000,
+                    )
+                    logger.info("[Eurobet] Calcio page loaded")
+                except Exception as e:
+                    logger.info("[Eurobet] Calcio page load error: %s — continuing", type(e).__name__)
+
+                # Use page.evaluate() to call Kambi API from within the browser context
+                # (inherits cookies + browser fingerprint from eurobet.it, bypasses CDN rate limit)
+                for sport_key, _ in self.SPORT_PAGES:
                     if sport_filter and sport_key != sport_filter:
                         continue
 
-                    captured: list[MatchOdds] = []
-
-                    async def _on_response(resp: _Response, _sk: str = sport_key, _cap: list = captured) -> None:
-                        url = resp.url
-                        # Log all non-trivial API-looking responses for diagnostics
-                        if any(kw in url for kw in ("api", "kambi", "offering", "json", "sport", "scommesse", "calcio", "tennis", "basket")):
-                            ct = resp.headers.get("content-type", "")
-                            if "json" in ct or "javascript" in ct or not ct:
-                                logger.info("[Eurobet] API resp (sport=%s): %s [%s]", _sk, url[:120], resp.status)
-                        if "kambicdn.com" not in url and "kambi" not in url:
-                            return
-                        try:
-                            data = await resp.json()
-                            rows = _parse_kambi_events_sport(data, _sk, wanted_leagues.get(_sk, set()))
-                            if rows:
-                                logger.info("[Eurobet] Intercepted Kambi resp for %s: %d rows", _sk, len(rows))
-                                _cap.extend(rows)
-                            else:
-                                preview = _json.dumps(data, ensure_ascii=False)[:200] if data else "empty"
-                                logger.info("[Eurobet] Kambi resp 0 rows (sport=%s) — %s", _sk, preview)
-                        except Exception as exc:
-                            logger.info("[Eurobet] Kambi parse error (sport=%s): %s", _sk, exc)
-
-                    page.on("response", _on_response)
-                    logger.info("[Eurobet] Navigating to %s", sport_url)
+                    kambi_path = KAMBI_SPORT_PATHS.get(sport_key, sport_key)
+                    kambi_url = (
+                        f"{KAMBI_BASE}/listView/{kambi_path}.json"
+                        f"?{KAMBI_PARAMS}&ncid=1"
+                    )
+                    logger.info("[Eurobet] Calling Kambi via page.evaluate() for %s", sport_key)
                     try:
-                        await page.goto(sport_url, wait_until="networkidle", timeout=45_000)
-                        logger.info("[Eurobet] %s: networkidle", sport_key)
-                    except Exception as e:
-                        logger.info("[Eurobet] %s: %s — continuing", sport_key, type(e).__name__)
-                    await page.wait_for_timeout(3000)
-                    page.remove_listener("response", _on_response)
+                        data = await page.evaluate(f"""
+                            async () => {{
+                                try {{
+                                    const resp = await fetch({_json.dumps(kambi_url)}, {{
+                                        headers: {{
+                                            'Accept': 'application/json',
+                                            'Accept-Language': 'it-IT,it;q=0.9',
+                                        }},
+                                        credentials: 'include',
+                                    }});
+                                    if (!resp.ok) {{
+                                        return {{ _error: resp.status + ' ' + resp.statusText }};
+                                    }}
+                                    return await resp.json();
+                                }} catch(e) {{
+                                    return {{ _error: e.toString() }};
+                                }}
+                            }}
+                        """)
+                    except Exception as exc:
+                        logger.info("[Eurobet] page.evaluate error for %s: %s", sport_key, exc)
+                        continue
+
+                    if isinstance(data, dict) and data.get("_error"):
+                        logger.info("[Eurobet] Kambi fetch error for %s: %s", sport_key, data["_error"])
+                        continue
+
+                    logger.info("[Eurobet] Kambi response for %s: type=%s preview=%s",
+                                sport_key,
+                                type(data).__name__,
+                                _json.dumps(data, ensure_ascii=False)[:200] if data else "empty")
+
+                    rows = _parse_kambi_events_sport(data, sport_key, wanted_leagues.get(sport_key, set()))
+                    logger.info("[Eurobet] %s: %d rows from Kambi", sport_key, len(rows))
 
                     # Deduplicate by (event_name, market)
                     seen: dict[tuple[str, str], MatchOdds] = {}
-                    for r in captured:
+                    for r in rows:
                         seen[(r.event_name, r.market)] = r
                     deduped = list(seen.values())
                     n_events = len({r.event_name for r in deduped})
@@ -413,7 +443,7 @@ class EurobetScraper:
                                 sport_key, n_events, len(deduped))
                     all_results.extend(deduped)
 
-                    await asyncio.sleep(2.0)
+                    await asyncio.sleep(1.0)
 
             finally:
                 await browser.close()
