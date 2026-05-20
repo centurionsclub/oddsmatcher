@@ -300,116 +300,149 @@ ALBERATURA_URL = (
 
 
 class SnaiScraper:
-    """Snai scraper — direct httpx calls to betting-snai.flutterseatech.it.
+    """Snai scraper — Playwright browser intercepts flutterseatech API calls.
 
-    No browser needed: the Snai API endpoints are publicly accessible.
-    1. GET alberaturaPrematch → parse competition list
-    2. For each wanted competition: GET live-ora-for-cards/{manif_id}
+    Navigate to snai.it sport pages and capture the API responses from
+    betting-snai.flutterseatech.it that the page JS fires automatically.
+    Also log all API-looking URLs for diagnostics.
     """
 
     bookmaker_name = BOOKMAKER
 
+    # Snai sport pages that trigger the flutterseatech API calls
+    SPORT_PAGES: list[tuple[str, str]] = [
+        ("calcio",  "https://www.snai.it/scommesse/calcio"),
+        ("tennis",  "https://www.snai.it/scommesse/tennis"),
+        ("basket",  "https://www.snai.it/scommesse/basket"),
+    ]
+
     async def scrape_all(self) -> list[MatchOdds]:
-        return await self._run(sport=None)
+        return await self._run(sport_filter=None)
 
     async def scrape_sport(self, sport: str) -> list[MatchOdds]:
-        return await self._run(sport=sport)
+        return await self._run(sport_filter=sport)
 
-    async def _run(self, sport: str | None) -> list[MatchOdds]:
-        import httpx
+    async def _run(self, sport_filter: str | None) -> list[MatchOdds]:
+        import urllib.parse
+        from playwright.async_api import async_playwright, Response as _Response
+
         proxy_url = os.environ.get("PROXY_URL")
+        proxy = None
         if proxy_url:
-            import urllib.parse
             p = urllib.parse.urlparse(proxy_url)
+            proxy = {
+                "server": f"{p.scheme}://{p.hostname}:{p.port}",
+                "username": p.username or "",
+                "password": p.password or "",
+            }
             logger.info("[Snai] Using proxy: %s:%s", p.hostname, p.port)
 
-        results: list[MatchOdds] = []
+        all_results: list[MatchOdds] = []
 
-        async with httpx.AsyncClient(
-            headers=_SNAI_HEADERS,
-            timeout=30,
-            follow_redirects=True,
-            proxy=proxy_url,
-        ) as client:
-            # ── Phase 1: fetch alberaturaPrematch ─────────────────────
-            logger.info("[Snai] Fetching alberaturaPrematch…")
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+                proxy=proxy,
+            )
             try:
-                resp = await client.get(ALBERATURA_URL)
-                resp.raise_for_status()
-                alberatura = resp.json()
-                logger.info("[Snai] alberaturaPrematch: keys=%s", list(alberatura.keys())[:8])
-            except Exception as exc:
-                logger.error("[Snai] alberaturaPrematch failed: %s", exc)
-                return results
-
-            # ── Phase 2: find competitions + fetch events ──────────────
-            competitions = self._find_competitions(alberatura, sport)
-            logger.info("[Snai] %d competitions found", len(competitions))
-
-            for league_name, sport_key, disc_id, manif_id in competitions:
-                url = EVENTS_API.format(manif_id=manif_id)
-                logger.info("[Snai] Fetching %s (manif=%d)…", league_name, manif_id)
+                context = await browser.new_context(
+                    user_agent=_UA,
+                    locale="it-IT",
+                    timezone_id="Europe/Rome",
+                    viewport={"width": 1280, "height": 800},
+                )
                 try:
-                    resp = await client.get(url)
-                    if resp.status_code == 404:
-                        logger.info("[Snai] %s: 404 (no events)", league_name)
+                    from playwright_stealth import stealth_async as _stealth_async
+                    page = await context.new_page()
+                    await _stealth_async(page)
+                    logger.info("[Snai] playwright-stealth applied")
+                except ImportError:
+                    page = await context.new_page()
+                    logger.warning("[Snai] playwright-stealth not installed")
+
+                for sport_key, sport_url in self.SPORT_PAGES:
+                    if sport_filter and sport_key != sport_filter:
                         continue
-                    resp.raise_for_status()
-                    body = resp.json()
-                except Exception as exc:
-                    logger.error("[Snai] %s: request failed: %s", league_name, exc)
-                    continue
 
-                preview = _json.dumps(body, ensure_ascii=False)[:300] if body else "empty"
-                logger.info("[Snai] %s preview: %s", league_name, preview)
+                    captured: list[MatchOdds] = []
 
-                rows = _parse_snai_events(body, league_name, sport_key)
-                logger.info("[Snai] %s: %d rows", league_name, len(rows))
-                results.extend(rows)
+                    async def _on_response(
+                        resp: _Response,
+                        _sk: str = sport_key,
+                        _cap: list = captured,
+                    ) -> None:
+                        url = resp.url
+                        # Log all JSON responses from flutterseatech for diagnostics
+                        if API_HOST in url:
+                            ct = resp.headers.get("content-type", "")
+                            logger.info("[Snai] API resp (sport=%s) status=%s url=%s",
+                                        _sk, resp.status, url[:150])
+                            if resp.status != 200:
+                                return
+                            try:
+                                data = await resp.json()
+                                # Determine league from URL (manif_id parameter)
+                                league_name: str | None = None
+                                # Try to find manif_id in URL
+                                import re as _re
+                                mid_m = _re.search(r"/(\d+)\b", url)
+                                if mid_m:
+                                    mid = int(mid_m.group(1))
+                                    # Find matching competition from our alberatura cache
+                                    league_name = self._manif_to_league.get(mid)
+                                if not league_name:
+                                    # Try all leagues for this sport
+                                    rows = []
+                                    for lg_name, sp_key, _, _ in getattr(self, "_competitions", []):
+                                        if sp_key == _sk:
+                                            r = _parse_snai_events(data, lg_name, sp_key)
+                                            if r:
+                                                rows = r
+                                                league_name = lg_name
+                                                break
+                                else:
+                                    rows = _parse_snai_events(data, league_name, _sk)
 
-        logger.info("[Snai] Total rows: %d", len(results))
-        return results
+                                if rows:
+                                    logger.info("[Snai] Parsed %d rows from %s (league=%s)",
+                                                len(rows), url[:80], league_name)
+                                    _cap.extend(rows)
+                                else:
+                                    preview = _json.dumps(data, ensure_ascii=False)[:300] if data else "empty"
+                                    logger.info("[Snai] 0 rows from %s — preview: %s", url[:80], preview)
+                            except Exception as exc:
+                                logger.info("[Snai] Parse error for %s: %s", url[:80], exc)
 
-    def _find_competitions(
-        self, alberatura: dict, sport_filter: str | None
-    ) -> list[tuple[str, str, int, int]]:
-        """
-        Parse manifestazioneMap (flat dict) to find competitions we want.
-        Returns list of (league_name, sport_key, codiceDisciplina, codiceManifestazione).
-        """
-        out: list[tuple[str, str, int, int]] = []
-        if not isinstance(alberatura, dict):
-            return out
+                    page.on("response", _on_response)
+                    logger.info("[Snai] Navigating to %s", sport_url)
+                    try:
+                        await page.goto(sport_url, wait_until="networkidle", timeout=45_000)
+                        logger.info("[Snai] %s: networkidle", sport_key)
+                    except Exception as e:
+                        logger.info("[Snai] %s: %s — continuing", sport_key, type(e).__name__)
+                    await page.wait_for_timeout(3000)
+                    page.remove_listener("response", _on_response)
 
-        manif_map = alberatura.get("manifestazioneMap", {})
-        if not isinstance(manif_map, dict):
-            logger.warning("[Snai] manifestazioneMap missing or wrong type: %s", type(manif_map))
-            return out
+                    # Deduplicate by (event_name, market)
+                    seen: dict[tuple[str, str], MatchOdds] = {}
+                    for r in captured:
+                        seen[(r.event_name, r.market)] = r
+                    deduped = list(seen.values())
+                    n_events = len({r.event_name for r in deduped})
+                    logger.info("[Snai] %s: %d events, %d market rows (after dedup)",
+                                sport_key, n_events, len(deduped))
+                    all_results.extend(deduped)
 
-        logger.info("[Snai] manifestazioneMap has %d entries", len(manif_map))
+                    import asyncio as _asyncio
+                    await _asyncio.sleep(2.0)
 
-        for key, entry in manif_map.items():
-            if not isinstance(entry, dict):
-                continue
+            finally:
+                await browser.close()
 
-            disc_id = entry.get("codiceDisciplina")
-            manif_id = entry.get("codiceManifestazione")
-            descrizione = str(entry.get("descrizione") or "").strip()
+        logger.info("[Snai] Total rows: %d", len(all_results))
+        return all_results
 
-            if not disc_id or not manif_id or not descrizione:
-                continue
-
-            sport_key = SPORT_CODE_MAP.get(int(disc_id))
-            if not sport_key:
-                continue
-
-            if sport_filter and sport_key != sport_filter:
-                continue
-
-            league_name = _match_league(descrizione, sport_key)
-            if league_name:
-                out.append((league_name, sport_key, int(disc_id), int(manif_id)))
-                logger.info("[Snai] Matched: %r → %r (disc=%s manif=%s)",
-                            descrizione, league_name, disc_id, manif_id)
-
-        return out
+    # Cache populated by _find_competitions for URL→league resolution
+    _manif_to_league: dict[int, str] = {}
+    _competitions: list = []

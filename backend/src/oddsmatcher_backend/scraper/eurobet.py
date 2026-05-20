@@ -373,7 +373,13 @@ class EurobetScraper:
                     captured: list[MatchOdds] = []
 
                     async def _on_response(resp: _Response, _sk: str = sport_key, _cap: list = captured) -> None:
-                        if "kambicdn.com" not in resp.url and "kambi" not in resp.url:
+                        url = resp.url
+                        # Log all non-trivial API-looking responses for diagnostics
+                        if any(kw in url for kw in ("api", "kambi", "offering", "json", "sport", "scommesse", "calcio", "tennis", "basket")):
+                            ct = resp.headers.get("content-type", "")
+                            if "json" in ct or "javascript" in ct or not ct:
+                                logger.info("[Eurobet] API resp (sport=%s): %s [%s]", _sk, url[:120], resp.status)
+                        if "kambicdn.com" not in url and "kambi" not in url:
                             return
                         try:
                             data = await resp.json()
@@ -383,9 +389,9 @@ class EurobetScraper:
                                 _cap.extend(rows)
                             else:
                                 preview = _json.dumps(data, ensure_ascii=False)[:200] if data else "empty"
-                                logger.debug("[Eurobet] Kambi resp 0 rows (sport=%s) — %s", _sk, preview)
-                        except Exception:
-                            pass
+                                logger.info("[Eurobet] Kambi resp 0 rows (sport=%s) — %s", _sk, preview)
+                        except Exception as exc:
+                            logger.info("[Eurobet] Kambi parse error (sport=%s): %s", _sk, exc)
 
                     page.on("response", _on_response)
                     logger.info("[Eurobet] Navigating to %s", sport_url)
