@@ -214,6 +214,9 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
                         return None
                     try:
                         q = float(str(q_raw).replace(",", "."))
+                        # Eurobet stores oddValue as integer ×100 (e.g. 225 = 2.25)
+                        if q > 100:
+                            q = q / 100
                         return round(q, 3) if q > 1.0 else None
                     except (TypeError, ValueError):
                         return None
@@ -222,9 +225,10 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
                     return str(odd.get("oddDescription") or odd.get("description") or
                                odd.get("name") or odd.get("outcome") or "").strip()
 
-                # ── 1X2 ──
-                if og_name in ("1X2", "1 X 2") or any(kw in og_name for kw in (
-                        "Esito Finale", "Match Result", "Testa a Testa", "Head to Head")):
+                # ── 1X2 / Head-to-Head ──
+                if og_name in ("1X2", "1 X 2", "T/T") or any(kw in og_name for kw in (
+                        "Esito Finale", "Match Result", "Testa a Testa", "Head to Head",
+                        "T/T (", "RISULTATO FINALE")):
                     odds_dict: dict[str, float] = {}
                     for odd in odds_items:
                         if not isinstance(odd, dict):
