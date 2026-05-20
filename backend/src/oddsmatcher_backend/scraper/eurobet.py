@@ -1,11 +1,16 @@
-"""Eurobet Italy pregame odds scraper — __NEXT_DATA__ extraction.
+"""Eurobet Italy pregame odds scraper — httpx to web.eurobet.it.
 
-Eurobet uses Next.js ISR (Incremental Static Regeneration). All event odds
-are rendered server-side and embedded in <script id="__NEXT_DATA__"> on the
-page. The browser makes no API calls for sport data — it's all in the HTML.
+www.eurobet.it is fully protected by Cloudflare Turnstile (blocks Playwright).
+web.eurobet.it is the backend subdomain that is NOT behind Cloudflare.
 
-We navigate to each competition page, extract __NEXT_DATA__, and parse events
-from props.pageProps.
+Approach:
+  1. Probe the detail-service API on web.eurobet.it with various URL patterns.
+  2. Also probe /webeb/rest/... paths (the API observed in network traffic).
+  3. Once a working pattern is found, fetch all leagues.
+
+Known working:
+  - web.eurobet.it/webeb/rest → {"result": "ok", "version": "1"}
+  - The sport data API path is unknown — we probe multiple candidates.
 """
 
 import json as _json
@@ -15,26 +20,28 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from playwright.async_api import async_playwright
+import httpx
 
 from oddsmatcher_backend.scraper.centroquote import MatchOdds
-
-try:
-    from playwright_stealth import stealth_async as _stealth_async
-    _STEALTH_AVAILABLE = True
-except ImportError:
-    _STEALTH_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
 BOOKMAKER = "Eurobet"
 BASE_URL = "https://www.eurobet.it"
+WEB_BASE = "https://web.eurobet.it"
 
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
 )
+_HEADERS = {
+    "User-Agent": _UA,
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "it-IT,it;q=0.9",
+    "Referer": "https://www.eurobet.it/",
+    "Origin": "https://www.eurobet.it",
+}
 
 # discipline → list of (league_name, meeting_alias)
 MEETINGS: dict[str, list[tuple[str, str]]] = {
@@ -86,29 +93,25 @@ def _parse_date(s: str | None) -> str | None:
 def _extract_events(data: Any) -> list[dict]:
     """Recursively search for a list of event-like dicts."""
     if isinstance(data, list) and data:
-        # Check if elements look like events
         if isinstance(data[0], dict) and any(
             k in data[0] for k in ("description", "descrizione", "eventName",
                                     "startDate", "dataOra", "betGroupList",
                                     "betGroups", "markets", "scommesse")
         ):
             return data
-        # Recurse into list elements
         for item in data:
             result = _extract_events(item)
             if result:
                 return result
 
     if isinstance(data, dict):
-        # Try common event list keys first
         for key in ("eventList", "events", "avvenimenti", "items", "data",
-                     "meetings", "competitions", "fixtures", "matches"):
+                     "meetings", "competitions", "fixtures", "matches", "result"):
             val = data.get(key)
             if val is not None:
                 result = _extract_events(val)
                 if result:
                     return result
-        # Recurse into all values
         for val in data.values():
             if isinstance(val, (dict, list)):
                 result = _extract_events(val)
@@ -255,10 +258,11 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
 
 
 class EurobetScraper:
-    """Eurobet scraper — parses __NEXT_DATA__ from SSR pages.
+    """Eurobet scraper — httpx to web.eurobet.it backend API.
 
-    Eurobet uses Next.js ISR: event data is embedded in <script id="__NEXT_DATA__">
-    on every competition page. We extract and parse it directly.
+    www.eurobet.it is Cloudflare-protected (Turnstile challenge blocks Playwright).
+    web.eurobet.it is the backend subdomain without Cloudflare protection.
+    We probe multiple API paths to discover the working endpoint.
     """
 
     bookmaker_name = BOOKMAKER
@@ -271,177 +275,125 @@ class EurobetScraper:
 
     async def _run(self, sport_filter: str | None) -> list[MatchOdds]:
         proxy_url = os.environ.get("PROXY_URL")
-        proxy_dict = None
         if proxy_url:
             import urllib.parse as _up
             p = _up.urlparse(proxy_url)
-            proxy_dict = {
-                "server": f"{p.scheme}://{p.hostname}:{p.port}",
-                "username": p.username or "",
-                "password": p.password or "",
-            }
             logger.info("[Eurobet] Using proxy: %s:%s", p.hostname, p.port)
 
-        # Build list of (league_name, discipline, alias, page_url)
-        pages: list[tuple[str, str, str, str]] = []
+        # Build (league_name, discipline, alias) list
+        meetings: list[tuple[str, str, str]] = []
         for discipline, entries in MEETINGS.items():
             if sport_filter and discipline != sport_filter:
                 continue
             for league_name, alias in entries:
-                page_url = f"{BASE_URL}/scommesse-sportive/{discipline}/{alias}"
-                pages.append((league_name, discipline, alias, page_url))
+                meetings.append((league_name, discipline, alias))
 
+        # ── Phase 1: Discover working API on web.eurobet.it ──────────────
+        first_disc, first_alias = meetings[0][1], meetings[0][2]
+        working_url_template: str | None = None  # with {disc}/{alias} placeholders
+
+        # Probe candidates on web.eurobet.it (not Cloudflare-protected)
+        probe_candidates: list[tuple[str, str]] = [
+            # detail-service (known internal API for sport schedule)
+            (f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
+             f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
+            (f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1",
+             f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1"),
+            (f"{WEB_BASE}/detail-service/sport-schedule/services/sport/{first_disc}?prematch=1&live=0",
+             f"{WEB_BASE}/detail-service/sport-schedule/services/sport/{{disc}}?prematch=1&live=0"),
+            # webeb/rest paths (health check found at /webeb/rest)
+            (f"{WEB_BASE}/webeb/rest/prematch/sport/{first_disc}/meeting/{first_alias}",
+             f"{WEB_BASE}/webeb/rest/prematch/sport/{{disc}}/meeting/{{alias}}"),
+            (f"{WEB_BASE}/webeb/rest/prematch/meeting/{first_alias}",
+             f"{WEB_BASE}/webeb/rest/prematch/meeting/{{alias}}"),
+            (f"{WEB_BASE}/webeb/rest/sport/{first_disc}/events",
+             f"{WEB_BASE}/webeb/rest/sport/{{disc}}/events"),
+            (f"{WEB_BASE}/webeb/rest/events?sport={first_disc}&meeting={first_alias}",
+             f"{WEB_BASE}/webeb/rest/events?sport={{disc}}&meeting={{alias}}"),
+            # integration-bridge (known internal API from FullStory monitoring)
+            (f"{WEB_BASE}/integration-bridge/prematch/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/prematch/{{disc}}/{{alias}}"),
+            (f"{WEB_BASE}/integration-bridge/sport-schedule/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/sport-schedule/{{disc}}/{{alias}}"),
+            (f"{WEB_BASE}/integration-bridge/events?sport={first_disc}&meeting={first_alias}",
+             f"{WEB_BASE}/integration-bridge/events?sport={{disc}}&meeting={{alias}}"),
+            # prematch-menu-service (seen in probe logs before)
+            (f"{WEB_BASE}/prematch-menu-service/api/v2/sport-schedule/services/sport/{first_disc}?prematch=1",
+             f"{WEB_BASE}/prematch-menu-service/api/v2/sport-schedule/services/sport/{{disc}}?prematch=1"),
+            # Try www.eurobet.it paths via httpx (might work without browser)
+            (f"{BASE_URL}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
+             f"{BASE_URL}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
+        ]
+
+        async with httpx.AsyncClient(
+            headers=_HEADERS, timeout=15, follow_redirects=True, proxy=proxy_url,
+        ) as client:
+            # First verify web.eurobet.it is accessible
+            try:
+                ping = await client.get(f"{WEB_BASE}/webeb/rest")
+                logger.info("[Eurobet] web.eurobet.it ping → %d | %s",
+                            ping.status_code, ping.text[:100])
+            except Exception as e:
+                logger.warning("[Eurobet] web.eurobet.it not reachable: %s", e)
+
+            for probe_url, url_template in probe_candidates:
+                try:
+                    resp = await client.get(probe_url)
+                    text = resp.text[:300]
+                    logger.info("[Eurobet] PROBE %s → %d | %s",
+                                probe_url[:100], resp.status_code, text)
+
+                    if resp.status_code == 200:
+                        if any(kw in resp.text for kw in (
+                            "eventList", "events", "betGroupList", "betGroups",
+                            "description", "descrizione", "startDate", "dataOra",
+                        )):
+                            logger.info("[Eurobet] ✅ Working API: %s", probe_url)
+                            working_url_template = url_template
+                            break
+                        else:
+                            # Log full structure for non-event 200
+                            logger.info("[Eurobet] 200 but no event keywords | full=%s",
+                                        resp.text[:500])
+                except Exception as exc:
+                    logger.info("[Eurobet] PROBE error %s: %s", probe_url[:80], str(exc)[:100])
+
+        if working_url_template is None:
+            logger.warning("[Eurobet] No working API found — all probes failed")
+            logger.info("[Eurobet] Total: 0 events, 0 rows")
+            return []
+
+        # ── Phase 2: Fetch all leagues ────────────────────────────────────
         all_results: list[MatchOdds] = []
 
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-                proxy=proxy_dict,
-            )
-            try:
-                context = await browser.new_context(
-                    user_agent=_UA,
-                    locale="it-IT",
-                    timezone_id="Europe/Rome",
-                    viewport={"width": 1280, "height": 800},
-                )
-                page = await context.new_page()
-                if _STEALTH_AVAILABLE:
-                    await _stealth_async(page)
-                    logger.info("[Eurobet] playwright-stealth applied")
-                else:
-                    logger.warning("[Eurobet] playwright-stealth not available")
-
-                # Homepage warm-up to get session cookies
-                logger.info("[Eurobet] Warming up on homepage...")
+        async with httpx.AsyncClient(
+            headers=_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
+        ) as client:
+            for league_name, discipline, alias in meetings:
+                url = working_url_template.format(disc=discipline, alias=alias)
+                logger.info("[Eurobet] Fetching %s…", league_name)
                 try:
-                    await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=25_000)
-                    await page.wait_for_timeout(3000)
-                    logger.info("[Eurobet] Homepage loaded")
-                except Exception as e:
-                    logger.warning("[Eurobet] Homepage warm-up failed: %s", str(e)[:100])
-
-                # Navigate general sport pages (less Cloudflare-challenged than specific competition pages)
-                # Then search for any embedded JSON data (script vars, window globals, etc.)
-                seen_disciplines_nav: set[str] = set()
-                for league_name, discipline, alias, page_url in pages:
-                    # Navigate each competition page; if Cloudflare blocks after the first,
-                    # fall back to the general sport page which loads more reliably
-                    if discipline not in seen_disciplines_nav:
-                        sport_url = f"{BASE_URL}/scommesse-sportive/{discipline}"
-                        seen_disciplines_nav.add(discipline)
-                        try:
-                            logger.info("[Eurobet] Navigating to sport page %s", sport_url)
-                            try:
-                                await page.goto(sport_url, wait_until="networkidle", timeout=30_000)
-                            except Exception:
-                                pass
-                            await page.wait_for_timeout(3000)
-                        except Exception as e:
-                            logger.warning("[Eurobet] Sport page nav error: %s", str(e)[:100])
-
-                    try:
-                        logger.info("[Eurobet] Navigating to %s", page_url)
-                        try:
-                            await page.goto(page_url, wait_until="networkidle", timeout=25_000)
-                        except Exception:
-                            pass  # timeout is ok — page still has content
-                        await page.wait_for_timeout(2000)
-
-                        # Check current URL and page title (detect Cloudflare challenge)
-                        try:
-                            title = await page.title()
-                            final_url = page.url
-                            logger.info("[Eurobet] %s: title=%r url=%s", league_name, title, final_url)
-                        except Exception:
-                            pass
-
-                        # Strategy 1: Extract __NEXT_DATA__ (Next.js pages)
-                        next_data_str = await page.evaluate("""
-                            () => {
-                                const el = document.getElementById('__NEXT_DATA__');
-                                return el ? el.textContent : null;
-                            }
-                        """)
-
-                        if next_data_str:
-                            try:
-                                next_data = _json.loads(next_data_str)
-                                page_props = (next_data.get("props") or {}).get("pageProps") or {}
-                                logger.info("[Eurobet] %s: __NEXT_DATA__ pageProps keys=%s | preview=%.1000s",
-                                            league_name, list(page_props.keys())[:15],
-                                            _json.dumps(page_props, ensure_ascii=False)[:1000])
-                                events = _extract_events(page_props)
-                                if events:
-                                    rows = _parse_events(events, league_name, discipline)
-                                    logger.info("[Eurobet] %s: %d rows from __NEXT_DATA__", league_name, len(rows))
-                                    all_results.extend(rows)
-                                    continue
-                            except Exception as e:
-                                logger.warning("[Eurobet] %s: __NEXT_DATA__ error: %s", league_name, e)
-
-                        # Strategy 2: Extract window globals / embedded JSON from script tags
-                        embedded_json = await page.evaluate("""
-                            () => {
-                                const results = {};
-                                // Check common window globals
-                                for (const k of ['__INITIAL_STATE__', '__REDUX_STATE__', '__APP_STATE__',
-                                                  '__data__', '__PRELOADED_STATE__', 'initialData',
-                                                  '__eb_data__', '__sport_data__']) {
-                                    if (window[k] !== undefined) {
-                                        results[k] = window[k];
-                                    }
-                                }
-                                // Search script tags for JSON
-                                const scripts = document.querySelectorAll('script:not([src])');
-                                for (const s of scripts) {
-                                    const txt = s.textContent;
-                                    if (txt && (txt.includes('eventList') || txt.includes('avvenimenti')
-                                                || txt.includes('betGroup') || txt.includes('quota'))) {
-                                        results['_script_snippet'] = txt.slice(0, 2000);
-                                        break;
-                                    }
-                                }
-                                // Check data attributes on main content elements
-                                const evEl = document.querySelector('[data-events],[data-odds],[data-sport]');
-                                if (evEl) {
-                                    results['_data_attr'] = evEl.getAttribute('data-events')
-                                                         || evEl.getAttribute('data-odds')
-                                                         || evEl.getAttribute('data-sport');
-                                }
-                                return results;
-                            }
-                        """)
-                        if embedded_json and isinstance(embedded_json, dict):
-                            non_empty = {k: v for k, v in embedded_json.items() if v}
-                            if non_empty:
-                                logger.info("[Eurobet] %s: embedded globals found: %s | preview=%.500s",
-                                            league_name, list(non_empty.keys()),
-                                            _json.dumps(non_empty, ensure_ascii=False)[:500])
-                                for k, v in non_empty.items():
-                                    if k.startswith("_"):
-                                        continue  # script snippets handled below
-                                    events = _extract_events(v)
-                                    if events:
-                                        rows = _parse_events(events, league_name, discipline)
-                                        logger.info("[Eurobet] %s: %d rows from window[%s]", league_name, len(rows), k)
-                                        all_results.extend(rows)
-                                        break
-
-                        # Strategy 3: Log HTML body for structure discovery (first league only)
-                        if not all_results:
-                            try:
-                                body_html = await page.evaluate("document.body ? document.body.innerHTML : ''")
-                                logger.info("[Eurobet] %s: BODY HTML=%.3000s", league_name, body_html)
-                            except Exception as e:
-                                logger.warning("[Eurobet] %s: body HTML error: %s", league_name, e)
-
-                    except Exception as exc:
-                        logger.error("[Eurobet] %s error: %s", league_name, exc, exc_info=True)
-
-            finally:
-                await browser.close()
+                    resp = await client.get(url)
+                    if resp.status_code != 200:
+                        logger.info("[Eurobet] %s → %d", league_name, resp.status_code)
+                        continue
+                    data = resp.json()
+                    if isinstance(data, dict):
+                        logger.info("[Eurobet] %s top keys: %s | preview=%.300s",
+                                    league_name, list(data.keys())[:10],
+                                    _json.dumps(data, ensure_ascii=False)[:300])
+                    events = _extract_events(data)
+                    if events:
+                        logger.info("[Eurobet] %s: %d events | first keys=%s",
+                                    league_name, len(events),
+                                    list(events[0].keys())[:10] if isinstance(events[0], dict) else "?")
+                        rows = _parse_events(events, league_name, discipline)
+                        logger.info("[Eurobet] %s: %d rows", league_name, len(rows))
+                        all_results.extend(rows)
+                    else:
+                        logger.info("[Eurobet] %s: no events found in response", league_name)
+                except Exception as exc:
+                    logger.error("[Eurobet] %s error: %s", league_name, exc)
 
         # Deduplicate by (event_name, market)
         seen: dict[tuple[str, str], MatchOdds] = {}

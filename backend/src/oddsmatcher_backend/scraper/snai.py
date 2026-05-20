@@ -121,12 +121,15 @@ def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[Matc
     if isinstance(data, list):
         events = data
     elif isinstance(data, dict):
-        # avvenimentiMap: dict keyed by event ID → convert to list
-        avm = data.get("avvenimentiMap")
-        if isinstance(avm, dict) and avm:
-            events = list(avm.values())
-            logger.info("[Snai] %s: found %d events in avvenimentiMap", league_name, len(events))
-        else:
+        # avvenimentoFeMap / avvenimentiMap: dict keyed by event ID → convert to list
+        for map_key in ("avvenimentoFeMap", "avvenimentiMap", "avvenimentiFeMap",
+                        "eventMap", "avvenimentiFe"):
+            avm = data.get(map_key)
+            if isinstance(avm, dict) and avm:
+                events = list(avm.values())
+                logger.info("[Snai] %s: found %d events in %s", league_name, len(events), map_key)
+                break
+        if not events:
             for key in ("avvenimenti", "eventi", "events", "data", "result",
                         "matches", "fixtures", "palinsesto", "avv",
                         "avvenimentiList", "listaAvvenimenti", "items"):
@@ -419,8 +422,8 @@ class SnaiScraper:
                         # Check for event-like content (require specific event keywords,
                         # not just "descrizione" which appears in navigation metadata too)
                         if any(kw in resp.text for kw in (
-                            "avvenimentiMap", "avvenimento", "scommesse", "quota",
-                            "startDate", "dataOra", "betGroup",
+                            "avvenimentoFeMap", "avvenimentiMap", "avvenimento",
+                            "scommesse", "quota", "startDate", "dataOra", "betGroup",
                         )):
                             logger.info("[Snai] ✅ Working URL found: %s (template: %s)",
                                         probe_url, url_template)
