@@ -527,63 +527,85 @@ class SnaiScraper:
                 except Exception as exc:
                     logger.info("[Snai] ODDS PROBE error %s: %s", probe_url[:80], str(exc)[:100])
 
-        # ── Phase 3b: Discovery probes (find other available endpoints) ──────
+        # ── Phase 3b: Probe Swagger/OpenAPI + alternative endpoints ─────────
         if working_odds_template is None:
-            logger.warning("[Snai] No odds endpoint found — trying discovery probes")
+            logger.warning("[Snai] No odds endpoint found — probing Swagger/OpenAPI and HTML")
             async with httpx.AsyncClient(
-                headers=_SNAI_HEADERS, timeout=15, follow_redirects=True, proxy=proxy_url,
+                headers=_SNAI_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
             ) as client:
-                # ── Step 1: Fetch FULL loggers to discover class/controller names ──
-                _ACTUATOR_BASE = f"https://{API_HOST}/api/lettura-palinsesto-sport/actuator"
-                try:
-                    log_resp = await client.get(f"{_ACTUATOR_BASE}/loggers")
-                    if log_resp.status_code == 200:
-                        log_data = log_resp.json()
-                        all_loggers = list((log_data.get("loggers") or {}).keys())
-                        logger.info("[Snai] ALL logger names (%d): %s",
-                                    len(all_loggers), all_loggers)
-                        # Extract Sisal-specific packages
-                        sisal_loggers = [l for l in all_loggers if "sisal" in l.lower() or "snai" in l.lower() or "palinsesto" in l.lower() or "scommessa" in l.lower()]
-                        logger.info("[Snai] Sisal/Snai logger names: %s", sisal_loggers)
-                except Exception as e:
-                    logger.info("[Snai] loggers fetch error: %s", e)
+                # ── Step 1: SpringDoc /v3/api-docs — lists ALL mapped endpoints ──
+                # Confirmed: io.swagger.v3.* and org.springdoc.* loggers are active.
+                swagger_urls = [
+                    f"https://{API_HOST}/api/lettura-palinsesto-sport/v3/api-docs",
+                    f"https://{API_HOST}/api/lettura-palinsesto-sport/swagger-ui.html",
+                    f"https://{API_HOST}/api/lettura-palinsesto-sport/swagger-ui/index.html",
+                    f"https://{API_HOST}/v3/api-docs",
+                    f"https://{API_HOST}/api/v3/api-docs",
+                    f"https://{API_HOST}/api/lettura-palinsesto-sport/api-docs",
+                ]
+                for sw_url in swagger_urls:
+                    try:
+                        r = await client.get(sw_url)
+                        logger.info("[Snai] SWAGGER %s → %d | %.300s", sw_url, r.status_code, r.text)
+                        if r.status_code == 200:
+                            try:
+                                sw_data = r.json()
+                                paths = list(sw_data.get("paths", {}).keys())
+                                logger.info("[Snai] SWAGGER paths (%d): %s", len(paths), paths)
+                                logger.info("[Snai] SWAGGER full spec: %.8000s",
+                                            _json.dumps(sw_data, ensure_ascii=False))
+                                break
+                            except Exception:
+                                logger.info("[Snai] SWAGGER HTML 200 | len=%d | preview=%.300s",
+                                            len(r.text), r.text[:300])
+                    except Exception as e:
+                        logger.info("[Snai] SWAGGER %s error: %s", sw_url, str(e)[:100])
 
-                # ── Step 2: Probe Snai website JS for API patterns ──────────────
-                try:
-                    snai_resp = await client.get("https://www.snai.it/scommesse/calcio/premier-league",
-                                                 follow_redirects=True)
-                    logger.info("[Snai] www.snai.it page → %d | type=%s | len=%d",
-                                snai_resp.status_code,
-                                snai_resp.headers.get("content-type","?"),
-                                len(snai_resp.text))
-                    if snai_resp.status_code == 200:
-                        # Look for API URL patterns in the HTML
-                        import re as _re
-                        api_patterns = _re.findall(r'["\']([^"\']*betting-snai[^"\']*)["\']',
-                                                   snai_resp.text)
-                        logger.info("[Snai] API patterns in HTML: %s", api_patterns[:20])
-                        # Look for JS bundle URLs
-                        js_urls = _re.findall(r'src=["\']([^"\']+\.js[^"\']*)["\']',
-                                              snai_resp.text)
-                        logger.info("[Snai] JS bundles found: %s", js_urls[:10])
-                        if js_urls:
-                            # Fetch first significant JS bundle and look for API calls
-                            for js_url in js_urls[:3]:
-                                if not js_url.startswith("http"):
-                                    js_url = "https://www.snai.it" + js_url
-                                try:
-                                    js_resp = await client.get(js_url)
-                                    if js_resp.status_code == 200:
-                                        js_text = js_resp.text
-                                        # Find API call patterns
-                                        api_calls = _re.findall(r'["\']([^"\']*palinsesto[^"\']*)["\']',
-                                                                js_text)
-                                        logger.info("[Snai] JS bundle %s → api_calls=%s",
-                                                    js_url[:80], api_calls[:20])
-                                except Exception as js_e:
-                                    logger.info("[Snai] JS fetch error: %s", js_e)
-                except Exception as snai_e:
-                    logger.info("[Snai] www.snai.it probe error: %s", snai_e)
+                # ── Step 2: Probe www.snai.it HTML for NEXT_DATA or API patterns ──
+                import re as _re
+                for page_url in [
+                    "https://www.snai.it/scommesse/calcio",
+                    "https://www.snai.it/scommesse/calcio/premier-league",
+                    "https://www.snai.it/sport/calcio",
+                ]:
+                    try:
+                        r = await client.get(page_url, follow_redirects=True)
+                        logger.info("[Snai] HTML %s → %d | type=%s | len=%d",
+                                    page_url, r.status_code,
+                                    r.headers.get("content-type", "?"), len(r.text))
+                        if r.status_code == 200:
+                            nd = _re.search(r'id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+                                            r.text, _re.DOTALL)
+                            if nd:
+                                logger.info("[Snai] NEXT_DATA len=%d | preview=%.3000s",
+                                            len(nd.group(1)), nd.group(1))
+                                break
+                            api_hits = _re.findall(
+                                r'["\']([^"\']*(?:betting-snai|flutterseatech)[^"\']*)["\']',
+                                r.text)
+                            logger.info("[Snai] betting-snai API URLs in HTML: %s", api_hits[:20])
+                            api_hits2 = _re.findall(
+                                r'["\']([^"\']*(?:scommess|quota|palinsesto)[^"\']*)["\']',
+                                r.text)
+                            logger.info("[Snai] scommessa/quota patterns in HTML: %s", api_hits2[:20])
+                    except Exception as e:
+                        logger.info("[Snai] HTML probe %s error: %s", page_url, str(e)[:100])
+
+                # ── Step 3: Try alternative service bases (different API gateway paths) ──
+                alt_bases = [
+                    f"https://{API_HOST}/api/scommessa-sport",
+                    f"https://{API_HOST}/api/lettura-scommessa",
+                    f"https://{API_HOST}/api/quota-sport",
+                    f"https://{API_HOST}/api/betting-sport",
+                    f"https://{API_HOST}/api/palinsesto-scommessa",
+                ]
+                for base in alt_bases:
+                    try:
+                        r = await client.get(f"{base}/actuator/health")
+                        logger.info("[Snai] ALT SERVICE %s/actuator/health → %d | %.200s",
+                                    base, r.status_code, r.text)
+                    except Exception as e:
+                        logger.info("[Snai] ALT SERVICE %s error: %s", base, str(e)[:80])
 
         if working_odds_template is None:
             logger.warning("[Snai] No working odds endpoint found — logging full first event for analysis")

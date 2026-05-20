@@ -293,39 +293,26 @@ class EurobetScraper:
         working_url_template: str | None = None  # with {disc}/{alias} placeholders
 
         # Probe candidates on web.eurobet.it (not Cloudflare-protected)
-        # integration-bridge is confirmed as a real Spring Boot API (returns JSON 404 on wrong paths)
+        # NOTE: integration-bridge Swagger confirmed it only has Opta/Perform/IMG (stats), NOT odds.
+        # detail-service on www.eurobet.it is Cloudflare-protected (403).
+        # Priority: try web.eurobet.it/detail-service (same service, CF-free backend).
         get_probe_candidates: list[tuple[str, str]] = [
-            # ── integration-bridge: sport-schedule paths ──
-            (f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
-             f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
-            (f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{first_disc}/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{{disc}}/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/sport-schedule/services/sport/{first_disc}?prematch=1&live=0",
-             f"{WEB_BASE}/integration-bridge/sport-schedule/services/sport/{{disc}}?prematch=1&live=0"),
-            # ── integration-bridge: api/v* paths ──
-            (f"{WEB_BASE}/integration-bridge/api/v1/sport/{first_disc}/meeting/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/api/v1/sport/{{disc}}/meeting/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/api/v1/events?sport={first_disc}&meeting={first_alias}&prematch=1",
-             f"{WEB_BASE}/integration-bridge/api/v1/events?sport={{disc}}&meeting={{alias}}&prematch=1"),
-            (f"{WEB_BASE}/integration-bridge/api/v2/sport/{first_disc}/meeting/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/api/v2/sport/{{disc}}/meeting/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/api/sports/{first_disc}/meetings/{first_alias}/events",
-             f"{WEB_BASE}/integration-bridge/api/sports/{{disc}}/meetings/{{alias}}/events"),
-            # ── integration-bridge: simplified paths ──
-            (f"{WEB_BASE}/integration-bridge/meeting/{first_disc}/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/meeting/{{disc}}/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/events/{first_disc}/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/events/{{disc}}/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/sport/{first_disc}/meeting/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/sport/{{disc}}/meeting/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/v1/{first_disc}/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/v1/{{disc}}/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/prematch/sport-schedule/{first_disc}/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/prematch/sport-schedule/{{disc}}/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/prematch/{first_disc}/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/prematch/{{disc}}/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/prematch/events?sport={first_disc}&meeting={first_alias}",
-             f"{WEB_BASE}/integration-bridge/prematch/events?sport={{disc}}&meeting={{alias}}"),
+            # ── web.eurobet.it detail-service (CF-free backend — same service as www.eurobet.it) ──
+            (f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
+             f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
+            (f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}"),
+            (f"{WEB_BASE}/detail-service/sport-schedule/services/sport/{first_disc}?prematch=1&live=0",
+             f"{WEB_BASE}/detail-service/sport-schedule/services/sport/{{disc}}?prematch=1&live=0"),
+            # ── Alternative service names on web.eurobet.it ──
+            (f"{WEB_BASE}/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
+             f"{WEB_BASE}/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
+            (f"{WEB_BASE}/sport-schedule/services/meeting/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/sport-schedule/services/meeting/{{disc}}/{{alias}}"),
+            (f"{WEB_BASE}/api/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
+             f"{WEB_BASE}/api/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
+            (f"{WEB_BASE}/api/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
+             f"{WEB_BASE}/api/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
             # ── webeb/rest paths ──
             (f"{WEB_BASE}/webeb/rest/api/prematch/{first_disc}/{first_alias}",
              f"{WEB_BASE}/webeb/rest/api/prematch/{{disc}}/{{alias}}"),
@@ -333,32 +320,9 @@ class EurobetScraper:
              f"{WEB_BASE}/webeb/rest/prematch/{{disc}}/{{alias}}"),
             (f"{WEB_BASE}/webeb/rest/sport/{first_disc}/meeting/{first_alias}",
              f"{WEB_BASE}/webeb/rest/sport/{{disc}}/meeting/{{alias}}"),
-            # ── www.eurobet.it detail-service (might bypass Cloudflare for API calls) ──
+            # ── www.eurobet.it detail-service (Cloudflare, might bypass for API) ──
             (f"{BASE_URL}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
              f"{BASE_URL}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
-        ]
-
-        # webeb/rest is a JBoss action-based API at /webeb/rest (POST, requires 'action' param)
-        # Confirmed: POST with {"action": "..."} is recognized, but value must be correct
-        # Trying Italian betting-specific action names for webeb (Eurobet-proprietary JBoss API)
-        _WEBEB_ACTIONS: list[str] = [
-            # Italian betting operations
-            "calcolaScommessa", "inserisciScommessa", "convalidaScommessa",
-            "getSessione", "getSessionePrematch", "getSessioneByMeeting",
-            "getProgrammaGara", "getProgrammaPrematch", "getProgramma",
-            "getSchedaPrematch", "getScheda", "getSchedaAvvenimento",
-            "getInfoBet", "getInfoPrematch", "getInfoScommessa",
-            "getCoupon", "getListaCoupon", "getBetDetail",
-            "getListaPrematch", "getListaOdds", "getListaQuote",
-            # Eurobet-specific names
-            "getPalinsestoEventi", "getPalinsestoAvvenimenti",
-            "getAvvenimentiPalinsesto", "getAvvenimentiManifestazione",
-            "getScommesseEvento", "getQuoteEvento", "getQuotePrematch",
-            "getMultiBet", "getSingolaBet", "getSistema",
-            # Generic patterns
-            "getPalinsestoPrematch", "getAvvenimentiPrematch", "getScommessePrematch",
-            "getPalinsesto", "getAvvenimenti", "getScommesse", "getOdds",
-            "getCalendario", "getQuote", "getMeeting", "getSchedula",
         ]
 
         async with httpx.AsyncClient(
@@ -399,148 +363,73 @@ class EurobetScraper:
                 except Exception as exc:
                     logger.info("[Eurobet] GET PROBE error %s: %s", probe_url[:80], str(exc)[:100])
 
-            # ── POST action probes for webeb/rest (JBoss action-based API) ──
-            # Confirmed: POST /webeb/rest → 200 with "Please specify a valid 'action' parameter"
-            # So we try POST /webeb/rest with {"action": "..."} in JSON body
-            if not working_url_template:
-                webeb_post_headers = {**_HEADERS, "Content-Type": "application/json"}
-                for action in _WEBEB_ACTIONS:
-                    try:
-                        body = {
-                            "action": action,
-                            "sport": first_disc,
-                            "meeting": first_alias,
-                            "prematch": True,
-                        }
-                        resp = await client.post(
-                            f"{WEB_BASE}/webeb/rest", json=body,
-                            headers=webeb_post_headers,
-                        )
-                        text = resp.text[:300]
-                        logger.info("[Eurobet] POST action=%s → %d | %s",
-                                    action, resp.status_code, text)
-                        if resp.status_code == 200 and '"result":"ok"' in resp.text:
-                            logger.info("[Eurobet] ✅ webeb/rest action=%s WORKS!", action)
-                            logger.info("[Eurobet] Full response: %.2000s", resp.text)
-                            break
-                        elif resp.status_code == 200 and "result" in resp.text:
-                            logger.info("[Eurobet] action=%s got 200 (not ok) | full=%.500s",
-                                        action, resp.text)
-                    except Exception as exc:
-                        logger.info("[Eurobet] POST action=%s error: %s",
-                                    action, str(exc)[:80])
+            # webeb/rest action probes: 60+ names tried across multiple runs, all "invalid action"
+            # Skipping — webeb/rest is likely a bet-booking API, not the odds feed.
 
-            # ── Also try form-encoded POST /webeb/rest (JBoss may prefer urlencoded) ──
+            # ── Probe other services on web.eurobet.it ──────────────────────────────
             if not working_url_template:
-                form_headers = {**_HEADERS, "Content-Type": "application/x-www-form-urlencoded"}
-                for action in _WEBEB_ACTIONS[:15]:
-                    try:
-                        form_data = f"action={action}&sport={first_disc}&meeting={first_alias}&prematch=1"
-                        resp = await client.post(
-                            f"{WEB_BASE}/webeb/rest",
-                            content=form_data.encode(),
-                            headers=form_headers,
-                        )
-                        text = resp.text[:200]
-                        if resp.status_code == 200 and '"result":"ok"' in resp.text:
-                            logger.info("[Eurobet] ✅ FORM action=%s WORKS! full=%.2000s",
-                                        action, resp.text)
-                            break
-                        elif resp.status_code == 200 and "valid 'action'" not in resp.text:
-                            logger.info("[Eurobet] FORM action=%s → 200 different | %s",
-                                        action, text)
-                        else:
-                            logger.info("[Eurobet] FORM action=%s → %d | %s",
-                                        action, resp.status_code, text)
-                    except Exception as exc:
-                        logger.info("[Eurobet] FORM action=%s error: %s",
-                                    action, str(exc)[:60])
-
-            # ── Also try GET /webeb/rest?action=... (some JBoss APIs accept GET too) ──
-            if not working_url_template:
-                for action in _WEBEB_ACTIONS[:6]:  # try first 6 via GET
-                    try:
-                        params = {"action": action, "sport": first_disc, "meeting": first_alias}
-                        resp = await client.get(f"{WEB_BASE}/webeb/rest", params=params)
-                        if resp.status_code == 200 and '"result":"ok"' in resp.text:
-                            logger.info("[Eurobet] ✅ GET webeb/rest?action=%s WORKS! full=%.2000s",
-                                        action, resp.text)
-                            break
-                        elif resp.status_code == 200:
-                            logger.info("[Eurobet] GET action=%s → 200 | %s",
-                                        action, resp.text[:200])
-                    except Exception as exc:
-                        logger.info("[Eurobet] GET action=%s error: %s", action, str(exc)[:60])
-
-            # ── Swagger/OpenAPI on integration-bridge (Spring Boot) ────────────────
-            if not working_url_template:
-                swagger_paths = [
-                    f"{WEB_BASE}/integration-bridge/swagger-ui.html",
-                    f"{WEB_BASE}/integration-bridge/swagger-ui/",
-                    f"{WEB_BASE}/integration-bridge/v3/api-docs",
-                    f"{WEB_BASE}/integration-bridge/v2/api-docs",
-                    f"{WEB_BASE}/integration-bridge/openapi",
-                    f"{WEB_BASE}/integration-bridge/openapi.json",
+                other_services = [
+                    f"{WEB_BASE}/odds-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
+                    f"{WEB_BASE}/betting-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
+                    f"{WEB_BASE}/schedule-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
+                    f"{WEB_BASE}/bet-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
                 ]
-                for sw_url in swagger_paths:
+                for svc_url in other_services:
                     try:
-                        r = await client.get(sw_url)
-                        logger.info("[Eurobet] SWAGGER %s → %d | %.600s",
-                                    sw_url, r.status_code, r.text)
+                        r = await client.get(svc_url)
+                        logger.info("[Eurobet] SVC %s → %d | %.300s",
+                                    svc_url[:100], r.status_code, r.text)
                         if r.status_code == 200 and any(kw in r.text for kw in
-                                                        ("openapi", "swagger", "paths", "components")):
-                            logger.info("[Eurobet] ✅ SWAGGER found! full=%.3000s", r.text)
+                                                        ("description", "betGroupList", "events", "avveniment")):
+                            logger.info("[Eurobet] ✅ SVC works: %s", svc_url)
+                            working_url_template = svc_url.replace(
+                                f"/{first_disc}/{first_alias}",
+                                "/{disc}/{alias}")
                             break
                     except Exception as e:
-                        logger.info("[Eurobet] SWAGGER %s error: %s", sw_url, str(e)[:60])
+                        logger.info("[Eurobet] SVC %s error: %s", svc_url[:80], str(e)[:60])
 
-            # ── Try Eurobet mobile/alternative domains ──────────────────────────
+            # ── Fetch www.eurobet.it HTML page for __NEXT_DATA__ (ISR = odds embedded) ──
             if not working_url_template:
-                alt_bases = [
-                    "https://m.eurobet.it",
-                    "https://api.eurobet.it",
-                    "https://mobile.eurobet.it",
+                import re as _re
+                # Eurobet is Next.js ISR — betting data is embedded in page HTML as __NEXT_DATA__
+                html_url_candidates = [
+                    (f"https://www.eurobet.it/it/scommesse/calcio/champions-league",
+                     f"https://www.eurobet.it/it/scommesse/{{disc}}/{{alias}}"),
+                    (f"https://www.eurobet.it/scommesse/calcio/champions-league",
+                     f"https://www.eurobet.it/scommesse/{{disc}}/{{alias}}"),
+                    (f"https://www.eurobet.it/it/scommesse-sportive/calcio/champions-league",
+                     f"https://www.eurobet.it/it/scommesse-sportive/{{disc}}/{{alias}}"),
                 ]
-                for alt_base in alt_bases:
+                for html_url, html_template in html_url_candidates:
                     try:
-                        test_url = f"{alt_base}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0"
-                        r = await client.get(test_url)
-                        logger.info("[Eurobet] ALT %s → %d | %.400s",
-                                    test_url[:100], r.status_code, r.text)
-                        if r.status_code == 200 and any(kw in r.text for kw in
-                                                        ("description", "betGroupList", "events")):
-                            logger.info("[Eurobet] ✅ ALT domain works: %s", alt_base)
-                            break
+                        r = await client.get(html_url, follow_redirects=True)
+                        logger.info("[Eurobet] HTML %s → %d | type=%s | len=%d",
+                                    html_url, r.status_code,
+                                    r.headers.get("content-type", "?"), len(r.text))
+                        if r.status_code == 200:
+                            nd = _re.search(r'id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+                                            r.text, _re.DOTALL)
+                            if nd:
+                                logger.info("[Eurobet] NEXT_DATA found len=%d | preview=%.3000s",
+                                            len(nd.group(1)), nd.group(1))
+                                # Try to find events in NEXT_DATA
+                                nd_text = nd.group(1)
+                                if any(kw in nd_text for kw in ("betGroupList", "betGroups",
+                                                                  "description", "startDate")):
+                                    logger.info("[Eurobet] ✅ NEXT_DATA has event data!")
+                                    working_url_template = "HTML:" + html_template
+                                    break
+                            else:
+                                # Look for API patterns in HTML
+                                api_hits = _re.findall(
+                                    r'["\']([^"\']*detail-service[^"\']*)["\']', r.text)
+                                logger.info("[Eurobet] detail-service URLs in HTML: %s", api_hits[:10])
+                                api_hits2 = _re.findall(
+                                    r'["\']([^"\']*web\.eurobet[^"\']*)["\']', r.text)
+                                logger.info("[Eurobet] web.eurobet URLs in HTML: %s", api_hits2[:10])
                     except Exception as e:
-                        logger.info("[Eurobet] ALT %s error: %s", alt_base, str(e)[:60])
-
-            # ── webeb/rest action log: try lower/upper/mixed case + short names ──
-            if not working_url_template:
-                extra_actions = [
-                    # Very short / simple
-                    "odds", "schedule", "events", "prematch", "meeting", "sport",
-                    "calendar", "bet", "quote", "scommessa",
-                    # Lowercase Italian
-                    "getpalinsesto", "getavvenimenti", "getscommesse", "getquote",
-                    # Upper case
-                    "ODDS", "SCHEDULE", "GET_EVENTS", "GET_ODDS",
-                    # camelCase specific Eurobet patterns
-                    "getOddsForMeeting", "getEventsForMeeting", "getScheduleForSport",
-                    "loadPrematch", "loadSchedule", "loadOdds",
-                    "estraiPalinsesto", "leggiPalinsesto", "leggiScommesse",
-                ]
-                for action in extra_actions:
-                    try:
-                        body = {"action": action, "sport": first_disc, "meeting": first_alias}
-                        r = await client.post(f"{WEB_BASE}/webeb/rest", json=body)
-                        if r.status_code == 200 and "valid 'action' value" not in r.text:
-                            logger.info("[Eurobet] ✅ EXTRA action=%s → 200 | %.500s",
-                                        action, r.text)
-                            break
-                        elif r.status_code == 200:
-                            pass  # still "invalid action" - skip logging
-                    except Exception as e:
-                        logger.info("[Eurobet] EXTRA action=%s error: %s", action, str(e)[:40])
+                        logger.info("[Eurobet] HTML %s error: %s", html_url, str(e)[:80])
 
         if working_url_template is None:
             logger.warning("[Eurobet] No working API found — all probes failed")
@@ -549,19 +438,39 @@ class EurobetScraper:
 
         # ── Phase 2: Fetch all leagues ────────────────────────────────────
         all_results: list[MatchOdds] = []
+        import re as _re2
+
+        is_html_mode = working_url_template.startswith("HTML:")
+        html_url_tpl = working_url_template[5:] if is_html_mode else None
 
         async with httpx.AsyncClient(
             headers=_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
         ) as client:
             for league_name, discipline, alias in meetings:
-                url = working_url_template.format(disc=discipline, alias=alias)
+                if is_html_mode:
+                    url = html_url_tpl.format(disc=discipline, alias=alias)
+                else:
+                    url = working_url_template.format(disc=discipline, alias=alias)
                 logger.info("[Eurobet] Fetching %s…", league_name)
                 try:
-                    resp = await client.get(url)
+                    resp = await client.get(url, follow_redirects=True)
                     if resp.status_code != 200:
                         logger.info("[Eurobet] %s → %d", league_name, resp.status_code)
                         continue
-                    data = resp.json()
+                    if is_html_mode:
+                        # Extract __NEXT_DATA__ from HTML
+                        nd = _re2.search(r'id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+                                         resp.text, _re2.DOTALL)
+                        if not nd:
+                            logger.info("[Eurobet] %s: no NEXT_DATA in HTML", league_name)
+                            continue
+                        try:
+                            data = _json.loads(nd.group(1))
+                        except Exception:
+                            logger.info("[Eurobet] %s: NEXT_DATA parse error", league_name)
+                            continue
+                    else:
+                        data = resp.json()
                     if isinstance(data, dict):
                         logger.info("[Eurobet] %s top keys: %s | preview=%.300s",
                                     league_name, list(data.keys())[:10],
