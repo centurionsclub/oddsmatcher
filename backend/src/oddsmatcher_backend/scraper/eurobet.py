@@ -44,28 +44,30 @@ _HEADERS = {
 }
 
 # discipline → list of (league_name, meeting_alias)
+# Aliases are the CORRECT Eurobet aliasUrl values (from prematch-menu-service).
+# These are used to navigate to the page and intercept the detail-service call.
 MEETINGS: dict[str, list[tuple[str, str]]] = {
     "calcio": [
-        ("Champions League",  "champions-league"),
-        ("Europa League",     "europa-league"),
-        ("Conference League", "conference-league"),
-        ("Premier League",    "premier-league"),
-        ("La Liga",           "prima-divisione"),
-        ("Bundesliga",        "bundesliga"),
-        ("Ligue 1",           "ligue-1"),
-        ("Serie A",           "serie-a"),
-        ("Serie B",           "serie-b"),
+        ("Champions League",  "eu-champions-league"),
+        ("Europa League",     "eu-europa-league"),
+        ("Conference League", "eu-conference-league"),
+        ("Premier League",    "ing-premier-league"),
+        ("La Liga",           "es-liga"),
+        ("Bundesliga",        "ger-bundesliga"),
+        ("Ligue 1",           "fr-ligue-1"),
+        ("Serie A",           "it-serie-a"),
+        ("Serie B",           "ita-serie-b"),
     ],
     "tennis": [
-        ("Roland Garros",   "roland-garros"),
-        ("Wimbledon",       "wimbledon"),
-        ("US Open",         "us-open"),
-        ("Australian Open", "australian-open"),
+        ("Roland Garros",   "fr-roland-garros-m"),
+        ("Wimbledon",       "ing-wimbledon"),
+        ("US Open",         "us-open-m"),
+        ("Australian Open", "au-australian-open-m"),
     ],
     "basket": [
-        ("NBA",            "nba"),
-        ("Eurolega",       "euroleague"),
-        ("Serie A Basket", "serie-a"),
+        ("NBA",            "us-nba"),
+        ("Eurolega",       "eu-eurolega"),
+        ("Serie A Basket", "it-serie-a"),
     ],
 }
 
@@ -487,92 +489,56 @@ class EurobetScraper:
                     except Exception as wup_e:
                         logger.warning("[Eurobet] Warmup navigation error: %s", wup_e)
 
-                    async def _browser_fetch(url: str) -> Any:
-                        """Fetch URL from within browser context (uses CF session cookies)."""
-                        js = f"""
-                        async () => {{
-                            try {{
-                                const r = await fetch('{url}', {{
-                                    credentials: 'include',
-                                    headers: {{ 'Accept': 'application/json' }}
-                                }});
-                                if (!r.ok) return {{_status: r.status, _error: 'http_error'}};
-                                return await r.json();
-                            }} catch(e) {{
-                                return {{_error: String(e)}};
-                            }}
-                        }}
-                        """
-                        return await page.evaluate(js)
+                    async def _fetch_league(league_name: str, discipline: str, alias: str) -> list[MatchOdds]:
+                        """Navigate to league page, intercept detail-service response."""
+                        bet_url = f"https://www.eurobet.it/it/scommesse/{discipline}/{alias}"
+                        captured: dict[str, Any] = {}
+                        captured_lock = asyncio.Lock()
 
-                    def _find_meeting_alias(item_list: list, target_desc: str) -> str | None:
-                        """Recursively find meeting aliasUrl matching target_desc."""
-                        for item in (item_list or []):
-                            if not isinstance(item, dict):
-                                continue
-                            desc = str(item.get("description") or "").lower()
-                            if target_desc.lower() in desc or desc in target_desc.lower():
-                                return item.get("aliasUrl")
-                            child = _find_meeting_alias(item.get("itemList") or [], target_desc)
-                            if child:
-                                return child
-                        return None
+                        async def on_response(response) -> None:
+                            url = response.url
+                            if "detail-service" in url and "meeting" in url:
+                                try:
+                                    body = await response.json()
+                                    async with captured_lock:
+                                        captured[url] = body
+                                    logger.info("[Eurobet] %s detail-service: code=%s desc=%s len=%d",
+                                                league_name,
+                                                body.get("code") if isinstance(body, dict) else "?",
+                                                str(body.get("description") or "")[:60] if isinstance(body, dict) else "?",
+                                                len(str(body)))
+                                except Exception:
+                                    pass
 
-                    # ── Step 1: Get correct meeting aliases from prematch-menu-service ──
-                    disc_aliases: dict[str, dict[str, str]] = {}  # disc → {league_name: correct_alias}
-                    for disc in set(d for _, d, _ in meetings):
-                        url = f"https://www.eurobet.it/prematch-menu-service/api/v2/sport-schedule/services/sport-list/{disc}"
-                        result = await _browser_fetch(url)
-                        if isinstance(result, dict) and "_error" not in result:
-                            sport_result = result.get("result") or {}
-                            item_list = sport_result.get("itemList") or []
-                            disc_aliases[disc] = {}
-                            for league_name, discipline, alias in meetings:
-                                if discipline != disc:
-                                    continue
-                                correct = _find_meeting_alias(item_list, league_name)
-                                if correct:
-                                    disc_aliases[disc][league_name] = correct
-                                    logger.info("[Eurobet] alias found: %s → %r", league_name, correct)
-                                else:
-                                    logger.info("[Eurobet] alias NOT found for %s (tried desc=%r)", league_name, league_name)
-                        else:
-                            logger.info("[Eurobet] prematch-menu %s error: %s", disc, result)
-
-                    # ── Step 2: Navigate to each league page, then fetch with correct alias ──
-                    # CF only allows detail-service calls when Referer is a valid scommesse page
-                    for league_name, discipline, alias in meetings:
-                        correct_alias = disc_aliases.get(discipline, {}).get(league_name, alias)
-                        nav_url = f"https://www.eurobet.it/it/scommesse/{discipline}/{alias}"
+                        page.on("response", on_response)
                         try:
-                            await page.goto(nav_url, wait_until="domcontentloaded", timeout=30_000)
-                            await page.wait_for_timeout(1000)
+                            await page.goto(bet_url, wait_until="networkidle", timeout=45_000)
+                            await page.wait_for_timeout(3000)
                         except Exception as e:
-                            logger.warning("[Eurobet] %s nav error: %s", league_name, e)
+                            logger.warning("[Eurobet] %s navigation error: %s", league_name, e)
+                        finally:
+                            page.remove_listener("response", on_response)
 
-                        # Now fetch detail-service from within this page context (correct Referer)
-                        api_url = f"/detail-service/sport-schedule/services/meeting/{discipline}/{correct_alias}?prematch=1&live=0"
-                        result = await _browser_fetch(api_url)
-                        if isinstance(result, dict) and "_error" not in result:
-                            status = result.get("_status")
-                            if status:
-                                logger.info("[Eurobet] %s → HTTP %d (alias=%r)", league_name, status, correct_alias)
-                                continue
-                            code = result.get("code")
-                            desc_r = result.get("description")
-                            logger.info("[Eurobet] %s → code=%s %s alias=%r | preview=%.300s",
-                                        league_name, code, desc_r, correct_alias,
-                                        _json.dumps(result, ensure_ascii=False)[:300])
-                            if code in (1, "1", 1):
-                                events = _extract_events(result)
+                        for cap_url, cap_data in captured.items():
+                            if isinstance(cap_data, dict) and cap_data.get("code") in (1, "1"):
+                                events = _extract_events(cap_data)
                                 if events:
                                     rows = _parse_events(events, league_name, discipline)
-                                    logger.info("[Eurobet] %s: %d rows", league_name, len(rows))
-                                    all_results.extend(rows)
-                                    if rows:
-                                        working_url_template = "BROWSER_FETCH"
-                        else:
-                            logger.info("[Eurobet] %s error: %s (alias=%r)", league_name, result, correct_alias)
+                                    logger.info("[Eurobet] %s: %d events, %d rows", league_name, len(events), len(rows))
+                                    return rows
+                                else:
+                                    logger.info("[Eurobet] %s: events not extracted from code=1 response | keys=%s | preview=%.400s",
+                                                league_name,
+                                                list(cap_data.keys())[:10],
+                                                _json.dumps(cap_data, ensure_ascii=False)[:400])
+                        logger.info("[Eurobet] %s: 0 rows", league_name)
+                        return []
+
+                    for league_name, discipline, alias in meetings:
+                        rows = await _fetch_league(league_name, discipline, alias)
+                        all_results.extend(rows)
+                        if rows:
+                            working_url_template = "PLAYWRIGHT_INTERCEPT"
 
                     await browser.close()
 
