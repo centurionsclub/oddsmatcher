@@ -36,20 +36,20 @@ SPORT_IDS = {
 }
 BF_SPORT_NAME = {v: k for k, v in SPORT_IDS.items()}
 
-# Target competitions for football — filtro SOLO per nome (region ignorata).
-# La competitionRegion su Betfair varia (DEU/GER/EUR/GBR) e non è affidabile.
-# I nomi sono abbastanza specifici da non generare falsi positivi.
+# Target competitions for football — keyword sul nome (con prefisso paese
+# dove il nome da solo è troppo generico, es. "premier league").
+# Betfair include il paese nel nome: "English Premier League", "Italian Serie A", ecc.
 TARGET_COMPETITION_KEYWORDS: list[str] = [
     # Italy
-    "serie a", "serie b", "coppa italia",
-    # England
-    "premier league", "championship",
-    # Germany
+    "italian serie a", "italian serie b", "coppa italia",
+    # England — "english" evita "Kuwaiti/Nigerian Premier League"
+    "english premier league", "english championship", "sky bet championship", "fa cup",
+    # Germany — "bundesliga" è abbastanza specifico (non appare in leghe africane/asiatiche)
     "bundesliga",
     # Spain
-    "la liga", "laliga", "primera division",
+    "spanish la liga", "la liga", "laliga", "primera division",
     # France
-    "ligue 1",
+    "french ligue 1", "ligue 1",
     # European cups
     "champions league", "europa league", "europa conference",
     "conference league", "uefa champions", "uefa europa",
@@ -150,18 +150,28 @@ async def _get_football_comp_ids(
         {"filter": {"eventTypeIds": ["1"]}},
     )
     ids: list[str] = []
+    matched_names: list[str] = []
+    skipped_names: list[str] = []
     for c in comps:
-        name    = (c.get("competition", {}).get("name", "") or "").lower()
-        region  = (c.get("competitionRegion", "") or "").upper()
-        comp_id = c.get("competition", {}).get("id")
+        raw_name = (c.get("competition", {}).get("name", "") or "")
+        name     = raw_name.lower()
+        region   = (c.get("competitionRegion", "") or "").upper()
+        comp_id  = c.get("competition", {}).get("id")
         if not comp_id:
             continue
+        matched = False
         for kw in TARGET_COMPETITION_KEYWORDS:
             if kw in name:
-                logger.debug("[Betfair] Comp: %s (region=%s) → ID %s", name, region, comp_id)
                 ids.append(comp_id)
+                matched_names.append(f"{raw_name} [{region}]")
+                matched = True
                 break
-    logger.info("[Betfair] %d competition IDs trovati", len(ids))
+        if not matched:
+            skipped_names.append(f"{raw_name} [{region}]")
+
+    logger.info("[Betfair] Competizioni INCLUSE (%d): %s", len(matched_names), matched_names)
+    logger.info("[Betfair] Competizioni ESCLUSE (%d): %s", len(skipped_names), skipped_names)
+    logger.info("[Betfair] %d competition IDs totali", len(ids))
     return ids
 
 
