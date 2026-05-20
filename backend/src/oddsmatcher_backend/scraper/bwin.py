@@ -152,6 +152,7 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
     if not fixtures:
         return results
 
+    _unknown_logged: set = set()
     for fix in fixtures:
         if not isinstance(fix, dict):
             continue
@@ -169,10 +170,18 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                     if mapping:
                         fix_league, fix_sport = mapping
                     else:
-                        # Unknown competition — not in our watch list, skip
+                        # Unknown competition — log once per comp_id, then skip
+                        cid = int(comp_id)
+                        if cid not in _unknown_logged:
+                            _unknown_logged.add(cid)
+                            comp_name = _get_name_str(comp_obj.get("name", ""))
+                            logger.info("[Bwin] Unknown comp_id=%s name=%r — skipping", cid, comp_name)
                         continue
                 except (TypeError, ValueError):
                     pass
+        else:
+            # Log fixture structure if competition field missing/unexpected
+            logger.info("[Bwin] DIAG fix keys=%s comp_obj=%r", list(fix.keys())[:8], comp_obj)
 
         # ── Extract event name and time ────────────────────────────────
         name_obj = fix.get("name") or fix.get("fixture", {}).get("name", "")
@@ -446,7 +455,7 @@ class BwinScraper(BasePlaywrightScraper):
                                 sport_key, len(rows), dict(leagues))
                     captured.extend(rows)
             except Exception as exc:
-                logger.debug("[Bwin] CDS resp parse error: %s", exc)
+                logger.info("[Bwin] CDS resp parse error: %s", exc)
 
         self._page.on("response", _on_response)
         url = self.base_url + sport_path
