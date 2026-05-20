@@ -339,16 +339,26 @@ class EurobetScraper:
         ]
 
         # webeb/rest is a JBoss action-based API at /webeb/rest (POST, requires 'action' param)
-        # Common action names for Italian betting platform APIs
+        # Confirmed: POST with {"action": "..."} is recognized, but value must be correct
+        # Trying Italian betting-specific action names for webeb (Eurobet-proprietary JBoss API)
         _WEBEB_ACTIONS: list[str] = [
+            # Italian betting operations
+            "calcolaScommessa", "inserisciScommessa", "convalidaScommessa",
+            "getSessione", "getSessionePrematch", "getSessioneByMeeting",
+            "getProgrammaGara", "getProgrammaPrematch", "getProgramma",
+            "getSchedaPrematch", "getScheda", "getSchedaAvvenimento",
+            "getInfoBet", "getInfoPrematch", "getInfoScommessa",
+            "getCoupon", "getListaCoupon", "getBetDetail",
+            "getListaPrematch", "getListaOdds", "getListaQuote",
+            # Eurobet-specific names
+            "getPalinsestoEventi", "getPalinsestoAvvenimenti",
+            "getAvvenimentiPalinsesto", "getAvvenimentiManifestazione",
+            "getScommesseEvento", "getQuoteEvento", "getQuotePrematch",
+            "getMultiBet", "getSingolaBet", "getSistema",
+            # Generic patterns
             "getPalinsestoPrematch", "getAvvenimentiPrematch", "getScommessePrematch",
-            "getCalendarioPrematch", "getOddsPrematch", "getQuotePrematch",
-            "getListaAvvenimentiPrematch", "getAvvenimentiByManifestazione",
-            "getScommesseByAvvenimento", "getDettaglioAvvenimento",
             "getPalinsesto", "getAvvenimenti", "getScommesse", "getOdds",
             "getCalendario", "getQuote", "getMeeting", "getSchedula",
-            "getListaEventi", "getEventiPrematch", "getMultiSessione",
-            "getPreMatchEvents", "getPreMatchOdds", "getPreMatchSchedule",
         ]
 
         async with httpx.AsyncClient(
@@ -420,9 +430,35 @@ class EurobetScraper:
                         logger.info("[Eurobet] POST action=%s error: %s",
                                     action, str(exc)[:80])
 
+            # ── Also try form-encoded POST /webeb/rest (JBoss may prefer urlencoded) ──
+            if not working_url_template:
+                form_headers = {**_HEADERS, "Content-Type": "application/x-www-form-urlencoded"}
+                for action in _WEBEB_ACTIONS[:15]:
+                    try:
+                        form_data = f"action={action}&sport={first_disc}&meeting={first_alias}&prematch=1"
+                        resp = await client.post(
+                            f"{WEB_BASE}/webeb/rest",
+                            content=form_data.encode(),
+                            headers=form_headers,
+                        )
+                        text = resp.text[:200]
+                        if resp.status_code == 200 and '"result":"ok"' in resp.text:
+                            logger.info("[Eurobet] ✅ FORM action=%s WORKS! full=%.2000s",
+                                        action, resp.text)
+                            break
+                        elif resp.status_code == 200 and "valid 'action'" not in resp.text:
+                            logger.info("[Eurobet] FORM action=%s → 200 different | %s",
+                                        action, text)
+                        else:
+                            logger.info("[Eurobet] FORM action=%s → %d | %s",
+                                        action, resp.status_code, text)
+                    except Exception as exc:
+                        logger.info("[Eurobet] FORM action=%s error: %s",
+                                    action, str(exc)[:60])
+
             # ── Also try GET /webeb/rest?action=... (some JBoss APIs accept GET too) ──
             if not working_url_template:
-                for action in _WEBEB_ACTIONS[:8]:  # try first 8 via GET
+                for action in _WEBEB_ACTIONS[:6]:  # try first 6 via GET
                     try:
                         params = {"action": action, "sport": first_disc, "meeting": first_alias}
                         resp = await client.get(f"{WEB_BASE}/webeb/rest", params=params)
@@ -435,6 +471,16 @@ class EurobetScraper:
                                         action, resp.text[:200])
                     except Exception as exc:
                         logger.info("[Eurobet] GET action=%s error: %s", action, str(exc)[:60])
+
+            # ── Try web.eurobet.it root and other discovery paths ──────────────────
+            if not working_url_template:
+                for disc_path in ["/", "/webeb/", "/webeb/services", "/api/", "/rest/"]:
+                    try:
+                        r = await client.get(f"{WEB_BASE}{disc_path}")
+                        logger.info("[Eurobet] ROOT %s → %d | %.400s",
+                                    disc_path, r.status_code, r.text)
+                    except Exception as e:
+                        logger.info("[Eurobet] ROOT %s error: %s", disc_path, str(e)[:60])
 
         if working_url_template is None:
             logger.warning("[Eurobet] No working API found — all probes failed")
