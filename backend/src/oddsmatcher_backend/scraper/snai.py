@@ -351,306 +351,138 @@ class SnaiScraper:
         manif_to_league: dict[int, tuple[str, str]] = {
             manif: (lg, sk) for lg, sk, _, manif in competitions
         }
+        disc_to_manif: dict[int, list[int]] = {}
+        for lg, sk, disc, manif in competitions:
+            disc_to_manif.setdefault(disc, []).append(manif)
 
-        # ── Phase 2: Get all events (no filter — endpoint returns all events) ──
-        # avvenimentiPrematch returns all events globally in avvenimentoFeMap.
-        # The events have codiceManifestazione we use to filter for our leagues.
-        # Events do NOT contain odds — odds need a separate call.
-        logger.info("[Snai] Fetching all events via avvenimentiPrematch…")
-        all_events: list[dict] = []
-        EVENTS_URL = f"{PFX}/palinsesto/prematch/avvenimentiPrematch?codiceManifestazione=1"
+        # ── Phase 2: Get events for each league via schedaManifestazione ────
+        # Swagger-confirmed endpoint: /palinsesto/prematch/schedaManifestazione/{filter}/{key}
+        # where filter is a time filter (try "T" = tutti, "0", "1") and key is the
+        # manifestazione key from alberaturaPrematch manifestazioneMap dict keys.
+        # Also try schedaManifestazioneSpeciale/{filter}/{disc}/{manif} (uses numeric IDs).
+        #
+        # Fallback: per-event via schedaAvvenimento/{key} using event keys from avvenimentiPrematch.
+
+        all_results: list[MatchOdds] = []
+        SCHEDA_AVVENIMENTO = f"{PFX}/palinsesto/prematch/schedaAvvenimento/{{key}}"
+        SCHEDA_MANIF_SPECIALE = f"{PFX}/palinsesto/prematch/schedaManifestazioneSpeciale/{{filter}}/{{disc}}/{{manif}}"
+        SCHEDA_MANIF = f"{PFX}/palinsesto/prematch/schedaManifestazione/{{filter}}/{{key}}"
 
         async with httpx.AsyncClient(
             headers=_SNAI_HEADERS, timeout=30, follow_redirects=True, proxy=proxy_url,
         ) as client:
-            try:
-                resp = await client.get(EVENTS_URL)
-                resp.raise_for_status()
-                data = resp.json()
+            # ── Step 2a: Try schedaManifestazioneSpeciale to get all events per league ──
+            # This is the most efficient: one request per league, returns full event+odds data.
+            # Filter values to try: "T" (tutti), "0", "1", "all"
+            working_manif_filter: str | None = None
+            first_comp = competitions[0]
+            first_lg, first_sk, first_disc, first_manif = first_comp
 
-                # ── CRITICAL: log ALL top-level keys to discover co-returned odds data ──
-                if isinstance(data, dict):
-                    logger.info("[Snai] avvenimentiPrematch ALL top-level keys: %s", list(data.keys()))
-                    for k, v in list(data.items())[:25]:
-                        if isinstance(v, dict):
-                            first_val = next(iter(v.values()), None) if v else None
-                            fkeys = list(first_val.keys())[:8] if isinstance(first_val, dict) else str(type(first_val))
-                            logger.info("[Snai] top[%r] = dict(%d entries) | first-entry keys=%s",
-                                        k, len(v), fkeys)
-                        elif isinstance(v, list):
-                            logger.info("[Snai] top[%r] = list(%d items)", k, len(v))
-                        else:
-                            logger.info("[Snai] top[%r] = %s: %s", k, type(v).__name__, str(v)[:100])
-
-                avm = data.get("avvenimentoFeMap") or {}
-                all_events = list(avm.values()) if isinstance(avm, dict) else []
-                logger.info("[Snai] Got %d total events from avvenimentoFeMap", len(all_events))
-                if all_events:
-                    logger.info("[Snai] First event keys: %s | preview=%.600s",
-                                list(all_events[0].keys()),
-                                _json.dumps(all_events[0], ensure_ascii=False)[:600])
-
-                # Stash full data for potential co-returned odds parsing
-                self._avvenimenti_data = data  # type: ignore[attr-defined]
-            except Exception as exc:
-                logger.error("[Snai] events fetch failed: %s", exc)
-                return []
-
-        # Filter events for our leagues
-        our_events: dict[int, list[dict]] = {}  # manif_id → events for that league
-        for ev in all_events:
-            if not isinstance(ev, dict):
-                continue
-            manif_id = ev.get("codiceManifestazione")
-            if manif_id and int(manif_id) in manif_to_league:
-                our_events.setdefault(int(manif_id), []).append(ev)
-
-        for manif_id, evs in our_events.items():
-            lg, sk = manif_to_league[manif_id]
-            logger.info("[Snai] %s (manif=%d): %d events", lg, manif_id, len(evs))
-
-        # ── Phase 3: Find odds endpoint using first event IDs ─────────────
-        # Events have codiceAvvenimento and codicePalinsesto — use these to find odds
-        working_odds_template: str | None = None
-        first_ev_for_odds: dict | None = None
-
-        # Find first event from our leagues
-        for manif_id, evs in our_events.items():
-            if evs:
-                first_ev_for_odds = evs[0]
-                break
-
-        if first_ev_for_odds is None:
-            logger.warning("[Snai] No events found for our leagues in the global event list")
-            return []
-
-        codice_palinsesto = first_ev_for_odds.get("codicePalinsesto")
-        codice_avvenimento = first_ev_for_odds.get("codiceAvvenimento")
-        event_id = first_ev_for_odds.get("eventId")
-        logger.info("[Snai] Probing odds endpoints for event codicePalinsesto=%s codiceAvvenimento=%s eventId=%s",
-                    codice_palinsesto, codice_avvenimento, event_id)
-
-        # Derive key and discipline from event
-        event_key = first_ev_for_odds.get("key", f"{codice_palinsesto}-{codice_avvenimento}")
-        codice_disciplina = first_ev_for_odds.get("codiceDisciplina", 1)
-        codice_manifestazione = first_ev_for_odds.get("codiceManifestazione")
-
-        odds_probe_candidates: list[tuple[str, str]] = [
-            # ── scommessePrematch (plural) ──
-            (f"{PFX}/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/scommessePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            (f"{PFX}/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}",
-             f"{PFX}/palinsesto/prematch/scommessePrematch?codicePalinsesto={{palinsesto}}"),
-            (f"{PFX}/palinsesto/prematch/scommessePrematch?codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/scommessePrematch?codiceAvvenimento={{avvenimento}}"),
-            (f"{PFX}/palinsesto/prematch/scommessePrematch?eventId={event_id}",
-             f"{PFX}/palinsesto/prematch/scommessePrematch?eventId={{eventId}}"),
-            (f"{PFX}/palinsesto/prematch/scommessePrematch?key={event_key}",
-             f"{PFX}/palinsesto/prematch/scommessePrematch?key={{key}}"),
-            # with discipline code
-            (f"{PFX}/palinsesto/prematch/scommessePrematch?codiceDisciplina={codice_disciplina}&codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/scommessePrematch?codiceDisciplina={{disc}}&codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            # ── avvenimentoPrematch (singular — event detail with odds?) ──
-            (f"{PFX}/palinsesto/prematch/avvenimentoPrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/avvenimentoPrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            (f"{PFX}/palinsesto/prematch/avvenimentoPrematch?eventId={event_id}",
-             f"{PFX}/palinsesto/prematch/avvenimentoPrematch?eventId={{eventId}}"),
-            # ── Fe (frontend) variants ──
-            (f"{PFX}/palinsesto/prematch/scommessaFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/scommessaFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            (f"{PFX}/palinsesto/prematch/quotaFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/quotaFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            (f"{PFX}/palinsesto/prematch/dettaglioFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/dettaglioFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            (f"{PFX}/palinsesto/prematch/avvenimentoFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/avvenimentoFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            # ── path-based with key ──
-            (f"{PFX}/palinsesto/prematch/scommessePrematch/{event_key}",
-             f"{PFX}/palinsesto/prematch/scommessePrematch/{{key}}"),
-            (f"{PFX}/palinsesto/prematch/dettaglioPrematch/{event_key}",
-             f"{PFX}/palinsesto/prematch/dettaglioPrematch/{{key}}"),
-            (f"{PFX}/palinsesto/prematch/{event_key}",
-             f"{PFX}/palinsesto/prematch/{{key}}"),
-            # ── path-based numeric ──
-            (f"{PFX}/palinsesto/prematch/scommessePrematch/{codice_palinsesto}/{codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/scommessePrematch/{{palinsesto}}/{{avvenimento}}"),
-            (f"{PFX}/palinsesto/prematch/dettaglioPrematch/{codice_palinsesto}/{codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/dettaglioPrematch/{{palinsesto}}/{{avvenimento}}"),
-            # ── lettura-scommessa-sport service ──
-            (f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            (f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessaFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/scommessaFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            # ── lettura-quota-sport service ──
-            (f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/scommessePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            (f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/quotaFePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/quotaFePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            # ── dettaglio (without palinsesto/prematch middle path) ──
-            (f"{PFX}/palinsesto/prematch/dettaglioPrematch?codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/dettaglioPrematch?codiceAvvenimento={{avvenimento}}"),
-            (f"{PFX}/palinsesto/prematch/dettaglioPrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/dettaglioPrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            # ── top-level service paths (without intermediate palinsesto/prematch) ──
-            (f"https://{API_HOST}/api/lettura-palinsesto-sport/scommessePrematch?codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"https://{API_HOST}/api/lettura-palinsesto-sport/scommessePrematch?codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-            # ── with codiceManifestazione ──
-            (f"{PFX}/palinsesto/prematch/scommessePrematch?codiceManifestazione={codice_manifestazione}&codicePalinsesto={codice_palinsesto}&codiceAvvenimento={codice_avvenimento}",
-             f"{PFX}/palinsesto/prematch/scommessePrematch?codiceManifestazione={{manif}}&codicePalinsesto={{palinsesto}}&codiceAvvenimento={{avvenimento}}"),
-        ]
-
-        async with httpx.AsyncClient(
-            headers=_SNAI_HEADERS, timeout=15, follow_redirects=True, proxy=proxy_url,
-        ) as client:
-            for probe_url, url_template in odds_probe_candidates:
+            for f_val in ("T", "0", "1", "all", "prematch"):
+                url = SCHEDA_MANIF_SPECIALE.format(filter=f_val, disc=first_disc, manif=first_manif)
                 try:
-                    resp = await client.get(probe_url)
-                    status = resp.status_code
-                    text = resp.text[:400]
-                    logger.info("[Snai] ODDS PROBE %s → %d | %s",
-                                probe_url[:120], status, text)
-                    if status == 200:
-                        if any(kw in resp.text for kw in (
-                            "scommesse", "quota", "betGroup", "mercato", "market",
-                            "esito", "outcome", "odds", "price", "infoTipoScommessa",
-                            "quotaMap", "scommessaMap",
-                        )):
-                            logger.info("[Snai] ✅ Odds URL found: %s", probe_url)
-                            working_odds_template = url_template
-                            break
-                        else:
-                            # 200 but no odds keywords — log full body for analysis
-                            logger.info("[Snai] 200 but no odds keywords | full=%.800s", resp.text)
-                    elif status not in (404, 403):
-                        # Unexpected status — might be useful
-                        logger.info("[Snai] Unexpected status %d for %s", status, probe_url[:100])
-                except Exception as exc:
-                    logger.info("[Snai] ODDS PROBE error %s: %s", probe_url[:80], str(exc)[:100])
+                    resp = await client.get(url)
+                    text = resp.text[:200]
+                    logger.info("[Snai] schedaManifestazioneSpeciale filter=%s → %d | %s",
+                                f_val, resp.status_code, text)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if isinstance(data, dict):
+                            logger.info("[Snai] ManifestazioneSpeciale top keys: %s | preview=%.600s",
+                                        list(data.keys())[:12],
+                                        _json.dumps(data, ensure_ascii=False)[:600])
+                        working_manif_filter = f_val
+                        break
+                except Exception as e:
+                    logger.info("[Snai] schedaManifestazioneSpeciale filter=%s error: %s", f_val, e)
 
-        # ── Phase 3b: Probe Swagger/OpenAPI + alternative endpoints ─────────
-        if working_odds_template is None:
-            logger.warning("[Snai] No odds endpoint found — probing Swagger/OpenAPI and HTML")
-            async with httpx.AsyncClient(
-                headers=_SNAI_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
-            ) as client:
-                # ── Step 1: SpringDoc /v3/api-docs — lists ALL mapped endpoints ──
-                # Confirmed: io.swagger.v3.* and org.springdoc.* loggers are active.
-                swagger_urls = [
-                    f"https://{API_HOST}/api/lettura-palinsesto-sport/v3/api-docs",
-                    f"https://{API_HOST}/api/lettura-palinsesto-sport/swagger-ui.html",
-                    f"https://{API_HOST}/api/lettura-palinsesto-sport/swagger-ui/index.html",
-                    f"https://{API_HOST}/v3/api-docs",
-                    f"https://{API_HOST}/api/v3/api-docs",
-                    f"https://{API_HOST}/api/lettura-palinsesto-sport/api-docs",
-                ]
-                for sw_url in swagger_urls:
-                    try:
-                        r = await client.get(sw_url)
-                        logger.info("[Snai] SWAGGER %s → %d | %.300s", sw_url, r.status_code, r.text)
-                        if r.status_code == 200:
-                            try:
-                                sw_data = r.json()
-                                paths = list(sw_data.get("paths", {}).keys())
-                                logger.info("[Snai] SWAGGER paths (%d): %s", len(paths), paths)
-                                logger.info("[Snai] SWAGGER full spec: %.8000s",
-                                            _json.dumps(sw_data, ensure_ascii=False))
-                                break
-                            except Exception:
-                                logger.info("[Snai] SWAGGER HTML 200 | len=%d | preview=%.300s",
-                                            len(r.text), r.text[:300])
-                    except Exception as e:
-                        logger.info("[Snai] SWAGGER %s error: %s", sw_url, str(e)[:100])
-
-                # ── Step 2: Probe www.snai.it HTML for NEXT_DATA or API patterns ──
-                import re as _re
-                for page_url in [
-                    "https://www.snai.it/scommesse/calcio",
-                    "https://www.snai.it/scommesse/calcio/premier-league",
-                    "https://www.snai.it/sport/calcio",
-                ]:
-                    try:
-                        r = await client.get(page_url, follow_redirects=True)
-                        logger.info("[Snai] HTML %s → %d | type=%s | len=%d",
-                                    page_url, r.status_code,
-                                    r.headers.get("content-type", "?"), len(r.text))
-                        if r.status_code == 200:
-                            nd = _re.search(r'id="__NEXT_DATA__"[^>]*>(.*?)</script>',
-                                            r.text, _re.DOTALL)
-                            if nd:
-                                logger.info("[Snai] NEXT_DATA len=%d | preview=%.3000s",
-                                            len(nd.group(1)), nd.group(1))
-                                break
-                            api_hits = _re.findall(
-                                r'["\']([^"\']*(?:betting-snai|flutterseatech)[^"\']*)["\']',
-                                r.text)
-                            logger.info("[Snai] betting-snai API URLs in HTML: %s", api_hits[:20])
-                            api_hits2 = _re.findall(
-                                r'["\']([^"\']*(?:scommess|quota|palinsesto)[^"\']*)["\']',
-                                r.text)
-                            logger.info("[Snai] scommessa/quota patterns in HTML: %s", api_hits2[:20])
-                    except Exception as e:
-                        logger.info("[Snai] HTML probe %s error: %s", page_url, str(e)[:100])
-
-                # ── Step 3: Try alternative service bases (different API gateway paths) ──
-                alt_bases = [
-                    f"https://{API_HOST}/api/scommessa-sport",
-                    f"https://{API_HOST}/api/lettura-scommessa",
-                    f"https://{API_HOST}/api/quota-sport",
-                    f"https://{API_HOST}/api/betting-sport",
-                    f"https://{API_HOST}/api/palinsesto-scommessa",
-                ]
-                for base in alt_bases:
-                    try:
-                        r = await client.get(f"{base}/actuator/health")
-                        logger.info("[Snai] ALT SERVICE %s/actuator/health → %d | %.200s",
-                                    base, r.status_code, r.text)
-                    except Exception as e:
-                        logger.info("[Snai] ALT SERVICE %s error: %s", base, str(e)[:80])
-
-        if working_odds_template is None:
-            logger.warning("[Snai] No working odds endpoint found — logging full first event for analysis")
-            if first_ev_for_odds:
-                logger.info("[Snai] Full first event: %s",
-                            _json.dumps(first_ev_for_odds, ensure_ascii=False)[:2000])
-            return []
-
-        # ── Phase 4: Fetch odds for all our events and parse ──────────────
-        all_results: list[MatchOdds] = []
-
-        async with httpx.AsyncClient(
-            headers=_SNAI_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
-        ) as client:
-            for manif_id, evs in our_events.items():
-                lg, sk = manif_to_league[manif_id]
-                logger.info("[Snai] Fetching odds for %s (%d events)…", lg, len(evs))
-                league_rows: list[MatchOdds] = []
-                for ev in evs[:50]:  # cap at 50 events per league to avoid timeout
-                    palinsesto = ev.get("codicePalinsesto")
-                    avvenimento = ev.get("codiceAvvenimento")
-                    ev_id = ev.get("eventId")
-                    ev_key = ev.get("key", f"{palinsesto}-{avvenimento}")
-                    ev_disc = ev.get("codiceDisciplina", 1)
-                    ev_manif = ev.get("codiceManifestazione")
-                    url = working_odds_template.format(
-                        palinsesto=palinsesto, avvenimento=avvenimento, eventId=ev_id,
-                        key=ev_key, disc=ev_disc, manif=ev_manif,
-                    )
+            if working_manif_filter is not None:
+                # Fetch all leagues using schedaManifestazioneSpeciale
+                logger.info("[Snai] Using schedaManifestazioneSpeciale (filter=%s)", working_manif_filter)
+                for lg, sk, disc, manif in competitions:
+                    url = SCHEDA_MANIF_SPECIALE.format(filter=working_manif_filter, disc=disc, manif=manif)
                     try:
                         resp = await client.get(url)
                         if resp.status_code != 200:
+                            logger.info("[Snai] %s: schedaManifestazioneSpeciale → %d", lg, resp.status_code)
                             continue
-                        odds_data = resp.json()
-                        # Log structure of first odds response per league
-                        if not league_rows and isinstance(odds_data, dict):
-                            logger.info("[Snai] %s odds structure keys: %s | preview=%.400s",
-                                        lg, list(odds_data.keys())[:10],
-                                        _json.dumps(odds_data, ensure_ascii=False)[:400])
-                        rows = _parse_snai_events(odds_data, lg, sk)
-                        league_rows.extend(rows)
+                        data = resp.json()
+                        rows = _parse_snai_events(data, lg, sk)
+                        logger.info("[Snai] %s (schedaManifestazioneSpeciale): %d rows", lg, len(rows))
+                        all_results.extend(rows)
                     except Exception as exc:
-                        logger.debug("[Snai] %s event odds error: %s", lg, exc)
-                logger.info("[Snai] %s: %d rows from %d events", lg, len(league_rows), len(evs))
-                all_results.extend(league_rows)
+                        logger.error("[Snai] %s schedaManifestazioneSpeciale error: %s", lg, exc)
+
+            else:
+                # ── Step 2b: Fallback — get event keys from avvenimentiPrematch then
+                #            fetch each event via schedaAvvenimento/{key} ──────────────
+                logger.info("[Snai] schedaManifestazioneSpeciale failed — fetching events via avvenimentiPrematch")
+                all_events: list[dict] = []
+                EVENTS_URL = f"{PFX}/palinsesto/prematch/avvenimentiPrematch"
+                try:
+                    resp = await client.get(EVENTS_URL)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    if isinstance(data, dict):
+                        logger.info("[Snai] avvenimentiPrematch top keys: %s", list(data.keys()))
+                    avm = data.get("avvenimentoFeMap") or {}
+                    all_events = list(avm.values()) if isinstance(avm, dict) else []
+                    logger.info("[Snai] Got %d total events", len(all_events))
+                    if all_events:
+                        logger.info("[Snai] First event: %s",
+                                    _json.dumps(all_events[0], ensure_ascii=False)[:300])
+                except Exception as exc:
+                    logger.error("[Snai] avvenimentiPrematch failed: %s", exc)
+                    return []
+
+                # Filter for our leagues
+                our_events: dict[int, list[dict]] = {}
+                for ev in all_events:
+                    if not isinstance(ev, dict):
+                        continue
+                    mid = ev.get("codiceManifestazione")
+                    if mid and int(mid) in manif_to_league:
+                        our_events.setdefault(int(mid), []).append(ev)
+                for mid, evs in our_events.items():
+                    lg, sk = manif_to_league[mid]
+                    logger.info("[Snai] %s: %d events", lg, len(evs))
+
+                # Fetch each event via schedaAvvenimento/{key}
+                logger.info("[Snai] Fetching odds per event via schedaAvvenimento…")
+
+                # First probe one event to confirm the endpoint works
+                test_ev = next((evs[0] for evs in our_events.values() if evs), None)
+                if test_ev:
+                    test_key = test_ev.get("key", f"{test_ev.get('codicePalinsesto')}-{test_ev.get('codiceAvvenimento')}")
+                    test_url = SCHEDA_AVVENIMENTO.format(key=test_key)
+                    try:
+                        r = await client.get(test_url)
+                        logger.info("[Snai] schedaAvvenimento TEST %s → %d | preview=%.600s",
+                                    test_url, r.status_code, r.text[:600])
+                    except Exception as e:
+                        logger.info("[Snai] schedaAvvenimento test error: %s", e)
+
+                for mid, evs in our_events.items():
+                    lg, sk = manif_to_league[mid]
+                    league_rows: list[MatchOdds] = []
+                    for ev in evs[:40]:  # cap to avoid timeout
+                        ev_key = ev.get("key", f"{ev.get('codicePalinsesto')}-{ev.get('codiceAvvenimento')}")
+                        url = SCHEDA_AVVENIMENTO.format(key=ev_key)
+                        try:
+                            resp = await client.get(url)
+                            if resp.status_code != 200:
+                                continue
+                            odds_data = resp.json()
+                            if not league_rows and isinstance(odds_data, dict):
+                                logger.info("[Snai] %s first event keys: %s | preview=%.500s",
+                                            lg, list(odds_data.keys())[:10],
+                                            _json.dumps(odds_data, ensure_ascii=False)[:500])
+                            rows = _parse_snai_events(odds_data, lg, sk)
+                            league_rows.extend(rows)
+                        except Exception as exc:
+                            logger.debug("[Snai] %s event %s error: %s", lg, ev_key, exc)
+                    logger.info("[Snai] %s: %d rows from %d events", lg, len(league_rows), len(evs))
+                    all_results.extend(league_rows)
 
         # Deduplicate by (event_name, market)
         seen: dict[tuple[str, str], MatchOdds] = {}

@@ -431,46 +431,153 @@ class EurobetScraper:
                     except Exception as e:
                         logger.info("[Eurobet] HTML %s error: %s", html_url, str(e)[:80])
 
+        # ── Phase 2: Playwright + page.evaluate(fetch()) fallback ────────────
+        # If httpx probes all failed, use Playwright browser to navigate www.eurobet.it.
+        # After homepage warmup Cloudflare issues cookies. Then page.evaluate(fetch('/detail-service/...'))
+        # is a same-origin fetch that includes those cookies — bypasses the CF challenge.
         if working_url_template is None:
-            logger.warning("[Eurobet] No working API found — all probes failed")
-            logger.info("[Eurobet] Total: 0 events, 0 rows")
-            return []
+            logger.info("[Eurobet] httpx probes failed — trying Playwright + page.evaluate(fetch())")
+            try:
+                from playwright.async_api import async_playwright
+                try:
+                    from playwright_stealth import stealth_async as _stealth_async
+                    _STEALTH = True
+                except ImportError:
+                    _STEALTH = False
 
-        # ── Phase 2: Fetch all leagues ────────────────────────────────────
+                _UA = _HEADERS["User-Agent"]
+                proxy_cfg = None
+                if proxy_url:
+                    import urllib.parse as _up
+                    p = _up.urlparse(proxy_url)
+                    proxy_cfg = {
+                        "server": f"{p.scheme}://{p.hostname}:{p.port}",
+                        "username": p.username or "",
+                        "password": p.password or "",
+                    }
+
+                all_results: list[MatchOdds] = []
+
+                async with async_playwright() as pw:
+                    browser = await pw.chromium.launch(
+                        headless=False,
+                        args=["--no-sandbox", "--disable-dev-shm-usage"],
+                        proxy=proxy_cfg,
+                    )
+                    ctx = await browser.new_context(
+                        user_agent=_UA,
+                        locale="it-IT",
+                        timezone_id="Europe/Rome",
+                        viewport={"width": 1280, "height": 800},
+                    )
+                    page = await ctx.new_page()
+                    if _STEALTH:
+                        await _stealth_async(page)
+                        logger.info("[Eurobet] playwright-stealth applied")
+
+                    # Warmup — establishes Cloudflare session cookies
+                    logger.info("[Eurobet] Playwright warmup: navigating to www.eurobet.it…")
+                    try:
+                        await page.goto("https://www.eurobet.it/", wait_until="domcontentloaded", timeout=30_000)
+                        await page.wait_for_timeout(4000)
+                        title = await page.title()
+                        logger.info("[Eurobet] Warmup page title: %s", title)
+                    except Exception as wup_e:
+                        logger.warning("[Eurobet] Warmup navigation error: %s", wup_e)
+
+                    # Test probe with same-origin fetch from within the browser
+                    test_path = f"/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0"
+                    logger.info("[Eurobet] Testing page.evaluate(fetch) for %s", test_path)
+                    try:
+                        result = await page.evaluate(f"""
+                            async () => {{
+                                const resp = await fetch('{test_path}', {{
+                                    credentials: 'include',
+                                    headers: {{'Accept': 'application/json'}}
+                                }});
+                                const status = resp.status;
+                                let body = '';
+                                try {{ body = await resp.text(); }} catch(e) {{}}
+                                return {{status, body: body.slice(0, 800)}};
+                            }}
+                        """)
+                        logger.info("[Eurobet] page.evaluate fetch → status=%s | body=%.600s",
+                                    result.get("status") if result else "?",
+                                    result.get("body", "") if result else "?")
+                        if result and result.get("status") == 200:
+                            body_text = result.get("body", "")
+                            if any(kw in body_text for kw in ("eventList", "events", "betGroupList",
+                                                               "description", "descrizione", "startDate")):
+                                logger.info("[Eurobet] ✅ page.evaluate fetch WORKS!")
+                                working_url_template = "PLAYWRIGHT:" + test_path.replace(
+                                    f"/{first_disc}/{first_alias}", "/{disc}/{alias}")
+                    except Exception as fe:
+                        logger.warning("[Eurobet] page.evaluate fetch error: %s", fe)
+
+                    if working_url_template and working_url_template.startswith("PLAYWRIGHT:"):
+                        path_tpl = working_url_template[11:]  # strip "PLAYWRIGHT:"
+                        for league_name, discipline, alias in meetings:
+                            path = path_tpl.format(disc=discipline, alias=alias)
+                            try:
+                                result = await page.evaluate(f"""
+                                    async () => {{
+                                        const resp = await fetch('{path}', {{
+                                            credentials: 'include',
+                                            headers: {{'Accept': 'application/json'}}
+                                        }});
+                                        if (!resp.ok) return {{error: resp.status}};
+                                        return await resp.json();
+                                    }}
+                                """)
+                                if result and isinstance(result, dict) and "error" not in result:
+                                    logger.info("[Eurobet] %s playwright fetch top keys: %s",
+                                                league_name, list(result.keys())[:10])
+                                    events = _extract_events(result)
+                                    if events:
+                                        rows = _parse_events(events, league_name, discipline)
+                                        logger.info("[Eurobet] %s: %d rows", league_name, len(rows))
+                                        all_results.extend(rows)
+                                    else:
+                                        logger.info("[Eurobet] %s: no events in playwright response", league_name)
+                                else:
+                                    logger.info("[Eurobet] %s: playwright fetch returned %s", league_name, result)
+                            except Exception as exc:
+                                logger.error("[Eurobet] %s playwright error: %s", league_name, exc)
+
+                    await browser.close()
+
+            except Exception as pw_err:
+                logger.error("[Eurobet] Playwright phase failed: %s", pw_err)
+
+            if working_url_template is None or not all_results:
+                logger.warning("[Eurobet] All approaches failed — 0 rows")
+                logger.info("[Eurobet] Total: 0 events, 0 rows")
+                return all_results if working_url_template else []
+
+            # Dedup and return Playwright results
+            seen: dict[tuple[str, str], MatchOdds] = {}
+            for r in all_results:
+                seen[(r.event_name, r.market)] = r
+            deduped = list(seen.values())
+            n_events = len({r.event_name for r in deduped})
+            logger.info("[Eurobet] Total: %d events, %d rows", n_events, len(deduped))
+            return deduped
+
+        # ── Phase 2: Fetch all leagues via httpx ──────────────────────────
         all_results: list[MatchOdds] = []
-        import re as _re2
-
-        is_html_mode = working_url_template.startswith("HTML:")
-        html_url_tpl = working_url_template[5:] if is_html_mode else None
 
         async with httpx.AsyncClient(
             headers=_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
         ) as client:
             for league_name, discipline, alias in meetings:
-                if is_html_mode:
-                    url = html_url_tpl.format(disc=discipline, alias=alias)
-                else:
-                    url = working_url_template.format(disc=discipline, alias=alias)
+                url = working_url_template.format(disc=discipline, alias=alias)
                 logger.info("[Eurobet] Fetching %s…", league_name)
                 try:
                     resp = await client.get(url, follow_redirects=True)
                     if resp.status_code != 200:
                         logger.info("[Eurobet] %s → %d", league_name, resp.status_code)
                         continue
-                    if is_html_mode:
-                        # Extract __NEXT_DATA__ from HTML
-                        nd = _re2.search(r'id="__NEXT_DATA__"[^>]*>(.*?)</script>',
-                                         resp.text, _re2.DOTALL)
-                        if not nd:
-                            logger.info("[Eurobet] %s: no NEXT_DATA in HTML", league_name)
-                            continue
-                        try:
-                            data = _json.loads(nd.group(1))
-                        except Exception:
-                            logger.info("[Eurobet] %s: NEXT_DATA parse error", league_name)
-                            continue
-                    else:
-                        data = resp.json()
+                    data = resp.json()
                     if isinstance(data, dict):
                         logger.info("[Eurobet] %s top keys: %s | preview=%.300s",
                                     league_name, list(data.keys())[:10],
