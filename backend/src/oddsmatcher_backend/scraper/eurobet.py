@@ -124,7 +124,19 @@ def _extract_events(data: Any) -> list[dict]:
 
 
 def _parse_events(events: list, league_name: str, discipline: str) -> list[MatchOdds]:
-    """Parse a list of event dicts into MatchOdds rows."""
+    """Parse Eurobet detail-service event list into MatchOdds rows.
+
+    Eurobet structure:
+      event.eventInfo.eventDescription  → match name
+      event.eventInfo.eventData         → Unix ms timestamp
+      event.betGroupList[i]             → bet group (e.g. "SCOMMESSE TOP")
+        .oddGroupList[j]                → market (e.g. oddGroupDescription="1X2")
+          .oddList[k]                   → individual odd
+            .oddDescription             → outcome label ("1", "X", "2", "Over", …)
+            .oddValue                   → decimal odds (float)
+    """
+    from datetime import timezone as _tz
+
     results: list[MatchOdds] = []
 
     OUTCOME_MAP = {
@@ -135,6 +147,8 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
         "Over": "Over", "Under": "Under",
         "Sì": "Goal", "Si": "Goal", "Yes": "Goal", "No": "No Goal",
     }
+
+    logged_first = False
 
     for ev in events:
         if not isinstance(ev, dict):
@@ -154,116 +168,126 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
         away = parts[1].strip() if len(parts) == 2 else ""
 
         time_raw = (ev.get("startDate") or ev.get("dataOra") or ev.get("startTime") or
-                    ev.get("data") or ev.get("eventDate") or
-                    ei.get("eventData") or "")
+                    ev.get("data") or ev.get("eventDate") or ei.get("eventData") or "")
         if isinstance(time_raw, (int, float)) and time_raw > 1e9:
-            # Unix timestamp — convert ms → seconds if needed
             ts = time_raw / 1000 if time_raw > 1e12 else time_raw
-            from datetime import timezone as _tz
             event_time = datetime.fromtimestamp(ts, tz=_tz.utc).isoformat()
         else:
             event_time = _parse_date(str(time_raw)) if time_raw else None
 
-        bet_groups = (ev.get("betGroupList") or ev.get("betGroups") or
-                      ev.get("markets") or ev.get("mercati") or ev.get("scommesse") or [])
+        bet_groups = ev.get("betGroupList") or []
         if isinstance(bet_groups, dict):
             bet_groups = list(bet_groups.values())
 
         for bg in bet_groups:
             if not isinstance(bg, dict):
                 continue
-            bg_name = str(bg.get("description") or bg.get("descrizione") or
-                          bg.get("name") or bg.get("marketType") or bg.get("tipo") or "").strip()
+            # Eurobet: markets are in oddGroupList inside each betGroup
+            odd_groups = bg.get("oddGroupList") or []
+            if isinstance(odd_groups, dict):
+                odd_groups = list(odd_groups.values())
 
-            bets = (bg.get("betList") or bg.get("bets") or bg.get("outcomes") or
-                    bg.get("esiti") or bg.get("selections") or bg.get("quote") or [])
-            if isinstance(bets, dict):
-                bets = list(bets.values())
-
-            # ── 1X2 ──
-            if any(kw in bg_name for kw in ("Esito Finale", "1X2", "Match Result",
-                                             "Testa a Testa", "Head to Head", "Risultato",
-                                             "1 X 2")):
-                odds_dict: dict[str, float] = {}
-                for bet in bets:
-                    if not isinstance(bet, dict):
-                        continue
-                    lbl = str(bet.get("description") or bet.get("descrizione") or
-                              bet.get("name") or bet.get("outcome") or "").strip()
-                    canonical = OUTCOME_MAP.get(lbl, lbl)
-                    q_raw = bet.get("quota") or bet.get("odds") or bet.get("price") or bet.get("value")
-                    try:
-                        q = float(str(q_raw).replace(",", ".")) if q_raw is not None else None
-                        if q and q > 1.0:
-                            odds_dict[canonical] = round(q, 3)
-                    except (TypeError, ValueError):
-                        pass
-                if odds_dict:
-                    results.append(MatchOdds(
-                        sport=discipline, league=league_name,
-                        home_team=home, away_team=away,
-                        event_name=name, event_time=event_time,
-                        match_url=f"{BASE_URL}/scommesse-sportive/", market="1X2",
-                        bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
-                    ))
-
-            # ── Double Chance ──
-            elif any(kw in bg_name for kw in ("Doppia Chance", "Double Chance")):
-                odds_dict = {}
-                for bet in bets:
-                    if not isinstance(bet, dict):
-                        continue
-                    lbl = str(bet.get("description") or bet.get("descrizione") or
-                              bet.get("name") or "").strip()
-                    canonical = OUTCOME_MAP.get(lbl, lbl)
-                    q_raw = bet.get("quota") or bet.get("odds") or bet.get("price") or bet.get("value")
-                    try:
-                        q = float(str(q_raw).replace(",", ".")) if q_raw is not None else None
-                        if q and q > 1.0:
-                            odds_dict[canonical] = round(q, 3)
-                    except (TypeError, ValueError):
-                        pass
-                if odds_dict:
-                    results.append(MatchOdds(
-                        sport=discipline, league=league_name,
-                        home_team=home, away_team=away,
-                        event_name=name, event_time=event_time,
-                        match_url=f"{BASE_URL}/scommesse-sportive/", market="DC",
-                        bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
-                    ))
-
-            # ── Over/Under ──
-            elif any(kw in bg_name for kw in ("Over/Under", "O/U", "Totale Gol", "Over Under")):
-                sp_m = re.search(r"(\d+[.,]\d+)", bg_name)
-                if not sp_m:
+            for og in odd_groups:
+                if not isinstance(og, dict):
                     continue
-                sp = sp_m.group(1).replace(",", ".")
-                if sp not in {"1.5", "2.5", "3.5"}:
-                    continue
-                odds_dict = {}
-                for bet in bets:
-                    if not isinstance(bet, dict):
-                        continue
-                    lbl = str(bet.get("description") or bet.get("descrizione") or
-                              bet.get("name") or "").strip()
-                    side = "Over" if "over" in lbl.lower() else ("Under" if "under" in lbl.lower() else None)
-                    if not side:
-                        continue
-                    q_raw = bet.get("quota") or bet.get("odds") or bet.get("price") or bet.get("value")
+                og_name = str(og.get("oddGroupDescription") or og.get("description") or
+                               og.get("name") or "").strip()
+
+                # Odds items: try oddList first, then fallback names
+                odds_items = (og.get("oddList") or og.get("betList") or
+                              og.get("bets") or og.get("outcomes") or [])
+                if isinstance(odds_items, dict):
+                    odds_items = list(odds_items.values())
+
+                # Log first oddGroup to discover full structure
+                if not logged_first and odds_items:
+                    logger.info("[Eurobet] %s oddGroup sample: name=%r odd0_keys=%s odd0=%.300s",
+                                league_name, og_name,
+                                list(odds_items[0].keys())[:10] if isinstance(odds_items[0], dict) else "?",
+                                _json.dumps(odds_items[0], ensure_ascii=False)[:300])
+                    logged_first = True
+
+                def _get_q(odd: dict) -> float | None:
+                    q_raw = (odd.get("oddValue") or odd.get("quota") or odd.get("value") or
+                             odd.get("price") or odd.get("odds"))
+                    if q_raw is None:
+                        return None
                     try:
-                        q = float(str(q_raw).replace(",", ".")) if q_raw is not None else None
-                        if q and q > 1.0:
-                            odds_dict[f"{side} {sp}"] = round(q, 3)
+                        q = float(str(q_raw).replace(",", "."))
+                        return round(q, 3) if q > 1.0 else None
                     except (TypeError, ValueError):
-                        pass
-                if odds_dict:
-                    results.append(MatchOdds(
-                        sport=discipline, league=league_name,
-                        home_team=home, away_team=away,
-                        event_name=name, event_time=event_time,
-                        match_url=f"{BASE_URL}/scommesse-sportive/", market=f"Over/Under {sp}",
-                        bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
-                    ))
+                        return None
+
+                def _get_lbl(odd: dict) -> str:
+                    return str(odd.get("oddDescription") or odd.get("description") or
+                               odd.get("name") or odd.get("outcome") or "").strip()
+
+                # ── 1X2 ──
+                if og_name in ("1X2", "1 X 2") or any(kw in og_name for kw in (
+                        "Esito Finale", "Match Result", "Testa a Testa", "Head to Head")):
+                    odds_dict: dict[str, float] = {}
+                    for odd in odds_items:
+                        if not isinstance(odd, dict):
+                            continue
+                        lbl = _get_lbl(odd)
+                        q = _get_q(odd)
+                        if q:
+                            odds_dict[OUTCOME_MAP.get(lbl, lbl)] = q
+                    if odds_dict:
+                        results.append(MatchOdds(
+                            sport=discipline, league=league_name,
+                            home_team=home, away_team=away,
+                            event_name=name, event_time=event_time,
+                            match_url=f"{BASE_URL}/scommesse-sportive/", market="1X2",
+                            bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
+                        ))
+
+                # ── Double Chance ──
+                elif any(kw in og_name for kw in ("Doppia Chance", "Double Chance")):
+                    odds_dict = {}
+                    for odd in odds_items:
+                        if not isinstance(odd, dict):
+                            continue
+                        lbl = _get_lbl(odd)
+                        q = _get_q(odd)
+                        if q:
+                            odds_dict[OUTCOME_MAP.get(lbl, lbl)] = q
+                    if odds_dict:
+                        results.append(MatchOdds(
+                            sport=discipline, league=league_name,
+                            home_team=home, away_team=away,
+                            event_name=name, event_time=event_time,
+                            match_url=f"{BASE_URL}/scommesse-sportive/", market="DC",
+                            bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
+                        ))
+
+                # ── Over/Under ──
+                elif any(kw in og_name for kw in ("Over/Under", "O/U", "Totale Gol", "Over Under")):
+                    sp_m = re.search(r"(\d+[.,]\d+)", og_name)
+                    if not sp_m:
+                        continue
+                    sp = sp_m.group(1).replace(",", ".")
+                    if sp not in {"1.5", "2.5", "3.5"}:
+                        continue
+                    odds_dict = {}
+                    for odd in odds_items:
+                        if not isinstance(odd, dict):
+                            continue
+                        lbl = _get_lbl(odd)
+                        side = "Over" if "over" in lbl.lower() else ("Under" if "under" in lbl.lower() else None)
+                        if not side:
+                            continue
+                        q = _get_q(odd)
+                        if q:
+                            odds_dict[f"{side} {sp}"] = q
+                    if odds_dict:
+                        results.append(MatchOdds(
+                            sport=discipline, league=league_name,
+                            home_team=home, away_team=away,
+                            event_name=name, event_time=event_time,
+                            match_url=f"{BASE_URL}/scommesse-sportive/", market=f"Over/Under {sp}",
+                            bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
+                        ))
 
     return results
 
@@ -532,27 +556,34 @@ class EurobetScraper:
                         api_url = (f"/detail-service/sport-schedule/services/meeting"
                                    f"/{discipline}/{alias}?prematch=1&live=0")
 
-                        # Fresh context = fresh CF clearance token per league
-                        ctx = await browser.new_context(
-                            user_agent=_UA,
-                            locale="it-IT",
-                            timezone_id="Europe/Rome",
-                            viewport={"width": 1280, "height": 800},
-                        )
-                        pg = await ctx.new_page()
-                        if _STEALTH:
-                            await _stealth_async(pg)
-                        try:
-                            # Navigate to betting page → CF challenge → sets clearance
-                            await pg.goto(bet_url, wait_until="domcontentloaded", timeout=30_000)
-                            await pg.wait_for_timeout(2000)
-                            # Same-origin fetch uses the fresh clearance
-                            result = await pg.evaluate(_FETCH_JS, api_url)
-                        except Exception as e:
-                            logger.warning("[Eurobet] %s error: %s", league_name, e)
-                            result = {"_error": str(e)}
-                        finally:
-                            await ctx.close()
+                        # Fresh context = fresh CF clearance token per league.
+                        # Retry up to 3 times if CF blocks (stochastic Turnstile failures).
+                        result: Any = {"_error": "not_tried"}
+                        for attempt in range(3):
+                            ctx = await browser.new_context(
+                                user_agent=_UA,
+                                locale="it-IT",
+                                timezone_id="Europe/Rome",
+                                viewport={"width": 1280, "height": 800},
+                            )
+                            pg = await ctx.new_page()
+                            if _STEALTH:
+                                await _stealth_async(pg)
+                            try:
+                                await pg.goto(bet_url, wait_until="domcontentloaded", timeout=30_000)
+                                await pg.wait_for_timeout(2000)
+                                result = await pg.evaluate(_FETCH_JS, api_url)
+                            except Exception as e:
+                                logger.warning("[Eurobet] %s attempt %d error: %s", league_name, attempt + 1, e)
+                                result = {"_error": str(e)}
+                            finally:
+                                await ctx.close()
+
+                            # If 403, retry with fresh context
+                            if isinstance(result, dict) and result.get("_status") == 403:
+                                logger.info("[Eurobet] %s attempt %d → 403, retrying…", league_name, attempt + 1)
+                                continue
+                            break
 
                         rows = _parse_result(result, league_name, discipline)
                         all_results.extend(rows)
