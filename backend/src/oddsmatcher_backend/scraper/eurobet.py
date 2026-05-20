@@ -431,12 +431,12 @@ class EurobetScraper:
                     except Exception as e:
                         logger.info("[Eurobet] HTML %s error: %s", html_url, str(e)[:80])
 
-        # ── Phase 2: Playwright + page.evaluate(fetch()) fallback ────────────
-        # If httpx probes all failed, use Playwright browser to navigate www.eurobet.it.
-        # After homepage warmup Cloudflare issues cookies. Then page.evaluate(fetch('/detail-service/...'))
-        # is a same-origin fetch that includes those cookies — bypasses the CF challenge.
+        # ── Phase 2: Playwright + page navigation for __NEXT_DATA__ ─────────
+        # www.eurobet.it is Next.js ISR — betting data is pre-rendered into the HTML
+        # inside <script id="__NEXT_DATA__">. Playwright navigates the betting pages
+        # directly (CF cookies maintained from warmup) and extracts this JSON.
         if working_url_template is None:
-            logger.info("[Eurobet] httpx probes failed — trying Playwright + page.evaluate(fetch())")
+            logger.info("[Eurobet] httpx probes failed — trying Playwright + __NEXT_DATA__ navigation")
             try:
                 from playwright.async_api import async_playwright
                 try:
@@ -445,7 +445,6 @@ class EurobetScraper:
                 except ImportError:
                     _STEALTH = False
 
-                _UA = _HEADERS["User-Agent"]
                 proxy_cfg = None
                 if proxy_url:
                     import urllib.parse as _up
@@ -460,7 +459,7 @@ class EurobetScraper:
 
                 async with async_playwright() as pw:
                     browser = await pw.chromium.launch(
-                        headless=False,
+                        headless=True,
                         args=["--no-sandbox", "--disable-dev-shm-usage"],
                         proxy=proxy_cfg,
                     )
@@ -479,70 +478,81 @@ class EurobetScraper:
                     logger.info("[Eurobet] Playwright warmup: navigating to www.eurobet.it…")
                     try:
                         await page.goto("https://www.eurobet.it/", wait_until="domcontentloaded", timeout=30_000)
-                        await page.wait_for_timeout(4000)
+                        await page.wait_for_timeout(3000)
                         title = await page.title()
                         logger.info("[Eurobet] Warmup page title: %s", title)
                     except Exception as wup_e:
                         logger.warning("[Eurobet] Warmup navigation error: %s", wup_e)
 
-                    # Test probe with same-origin fetch from within the browser
-                    test_path = f"/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0"
-                    logger.info("[Eurobet] Testing page.evaluate(fetch) for %s", test_path)
+                    # Test: navigate to a betting page and extract __NEXT_DATA__
+                    test_league, test_disc, test_alias = meetings[0]
+                    test_bet_url = f"https://www.eurobet.it/it/scommesse/{test_disc}/{test_alias}"
+                    logger.info("[Eurobet] Testing betting page navigation: %s", test_bet_url)
                     try:
-                        result = await page.evaluate(f"""
-                            async () => {{
-                                const resp = await fetch('{test_path}', {{
-                                    credentials: 'include',
-                                    headers: {{'Accept': 'application/json'}}
-                                }});
-                                const status = resp.status;
-                                let body = '';
-                                try {{ body = await resp.text(); }} catch(e) {{}}
-                                return {{status, body: body.slice(0, 800)}};
-                            }}
-                        """)
-                        logger.info("[Eurobet] page.evaluate fetch → status=%s | body=%.600s",
-                                    result.get("status") if result else "?",
-                                    result.get("body", "") if result else "?")
-                        if result and result.get("status") == 200:
-                            body_text = result.get("body", "")
-                            if any(kw in body_text for kw in ("eventList", "events", "betGroupList",
-                                                               "description", "descrizione", "startDate")):
-                                logger.info("[Eurobet] ✅ page.evaluate fetch WORKS!")
-                                working_url_template = "PLAYWRIGHT:" + test_path.replace(
-                                    f"/{first_disc}/{first_alias}", "/{disc}/{alias}")
-                    except Exception as fe:
-                        logger.warning("[Eurobet] page.evaluate fetch error: %s", fe)
+                        await page.goto(test_bet_url, wait_until="domcontentloaded", timeout=30_000)
+                        await page.wait_for_timeout(3000)
 
-                    if working_url_template and working_url_template.startswith("PLAYWRIGHT:"):
-                        path_tpl = working_url_template[11:]  # strip "PLAYWRIGHT:"
-                        for league_name, discipline, alias in meetings:
-                            path = path_tpl.format(disc=discipline, alias=alias)
+                        next_data_text = await page.evaluate(
+                            "() => document.getElementById('__NEXT_DATA__')?.textContent || ''"
+                        )
+                        logger.info("[Eurobet] __NEXT_DATA__ len=%d | preview=%.800s",
+                                    len(next_data_text), next_data_text[:800])
+
+                        if next_data_text and len(next_data_text) > 200:
+                            nd_json = _json.loads(next_data_text)
+                            events = _extract_events(nd_json)
+                            logger.info("[Eurobet] Test page events found: %d", len(events))
+                            if events:
+                                logger.info("[Eurobet] ✅ __NEXT_DATA__ navigation works! First event keys=%s",
+                                            list(events[0].keys())[:10] if isinstance(events[0], dict) else "?")
+                                working_url_template = "NEXTDATA:https://www.eurobet.it/it/scommesse/{disc}/{alias}"
+                                rows = _parse_events(events, test_league, test_disc)
+                                logger.info("[Eurobet] %s: %d rows", test_league, len(rows))
+                                all_results.extend(rows)
+                            else:
+                                # Log structure for debugging
+                                logger.info("[Eurobet] __NEXT_DATA__ top keys: %s",
+                                            list(nd_json.keys())[:12] if isinstance(nd_json, dict) else "?")
+                                logger.info("[Eurobet] __NEXT_DATA__ full preview=%.3000s", next_data_text[:3000])
+                                # Still mark as working for probe — data structure may differ
+                                working_url_template = "NEXTDATA:https://www.eurobet.it/it/scommesse/{disc}/{alias}"
+                        else:
+                            # __NEXT_DATA__ absent — check page content for debugging
+                            page_html = await page.evaluate(
+                                "() => document.documentElement?.innerHTML?.slice(0, 3000) || ''"
+                            )
+                            logger.info("[Eurobet] No __NEXT_DATA__ — page HTML preview: %.1500s", page_html)
+                            api_urls = re.findall(r'["\']([^"\']*detail-service[^"\']{0,100})["\']', page_html)
+                            logger.info("[Eurobet] detail-service URLs in page: %s", api_urls[:10])
+                    except Exception as nav_e:
+                        logger.warning("[Eurobet] Betting page navigation error: %s", nav_e)
+
+                    # Fetch remaining leagues if navigation approach works
+                    if working_url_template and working_url_template.startswith("NEXTDATA:"):
+                        url_pattern = working_url_template[9:]  # strip "NEXTDATA:"
+                        for league_name, discipline, alias in meetings[1:]:  # skip first (already done)
+                            bet_url = url_pattern.format(disc=discipline, alias=alias)
                             try:
-                                result = await page.evaluate(f"""
-                                    async () => {{
-                                        const resp = await fetch('{path}', {{
-                                            credentials: 'include',
-                                            headers: {{'Accept': 'application/json'}}
-                                        }});
-                                        if (!resp.ok) return {{error: resp.status}};
-                                        return await resp.json();
-                                    }}
-                                """)
-                                if result and isinstance(result, dict) and "error" not in result:
-                                    logger.info("[Eurobet] %s playwright fetch top keys: %s",
-                                                league_name, list(result.keys())[:10])
-                                    events = _extract_events(result)
+                                await page.goto(bet_url, wait_until="domcontentloaded", timeout=30_000)
+                                await page.wait_for_timeout(2000)
+                                next_data_text = await page.evaluate(
+                                    "() => document.getElementById('__NEXT_DATA__')?.textContent || ''"
+                                )
+                                if next_data_text and len(next_data_text) > 200:
+                                    nd_json = _json.loads(next_data_text)
+                                    events = _extract_events(nd_json)
                                     if events:
                                         rows = _parse_events(events, league_name, discipline)
                                         logger.info("[Eurobet] %s: %d rows", league_name, len(rows))
                                         all_results.extend(rows)
                                     else:
-                                        logger.info("[Eurobet] %s: no events in playwright response", league_name)
+                                        logger.info("[Eurobet] %s: no events in __NEXT_DATA__ (keys=%s)",
+                                                    league_name,
+                                                    list(nd_json.keys())[:8] if isinstance(nd_json, dict) else "?")
                                 else:
-                                    logger.info("[Eurobet] %s: playwright fetch returned %s", league_name, result)
+                                    logger.info("[Eurobet] %s: no __NEXT_DATA__ found", league_name)
                             except Exception as exc:
-                                logger.error("[Eurobet] %s playwright error: %s", league_name, exc)
+                                logger.error("[Eurobet] %s navigation error: %s", league_name, exc)
 
                     await browser.close()
 

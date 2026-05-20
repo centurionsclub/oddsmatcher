@@ -371,30 +371,109 @@ class SnaiScraper:
         async with httpx.AsyncClient(
             headers=_SNAI_HEADERS, timeout=30, follow_redirects=True, proxy=proxy_url,
         ) as client:
-            # ── Step 2a: Try schedaManifestazioneSpeciale to get all events per league ──
-            # This is the most efficient: one request per league, returns full event+odds data.
-            # Filter values to try: "T" (tutti), "0", "1", "all"
-            working_manif_filter: str | None = None
             first_comp = competitions[0]
             first_lg, first_sk, first_disc, first_manif = first_comp
 
-            for f_val in ("T", "0", "1", "all", "prematch"):
+            # ── Step 2a: Probe /palinsesto/prematch/init to understand available filters ──
+            try:
+                init_resp = await client.get(f"{PFX}/palinsesto/prematch/init")
+                logger.info("[Snai] prematch/init → %d | preview=%.800s",
+                            init_resp.status_code, init_resp.text[:800])
+            except Exception as ie:
+                logger.info("[Snai] prematch/init error: %s", ie)
+
+            # ── Step 2b: Test schedaAvvenimento/{key} with a known event ─────────────
+            # First get events list to get valid keys
+            test_events: list[dict] = []
+            try:
+                ev_resp = await client.get(f"{PFX}/palinsesto/prematch/avvenimentiPrematch")
+                if ev_resp.status_code == 200:
+                    ev_data = ev_resp.json()
+                    avm = ev_data.get("avvenimentoFeMap") or {}
+                    test_events = list(avm.values())[:10]
+                    logger.info("[Snai] Got %d test events", len(test_events))
+            except Exception as te:
+                logger.info("[Snai] avvenimentiPrematch test error: %s", te)
+
+            # Test schedaAvvenimento with first available event
+            schedaAvv_works = False
+            if test_events:
+                test_ev = test_events[0]
+                test_key = test_ev.get("key", f"{test_ev.get('codicePalinsesto')}-{test_ev.get('codiceAvvenimento')}")
+                test_url = SCHEDA_AVVENIMENTO.format(key=test_key)
+                try:
+                    r = await client.get(test_url)
+                    logger.info("[Snai] schedaAvvenimento/%s → %d | preview=%.600s",
+                                test_key, r.status_code, r.text[:600])
+                    if r.status_code == 200:
+                        schedaAvv_works = True
+                        scheda_data = r.json()
+                        logger.info("[Snai] schedaAvvenimento top keys: %s | has_scommesse=%s",
+                                    list(scheda_data.keys())[:12] if isinstance(scheda_data, dict) else "?",
+                                    "scommessaMap" in str(scheda_data) or "scommesse" in str(scheda_data))
+                except Exception as se:
+                    logger.info("[Snai] schedaAvvenimento test error: %s", se)
+
+            # ── Step 2c: Try schedaManifestazioneSpeciale with extended filter values ──
+            working_manif_filter: str | None = None
+            # filter=0 returns empty (today only). Try day ranges that include next-week matches.
+            for f_val in ("H+168", "H+336", "7", "14", "30", "1", "2", "3", "5",
+                          "H+48", "H+72", "H+96", "H+120", "H+144"):
                 url = SCHEDA_MANIF_SPECIALE.format(filter=f_val, disc=first_disc, manif=first_manif)
                 try:
                     resp = await client.get(url)
-                    text = resp.text[:200]
-                    logger.info("[Snai] schedaManifestazioneSpeciale filter=%s → %d | %s",
-                                f_val, resp.status_code, text)
+                    text = resp.text[:250]
+                    n_events = '"avvenimentoFeList"' in resp.text and len(
+                        _json.loads(resp.text).get("avvenimentoFeList", [])) if resp.status_code == 200 else 0
+                    logger.info("[Snai] schedaManifestazioneSpeciale filter=%s → %d | events=%s | %s",
+                                f_val, resp.status_code, n_events, text[:150])
                     if resp.status_code == 200:
                         data = resp.json()
-                        if isinstance(data, dict):
-                            logger.info("[Snai] ManifestazioneSpeciale top keys: %s | preview=%.600s",
-                                        list(data.keys())[:12],
-                                        _json.dumps(data, ensure_ascii=False)[:600])
-                        working_manif_filter = f_val
-                        break
+                        events_list = data.get("avvenimentoFeList", [])
+                        if events_list:
+                            logger.info("[Snai] ✅ filter=%s returns %d events! First: %.400s",
+                                        f_val, len(events_list), _json.dumps(events_list[0], ensure_ascii=False))
+                            working_manif_filter = f_val
+                            break
+                        # Even if empty, keep trying — log cluster info
+                        clusters = data.get("clusterMenu", {}).get("clusterList", [])
+                        logger.info("[Snai] filter=%s: empty events, clusters=%s", f_val, clusters[:3])
                 except Exception as e:
-                    logger.info("[Snai] schedaManifestazioneSpeciale filter=%s error: %s", f_val, e)
+                    logger.info("[Snai] schedaManifestazioneSpeciale filter=%s error: %s", f_val, str(e)[:80])
+
+            # Also try schedaManifestazione (non-Speciale) — needs string key from manifestazioneMap
+            if working_manif_filter is None:
+                # Log manifestazioneMap keys from alberaturaPrematch for schedaManifestazione
+                try:
+                    alb_resp = await client.get(ALBERATURA_URL)
+                    if alb_resp.status_code == 200:
+                        alb_data = alb_resp.json()
+                        manif_map = alb_data.get("manifestazioneMap", {})
+                        # Get keys for leagues we care about
+                        for mk, mv in manif_map.items():
+                            if int(mv.get("codiceManifestazione", 0)) in manif_to_league:
+                                lg_name = manif_to_league[int(mv.get("codiceManifestazione", 0))][0]
+                                logger.info("[Snai] manifestazioneMap key=%r → %s (manif=%s disc=%s)",
+                                            mk, lg_name, mv.get("codiceManifestazione"), mv.get("codiceDisciplina"))
+                        # Try schedaManifestazione with a few filter+key combos
+                        sample_keys = list(manif_map.keys())[:3]
+                        for mk in sample_keys:
+                            for f_val in ("H+168", "7", "0"):
+                                sm_url = SCHEDA_MANIF.format(filter=f_val, key=mk)
+                                try:
+                                    r = await client.get(sm_url)
+                                    logger.info("[Snai] schedaManifestazione filter=%s key=%r → %d | %.200s",
+                                                f_val, mk, r.status_code, r.text[:200])
+                                    if r.status_code == 200:
+                                        sm_data = r.json()
+                                        sm_events = sm_data.get("avvenimentoFeList", [])
+                                        if sm_events:
+                                            logger.info("[Snai] schedaManifestazione WORKS filter=%s key=%r!", f_val, mk)
+                                            break
+                                except Exception as sme:
+                                    logger.info("[Snai] schedaManifestazione error: %s", sme)
+                except Exception as alb_e:
+                    logger.info("[Snai] alberatura re-fetch error: %s", alb_e)
 
             if working_manif_filter is not None:
                 # Fetch all leagues using schedaManifestazioneSpeciale
@@ -413,7 +492,8 @@ class SnaiScraper:
                     except Exception as exc:
                         logger.error("[Snai] %s schedaManifestazioneSpeciale error: %s", lg, exc)
 
-            else:
+            elif schedaAvv_works:
+                logger.info("[Snai] schedaManifestazioneSpeciale empty — using schedaAvvenimento per-event")
                 # ── Step 2b: Fallback — get event keys from avvenimentiPrematch then
                 #            fetch each event via schedaAvvenimento/{key} ──────────────
                 logger.info("[Snai] schedaManifestazioneSpeciale failed — fetching events via avvenimentiPrematch")
