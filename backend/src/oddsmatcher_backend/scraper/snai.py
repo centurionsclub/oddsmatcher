@@ -372,7 +372,11 @@ class SnaiScraper:
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-http2",  # proxy doesn't support HTTP/2 CONNECT for snai.it
+                ],
                 proxy=proxy_dict,
             )
             try:
