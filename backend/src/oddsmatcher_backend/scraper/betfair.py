@@ -44,12 +44,12 @@ TARGET_COMPETITION_KEYWORDS: list[str] = [
     "italian serie a", "italian serie b", "coppa italia",
     # England — "english" evita "Kuwaiti/Nigerian Premier League"
     "english premier league", "english championship", "sky bet championship", "fa cup",
-    # Germany — "bundesliga" è abbastanza specifico (non appare in leghe africane/asiatiche)
-    "bundesliga",
-    # Spain
-    "spanish la liga", "la liga", "laliga", "primera division",
-    # France
-    "french ligue 1", "ligue 1",
+    # Germany — "german bundesliga" evita "Austrian Bundesliga"; "german playoff" = spareggi retrocessione
+    "german bundesliga", "german playoff",
+    # Spain — "spanish la liga" evita "Peruvian/Uruguayan Primera Division"
+    "spanish la liga", "la liga", "laliga",
+    # France — "french ligue 1" evita "Algerian Ligue 1"
+    "french ligue 1",
     # European cups
     "champions league", "europa league", "europa conference",
     "conference league", "uefa champions", "uefa europa",
