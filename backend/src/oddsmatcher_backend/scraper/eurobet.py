@@ -140,9 +140,11 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
         if not isinstance(ev, dict):
             continue
 
+        ei = ev.get("eventInfo") or {}
         name_raw = (ev.get("description") or ev.get("descrizione") or
                     ev.get("name") or ev.get("eventName") or
-                    ev.get("eventDescription") or "")
+                    ev.get("eventDescription") or
+                    ei.get("eventDescription") or ei.get("description") or "")
         name = re.sub(r"\s+[-–]\s+", " - ", str(name_raw)).strip()
         if not name:
             continue
@@ -152,8 +154,15 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
         away = parts[1].strip() if len(parts) == 2 else ""
 
         time_raw = (ev.get("startDate") or ev.get("dataOra") or ev.get("startTime") or
-                    ev.get("data") or ev.get("eventDate") or "")
-        event_time = _parse_date(str(time_raw)) if time_raw else None
+                    ev.get("data") or ev.get("eventDate") or
+                    ei.get("eventData") or "")
+        if isinstance(time_raw, (int, float)) and time_raw > 1e9:
+            # Unix timestamp — convert ms → seconds if needed
+            ts = time_raw / 1000 if time_raw > 1e12 else time_raw
+            from datetime import timezone as _tz
+            event_time = datetime.fromtimestamp(ts, tz=_tz.utc).isoformat()
+        else:
+            event_time = _parse_date(str(time_raw)) if time_raw else None
 
         bet_groups = (ev.get("betGroupList") or ev.get("betGroups") or
                       ev.get("markets") or ev.get("mercati") or ev.get("scommesse") or [])
@@ -462,104 +471,93 @@ class EurobetScraper:
 
                 all_results: list[MatchOdds] = []
 
+                # CF clearance is ONE-USE per browser context — each navigation to a
+                # betting page issues a fresh Turnstile token that allows exactly one
+                # same-origin detail-service call. Use a fresh context per league.
+                _FETCH_JS = """
+                async (url) => {
+                    try {
+                        const r = await fetch(url, {
+                            credentials: 'include',
+                            headers: {'Accept': 'application/json, */*'}
+                        });
+                        if (!r.ok) return {_status: r.status, _error: 'http_error'};
+                        const ct = r.headers.get('content-type') || '';
+                        if (!ct.includes('json')) return {_status: r.status, _error: 'not_json', _ct: ct};
+                        return await r.json();
+                    } catch(e) {
+                        return {_error: String(e)};
+                    }
+                }
+                """
+
+                def _parse_result(result: Any, league_name: str, discipline: str) -> list[MatchOdds]:
+                    if not isinstance(result, dict):
+                        logger.info("[Eurobet] %s: bad type %s", league_name, type(result).__name__)
+                        return []
+                    if "_error" in result:
+                        logger.info("[Eurobet] %s: HTTP %s – %s",
+                                    league_name, result.get("_status", "?"), result.get("_error"))
+                        return []
+                    code = result.get("code")
+                    desc = str(result.get("description") or "")[:80]
+                    logger.info("[Eurobet] %s: code=%s desc=%s", league_name, code, desc)
+                    if code not in (1, "1"):
+                        return []
+                    events = _extract_events(result)
+                    if not events:
+                        logger.info("[Eurobet] %s: code=1 but no events | preview=%.500s",
+                                    league_name, _json.dumps(result, ensure_ascii=False)[:500])
+                        return []
+                    # Log first event + first betGroup for structure discovery
+                    ev0 = events[0] if isinstance(events[0], dict) else {}
+                    bgl = ev0.get("betGroupList") or []
+                    bg0 = bgl[0] if bgl else {}
+                    logger.info("[Eurobet] %s: ev0 keys=%s betGroup0=%.400s",
+                                league_name, list(ev0.keys())[:10],
+                                _json.dumps(bg0, ensure_ascii=False)[:400])
+                    rows = _parse_events(events, league_name, discipline)
+                    logger.info("[Eurobet] %s: %d events → %d rows", league_name, len(events), len(rows))
+                    return rows
+
                 async with async_playwright() as pw:
                     browser = await pw.chromium.launch(
                         headless=True,
                         args=["--no-sandbox", "--disable-dev-shm-usage"],
                         proxy=proxy_cfg,
                     )
-                    ctx = await browser.new_context(
-                        user_agent=_UA,
-                        locale="it-IT",
-                        timezone_id="Europe/Rome",
-                        viewport={"width": 1280, "height": 800},
-                    )
-                    page = await ctx.new_page()
-                    if _STEALTH:
-                        await _stealth_async(page)
-                        logger.info("[Eurobet] playwright-stealth applied")
-
-                    # Warmup — establishes Cloudflare session cookies
-                    logger.info("[Eurobet] Playwright warmup: navigating to www.eurobet.it…")
-                    try:
-                        await page.goto("https://www.eurobet.it/", wait_until="domcontentloaded", timeout=30_000)
-                        await page.wait_for_timeout(3000)
-                        title = await page.title()
-                        logger.info("[Eurobet] Warmup page title: %s", title)
-                    except Exception as wup_e:
-                        logger.warning("[Eurobet] Warmup navigation error: %s", wup_e)
-
-                    async def _browser_fetch(url: str) -> Any:
-                        """Fetch URL from within browser context (uses CF session cookies)."""
-                        js = f"""
-                        async () => {{
-                            try {{
-                                const r = await fetch('{url}', {{
-                                    credentials: 'include',
-                                    headers: {{ 'Accept': 'application/json, */*' }}
-                                }});
-                                if (!r.ok) return {{_status: r.status, _error: 'http_error'}};
-                                const ct = r.headers.get('content-type') || '';
-                                if (!ct.includes('json')) return {{_status: r.status, _error: 'not_json', _ct: ct}};
-                                return await r.json();
-                            }} catch(e) {{
-                                return {{_error: String(e)}};
-                            }}
-                        }}
-                        """
-                        return await page.evaluate(js)
-
-                    def _fetch_league_sync(result: Any, league_name: str, discipline: str, alias: str) -> list[MatchOdds]:
-                        """Parse a detail-service JSON response into MatchOdds rows."""
-                        if not isinstance(result, dict):
-                            logger.info("[Eurobet] %s: unexpected result type %s", league_name, type(result).__name__)
-                            return []
-                        if "_error" in result:
-                            logger.info("[Eurobet] %s: fetch error status=%s err=%s",
-                                        league_name, result.get("_status", "?"), result.get("_error"))
-                            return []
-                        code = result.get("code")
-                        desc = str(result.get("description") or "")[:80]
-                        logger.info("[Eurobet] %s: code=%s desc=%s keys=%s",
-                                    league_name, code, desc, list(result.keys())[:8])
-                        if code not in (1, "1"):
-                            logger.info("[Eurobet] %s: non-success code=%s | preview=%.300s",
-                                        league_name, code, _json.dumps(result, ensure_ascii=False)[:300])
-                            return []
-                        events = _extract_events(result)
-                        if not events:
-                            logger.info("[Eurobet] %s: code=1 but no events | keys=%s | preview=%.600s",
-                                        league_name, list(result.keys())[:10],
-                                        _json.dumps(result, ensure_ascii=False)[:600])
-                            return []
-                        # Log first event structure to verify key names
-                        logger.info("[Eurobet] %s: first event keys=%s | preview=%.500s",
-                                    league_name, list(events[0].keys())[:15] if isinstance(events[0], dict) else "?",
-                                    _json.dumps(events[0], ensure_ascii=False)[:500])
-                        rows = _parse_events(events, league_name, discipline)
-                        logger.info("[Eurobet] %s: %d events, %d rows", league_name, len(events), len(rows))
-                        return rows
-
-                    # Navigate to ONE betting page to establish CF context for detail-service.
-                    # After this, all _browser_fetch calls are made without re-navigating.
-                    # Navigating per-league invalidates the CF session after the first call.
-                    first_league, first_disc, first_alias = meetings[0]
-                    init_url = f"https://www.eurobet.it/it/scommesse/{first_disc}/{first_alias}"
-                    logger.info("[Eurobet] Establishing CF betting context: %s", init_url)
-                    try:
-                        await page.goto(init_url, wait_until="domcontentloaded", timeout=30_000)
-                        await page.wait_for_timeout(2000)
-                    except Exception as e:
-                        logger.warning("[Eurobet] CF context navigation error: %s", e)
 
                     for league_name, discipline, alias in meetings:
+                        bet_url = f"https://www.eurobet.it/it/scommesse/{discipline}/{alias}"
                         api_url = (f"/detail-service/sport-schedule/services/meeting"
                                    f"/{discipline}/{alias}?prematch=1&live=0")
-                        result = await _browser_fetch(api_url)
-                        rows = _fetch_league_sync(result, league_name, discipline, alias)
+
+                        # Fresh context = fresh CF clearance token per league
+                        ctx = await browser.new_context(
+                            user_agent=_UA,
+                            locale="it-IT",
+                            timezone_id="Europe/Rome",
+                            viewport={"width": 1280, "height": 800},
+                        )
+                        pg = await ctx.new_page()
+                        if _STEALTH:
+                            await _stealth_async(pg)
+                        try:
+                            # Navigate to betting page → CF challenge → sets clearance
+                            await pg.goto(bet_url, wait_until="domcontentloaded", timeout=30_000)
+                            await pg.wait_for_timeout(2000)
+                            # Same-origin fetch uses the fresh clearance
+                            result = await pg.evaluate(_FETCH_JS, api_url)
+                        except Exception as e:
+                            logger.warning("[Eurobet] %s error: %s", league_name, e)
+                            result = {"_error": str(e)}
+                        finally:
+                            await ctx.close()
+
+                        rows = _parse_result(result, league_name, discipline)
                         all_results.extend(rows)
                         if rows:
-                            working_url_template = "PLAYWRIGHT_BROWSER_FETCH"
+                            working_url_template = "PLAYWRIGHT_PER_CTX"
 
                     await browser.close()
 
