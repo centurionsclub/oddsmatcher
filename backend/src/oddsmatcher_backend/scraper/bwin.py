@@ -487,12 +487,7 @@ class BwinScraper(BasePlaywrightScraper):
         captured: list[MatchOdds] = []
 
         _cds_urls_seen: set = set()
-        # Endpoints to inspect for fixture data (in addition to bettingoffer/fixtures)
-        _INSPECT_ENDPOINTS = (
-            "offer-grouping/grid-view/all/regional",
-            "offer-grouping/v2/fixture-view/regional",
-            "bettingoffer/fixture-view",
-        )
+        _next_data_seen: set = set()
 
         async def _on_response(resp: _Response) -> None:
             # Log any CDS API URL we haven't seen before (for discovery)
@@ -502,38 +497,32 @@ class BwinScraper(BasePlaywrightScraper):
                     _cds_urls_seen.add(path)
                     logger.info("[Bwin] CDS endpoint: %s", path)
 
-            # ── Try to parse fixture data from all known endpoints ─────────
-            is_fixtures = "cds-api/bettingoffer/fixtures" in resp.url
-            is_inspect  = any(ep in resp.url for ep in _INSPECT_ENDPOINTS)
+            # ── Intercept Next.js SSR data (/_next/data/*.json) ───────────
+            if "_next/data/" in resp.url and resp.url.endswith(".json"):
+                path_key = resp.url.split("_next/data/")[-1][:80]
+                if path_key not in _next_data_seen:
+                    _next_data_seen.add(path_key)
+                    try:
+                        nd = await resp.json()
+                        snippet = _json.dumps(nd)[:800]
+                        logger.info("[Bwin] NextData[%s]: %s", path_key[:50], snippet)
+                    except Exception as exc:
+                        logger.info("[Bwin] NextData parse error: %s", exc)
 
-            if not (is_fixtures or is_inspect):
+            # ── Parse CDS fixtures ────────────────────────────────────────
+            if "cds-api/bettingoffer/fixtures" not in resp.url:
                 return
             try:
                 body = await resp.json()
-            except Exception as exc:
-                logger.info("[Bwin] CDS resp JSON error (%s): %s",
-                            resp.url.split("cds-api/")[-1][:40], exc)
-                return
-
-            if is_inspect and not is_fixtures:
-                # Log body structure for discovery (first 600 chars)
-                import json as _json2
-                snippet = _json2.dumps(body)[:600]
-                ep = resp.url.split("cds-api/")[-1].split("?")[0][:60]
-                logger.info("[Bwin] Body[%s]: %s", ep, snippet)
-
-            # Always try to parse as CDS fixtures (same parser works for both formats)
-            try:
                 rows = _parse_cds_fixtures(body, sport_key, sport_key)
                 if rows:
                     from collections import Counter
                     leagues = Counter(r.league for r in rows)
-                    ep = resp.url.split("cds-api/")[-1].split("?")[0][:50]
-                    logger.info("[Bwin] Intercepted %s via [%s]: %d rows %s",
-                                sport_key, ep, len(rows), dict(leagues))
+                    logger.info("[Bwin] Intercepted %s: %d rows %s",
+                                sport_key, len(rows), dict(leagues))
                     captured.extend(rows)
             except Exception as exc:
-                logger.info("[Bwin] CDS parse error: %s", exc)
+                logger.info("[Bwin] CDS resp parse error: %s", exc)
 
         self._page.on("response", _on_response)
         url = self.base_url + sport_path
@@ -544,6 +533,19 @@ class BwinScraper(BasePlaywrightScraper):
         except Exception as e:
             self._log.info("[Bwin] %s: %s — continuing", sport_key, type(e).__name__)
         await self._page.wait_for_timeout(3000)
+
+        # ── Extract __NEXT_DATA__ from rendered page ──────────────────────
+        try:
+            next_data_raw = await self._page.evaluate(
+                "JSON.stringify(window.__NEXT_DATA__ || null)"
+            )
+            if next_data_raw and next_data_raw != "null":
+                nd = _json.loads(next_data_raw)
+                snippet = _json.dumps(nd)[:1000]
+                logger.info("[Bwin] __NEXT_DATA__ for %s: %s", sport_path[:40], snippet)
+        except Exception as exc:
+            logger.info("[Bwin] __NEXT_DATA__ eval error: %s", exc)
+
         self._page.remove_listener("response", _on_response)
         return captured
 
