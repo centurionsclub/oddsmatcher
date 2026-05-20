@@ -487,6 +487,12 @@ class BwinScraper(BasePlaywrightScraper):
         captured: list[MatchOdds] = []
 
         _cds_urls_seen: set = set()
+        # Endpoints to inspect for fixture data (in addition to bettingoffer/fixtures)
+        _INSPECT_ENDPOINTS = (
+            "offer-grouping/grid-view/all/regional",
+            "offer-grouping/v2/fixture-view/regional",
+            "bettingoffer/fixture-view",
+        )
 
         async def _on_response(resp: _Response) -> None:
             # Log any CDS API URL we haven't seen before (for discovery)
@@ -496,19 +502,38 @@ class BwinScraper(BasePlaywrightScraper):
                     _cds_urls_seen.add(path)
                     logger.info("[Bwin] CDS endpoint: %s", path)
 
-            if "cds-api/bettingoffer/fixtures" not in resp.url:
+            # ── Try to parse fixture data from all known endpoints ─────────
+            is_fixtures = "cds-api/bettingoffer/fixtures" in resp.url
+            is_inspect  = any(ep in resp.url for ep in _INSPECT_ENDPOINTS)
+
+            if not (is_fixtures or is_inspect):
                 return
             try:
                 body = await resp.json()
+            except Exception as exc:
+                logger.info("[Bwin] CDS resp JSON error (%s): %s",
+                            resp.url.split("cds-api/")[-1][:40], exc)
+                return
+
+            if is_inspect and not is_fixtures:
+                # Log body structure for discovery (first 600 chars)
+                import json as _json2
+                snippet = _json2.dumps(body)[:600]
+                ep = resp.url.split("cds-api/")[-1].split("?")[0][:60]
+                logger.info("[Bwin] Body[%s]: %s", ep, snippet)
+
+            # Always try to parse as CDS fixtures (same parser works for both formats)
+            try:
                 rows = _parse_cds_fixtures(body, sport_key, sport_key)
                 if rows:
                     from collections import Counter
                     leagues = Counter(r.league for r in rows)
-                    logger.info("[Bwin] Intercepted %s: %d rows %s",
-                                sport_key, len(rows), dict(leagues))
+                    ep = resp.url.split("cds-api/")[-1].split("?")[0][:50]
+                    logger.info("[Bwin] Intercepted %s via [%s]: %d rows %s",
+                                sport_key, ep, len(rows), dict(leagues))
                     captured.extend(rows)
             except Exception as exc:
-                logger.info("[Bwin] CDS resp parse error: %s", exc)
+                logger.info("[Bwin] CDS parse error: %s", exc)
 
         self._page.on("response", _on_response)
         url = self.base_url + sport_path
