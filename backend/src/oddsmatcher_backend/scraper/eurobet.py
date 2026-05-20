@@ -530,10 +530,18 @@ class EurobetScraper:
                                         logger.info("[Eurobet] %s: %d rows from /_next/data/", league_name, len(rows))
                                         return rows
                                     else:
-                                        logger.info("[Eurobet] %s /_next/data/ pageProps keys=%s | preview=%.600s",
-                                                    league_name,
-                                                    list(page_props.keys())[:10] if isinstance(page_props, dict) else "?",
-                                                    _json.dumps(page_props, ensure_ascii=False)[:600])
+                                        pp_keys = list(page_props.keys())[:10] if isinstance(page_props, dict) else "?"
+                                        logger.info("[Eurobet] %s /_next/data/ pageProps keys=%s", league_name, pp_keys)
+                                        # Dump modules structure to understand event location
+                                        mods = page_props.get("modules") if isinstance(page_props, dict) else None
+                                        if mods is not None:
+                                            logger.info("[Eurobet] %s modules type=%s len=%s | preview=%.2000s",
+                                                        league_name, type(mods).__name__,
+                                                        len(mods) if hasattr(mods, '__len__') else '?',
+                                                        _json.dumps(mods, ensure_ascii=False)[:2000])
+                                        else:
+                                            logger.info("[Eurobet] %s full pageProps preview=%.2000s",
+                                                        league_name, _json.dumps(page_props, ensure_ascii=False)[:2000])
                             elif "detail-service" in cap_url:
                                 events = _extract_events(cap_data)
                                 if events:
