@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from playwright.async_api import async_playwright, Response as _Response
+from playwright.async_api import async_playwright
 
 from oddsmatcher_backend.scraper.centroquote import MatchOdds
 
@@ -324,50 +324,54 @@ class EurobetScraper:
                 except Exception as e:
                     logger.warning("[Eurobet] Homepage warmup failed: %s", str(e)[:120])
 
-                # Navigate to each competition page and capture detail-service responses
+                # For each competition: use page.evaluate(fetch()) so the browser's
+                # session cookies (set during homepage warmup) are automatically included.
+                # The Eurobet Next.js app uses ISR — no client-side detail-service calls are
+                # made by the page JS. We must initiate them ourselves via the browser.
                 for league_name, discipline, alias, page_url in pages:
-                    captured_data: list[tuple[str, Any]] = []
-
-                    async def _on_response(
-                        resp: _Response,
-                        _lg: str = league_name,
-                        _disc: str = discipline,
-                        _cap: list = captured_data,
-                    ) -> None:
-                        url = resp.url
-                        if DETAIL_HOST_PATH not in url:
-                            return
-                        logger.info("[Eurobet] Intercepted: %s → %d", url[:120], resp.status)
-                        if resp.status != 200:
-                            return
-                        try:
-                            data = await resp.json()
-                            _cap.append((url, data))
-                        except Exception as ex:
-                            logger.info("[Eurobet] JSON parse error for %s: %s", url[:80], ex)
-
-                    page.on("response", _on_response)
-                    logger.info("[Eurobet] Navigating to %s", page_url)
+                    api_path = (
+                        f"/detail-service/sport-schedule/services/meeting"
+                        f"/{discipline}/{alias}?prematch=1&live=0"
+                    )
+                    logger.info("[Eurobet] Fetching %s via page.evaluate: %s", league_name, api_path)
                     try:
-                        await page.goto(page_url, wait_until="networkidle", timeout=45_000)
-                        logger.info("[Eurobet] %s: networkidle", league_name)
-                    except Exception as e:
-                        logger.info("[Eurobet] %s: nav error: %s", league_name, str(e)[:150])
-                    await page.wait_for_timeout(3000)
-                    page.remove_listener("response", _on_response)
+                        result = await page.evaluate(f"""
+                            async () => {{
+                                try {{
+                                    const resp = await fetch('{api_path}', {{
+                                        credentials: 'include',
+                                        headers: {{
+                                            'Accept': 'application/json',
+                                            'Accept-Language': 'it-IT,it;q=0.9'
+                                        }}
+                                    }});
+                                    if (!resp.ok) return {{error: resp.status}};
+                                    return await resp.json();
+                                }} catch(e) {{
+                                    return {{error: String(e)}};
+                                }}
+                            }}
+                        """)
+                    except Exception as exc:
+                        logger.info("[Eurobet] %s evaluate error: %s", league_name, exc)
+                        continue
 
-                    logger.info("[Eurobet] %s: %d API responses captured", league_name, len(captured_data))
-                    for url, data in captured_data:
-                        rows = _parse_detail_response(data, league_name, discipline)
-                        if rows:
-                            logger.info("[Eurobet] %s: %d rows from %s", league_name, len(rows), url[:100])
-                            all_results.extend(rows)
-                        else:
-                            preview = _json.dumps(data, ensure_ascii=False)[:200] if data else "empty"
-                            logger.info("[Eurobet] %s: 0 rows from %s — preview: %s",
-                                        league_name, url[:80], preview)
+                    if not result or not isinstance(result, dict):
+                        logger.info("[Eurobet] %s: null/non-dict result", league_name)
+                        continue
 
-                    await page.wait_for_timeout(1000)
+                    if "error" in result:
+                        logger.info("[Eurobet] %s: fetch error=%s", league_name, result["error"])
+                        continue
+
+                    preview = _json.dumps(result, ensure_ascii=False)[:300]
+                    logger.info("[Eurobet] %s: response preview: %s", league_name, preview)
+
+                    rows = _parse_detail_response(result, league_name, discipline)
+                    logger.info("[Eurobet] %s: %d rows", league_name, len(rows))
+                    all_results.extend(rows)
+
+                    await page.wait_for_timeout(500)
 
             finally:
                 await browser.close()

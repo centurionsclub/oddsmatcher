@@ -285,36 +285,6 @@ def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[Matc
     return results
 
 
-def _build_event_url_candidates(disc: int, manif: int) -> list[tuple[str, str, dict | None]]:
-    """Return a list of (method, url, body) candidates to try for events API."""
-    PFX = f"{API_BASE}/palinsesto/prematch"
-    candidates = [
-        # GET patterns — most common Italian betting API shapes
-        ("GET", f"{PFX}/avvenimentiList/{manif}",              None),
-        ("GET", f"{PFX}/avvenimentiList/{disc}/{manif}",        None),
-        ("GET", f"{PFX}/avvenimentiList/{manif}?offerId=1&metaTplEnabled=true&deep=true", None),
-        ("GET", f"{PFX}/avvenimentiList/{manif}?offerId=0&metaTplEnabled=true&deep=true", None),
-        ("GET", f"{PFX}/avvenimentiListPrematch/{manif}",       None),
-        ("GET", f"{PFX}/avvenimentiByManifestazione/{disc}/{manif}", None),
-        ("GET", f"{PFX}/avvenimentiByManifestazione/{manif}",   None),
-        ("GET", f"{PFX}/palinsestoManifestazione/{disc}/{manif}", None),
-        ("GET", f"{PFX}/palinsestoManifestazione/{manif}",      None),
-        ("GET", f"{PFX}/scommesse/{manif}",                     None),
-        ("GET", f"{PFX}/scommesse/{disc}/{manif}",              None),
-        ("GET", f"{PFX}/avvenimentiList?codiceDisciplina={disc}&codiceManifestazione={manif}", None),
-        ("GET", f"{PFX}/avvenimentiList?disciplinaId={disc}&manifestazioneId={manif}", None),
-        ("GET", f"{PFX}/avvenimentiList?manifestazioneId={manif}", None),
-        # POST patterns
-        ("POST", f"{PFX}/avvenimentiList",
-         {"codiceDisciplina": disc, "codiceManifestazione": manif}),
-        ("POST", f"{PFX}/avvenimentiList",
-         {"disciplinaId": disc, "manifestazioneId": manif}),
-        # Alternative service base
-        ("GET", f"https://{API_HOST}/api/palinsesto/prematch/avvenimentiList/{disc}/{manif}", None),
-        ("GET", f"https://{API_HOST}/api/lettura-avvenimento-sport/avvenimento/prematch/{disc}/{manif}", None),
-    ]
-    return candidates
-
 
 class SnaiScraper:
     """Snai scraper — httpx only (Playwright fails for snai.it via proxy).
@@ -360,89 +330,133 @@ class SnaiScraper:
         if not competitions:
             return []
 
-        # ── Phase 2: Discover working events endpoint ────────────────────
-        # Use the first competition to probe all candidate URLs.
+        # ── Phase 2: Discover working events endpoint via Playwright ────────
+        # We navigate Playwright to betting-snai.flutterseatech.it (proxy-accessible)
+        # then use page.evaluate(fetch()) to probe event endpoints.
+        # All httpx candidates already returned 404 — maybe browser cookies help.
         first_lg, first_sk, first_disc, first_manif = competitions[0]
-        working_pattern: tuple[str, str, dict | None] | None = None
+        working_url: str | None = None
 
-        logger.info("[Snai] Probing event endpoints for %r (disc=%d manif=%d)…",
+        logger.info("[Snai] Probing event endpoints via browser for %r (disc=%d manif=%d)…",
                     first_lg, first_disc, first_manif)
 
-        candidates = _build_event_url_candidates(first_disc, first_manif)
+        from playwright.async_api import async_playwright as _aplayw
 
-        async with httpx.AsyncClient(
-            headers=_SNAI_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
-        ) as client:
-            for method, url, body in candidates:
+        # Candidate full URLs (browser fetch, same-origin cookies)
+        PFX = f"https://{API_HOST}/api/lettura-palinsesto-sport"
+        probe_urls: list[str] = [
+            # Paths under lettura-palinsesto-sport (previously all 404 via httpx)
+            f"{PFX}/palinsesto/prematch/avvenimentiList/{first_manif}",
+            f"{PFX}/palinsesto/prematch/avvenimentiList/{first_disc}/{first_manif}",
+            # Different sub-paths within lettura-palinsesto-sport
+            f"{PFX}/scommessa/prematch/avvenimentiList/{first_manif}",
+            f"{PFX}/scommessa/prematch/avvenimentiList/{first_disc}/{first_manif}",
+            f"{PFX}/palinsesto/avvenimentiList/{first_manif}",
+            f"{PFX}/palinsesto/avvenimentiList/{first_disc}/{first_manif}",
+            f"{PFX}/palinsesto/prematch/palinsestoScommesse/{first_disc}/{first_manif}",
+            # Completely different service names
+            f"https://{API_HOST}/api/lettura-scommessa-sport/palinsesto/prematch/avvenimentiList/{first_manif}",
+            f"https://{API_HOST}/api/lettura-quota-sport/palinsesto/prematch/avvenimentiList/{first_manif}",
+            f"https://{API_HOST}/api/lettura-scommessa-sport/scommessa/prematch/{first_disc}/{first_manif}",
+            f"https://{API_HOST}/api/scommessa/palinsesto/prematch/{first_disc}/{first_manif}",
+            # Try alberaturaPrematch variant that might include events
+            f"{PFX}/palinsesto/prematch/palinsestoPrematch/{first_disc}/{first_manif}",
+        ]
+
+        proxy_dict_pw = None
+        if proxy_url:
+            import urllib.parse as _up
+            p = _up.urlparse(proxy_url)
+            proxy_dict_pw = {
+                "server": f"{p.scheme}://{p.hostname}:{p.port}",
+                "username": p.username or "",
+                "password": p.password or "",
+            }
+
+        async with _aplayw() as pw:
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+                proxy=proxy_dict_pw,
+            )
+            try:
+                context = await browser.new_context(
+                    user_agent=_UA, locale="it-IT",
+                    viewport={"width": 1280, "height": 800},
+                )
+                page = await context.new_page()
+
+                # Navigate to the working alberaturaPrematch URL to establish
+                # a session on betting-snai.flutterseatech.it
+                logger.info("[Snai] Navigating browser to flutterseatech domain…")
                 try:
-                    if method == "POST":
-                        r = await client.post(url, json=body)
-                    else:
-                        r = await client.get(url)
-                    preview = ""
-                    if r.status_code == 200:
-                        try:
-                            jdata = r.json()
-                            preview = _json.dumps(jdata, ensure_ascii=False)[:300]
-                        except Exception:
-                            preview = r.text[:200]
-                    logger.info("[Snai] %s %s → %d%s",
-                                method, url, r.status_code,
-                                f" | {preview}" if preview else "")
-                    if r.status_code == 200 and preview:
-                        # Check if the response looks like event data
-                        if any(kw in preview for kw in (
-                            "avvenimento", "descrizione", "scommesse", "quota",
-                            "events", "startDate", "dataOra", "manifesta",
-                        )):
-                            logger.info("[Snai] ✅ Working endpoint found: %s %s", method, url)
-                            working_pattern = (method, url, body)
-                            break
-                        else:
-                            logger.info("[Snai] 200 but no event data in: %s", preview[:100])
-                except Exception as exc:
-                    logger.info("[Snai] %s %s → error: %s", method, url, exc)
+                    await page.goto(
+                        ALBERATURA_URL, wait_until="domcontentloaded", timeout=20_000
+                    )
+                    logger.info("[Snai] flutterseatech domain loaded OK")
+                except Exception as e:
+                    logger.warning("[Snai] flutterseatech nav failed: %s", str(e)[:100])
 
-        if working_pattern is None:
-            logger.warning("[Snai] No working events endpoint found — all candidates returned non-200 or no data")
-            logger.warning("[Snai] Check logs above for the status codes to identify the correct pattern")
+                for candidate_url in probe_urls:
+                    try:
+                        result = await page.evaluate(f"""
+                            async () => {{
+                                try {{
+                                    const resp = await fetch('{candidate_url}', {{
+                                        credentials: 'include',
+                                        headers: {{
+                                            'Accept': 'application/json',
+                                            'Referer': 'https://www.snai.it/'
+                                        }}
+                                    }});
+                                    const text = await resp.text();
+                                    return {{status: resp.status, text: text.slice(0, 500)}};
+                                }} catch(e) {{
+                                    return {{status: 0, text: String(e)}};
+                                }}
+                            }}
+                        """)
+                    except Exception as exc:
+                        logger.info("[Snai] evaluate error for %s: %s", candidate_url[:80], exc)
+                        continue
+
+                    status = result.get("status", 0) if isinstance(result, dict) else 0
+                    text = result.get("text", "") if isinstance(result, dict) else ""
+                    logger.info("[Snai] %s → %d | %s", candidate_url[:90], status, text[:200])
+
+                    if status == 200 and any(kw in text for kw in (
+                        "avvenimento", "descrizione", "scommesse", "quota",
+                        "events", "startDate", "dataOra",
+                    )):
+                        logger.info("[Snai] ✅ Working URL found: %s", candidate_url)
+                        working_url = candidate_url
+                        break
+            finally:
+                await browser.close()
+
+        if working_url is None:
+            logger.warning("[Snai] No working events endpoint found after browser probe")
             return []
 
-        # Build the URL template from the working pattern
-        # We'll substitute disc/manif IDs for each competition
-        working_method, working_url_template, working_body_template = working_pattern
-
-        # ── Phase 3: Fetch events for each competition ───────────────────
+        # ── Phase 3: Fetch events for all competitions via httpx ─────────
+        # Derive the URL template from the working URL by replacing first IDs
         all_results: list[MatchOdds] = []
 
         async with httpx.AsyncClient(
             headers=_SNAI_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
         ) as client:
             for lg, sk, disc, manif in competitions:
-                # Substitute the IDs in the working URL
-                url = working_url_template.replace(
+                url = working_url.replace(
                     str(first_manif), str(manif)
                 ).replace(
                     str(first_disc), str(disc)
                 )
-                body = None
-                if working_body_template:
-                    body = {
-                        k: (manif if v == first_manif else (disc if v == first_disc else v))
-                        for k, v in working_body_template.items()
-                    }
-
-                logger.info("[Snai] Fetching %s (%s/%s)…", lg, disc, manif)
+                logger.info("[Snai] Fetching %s (%d/%d)…", lg, disc, manif)
                 try:
-                    if working_method == "POST":
-                        resp = await client.post(url, json=body)
-                    else:
-                        resp = await client.get(url)
-
+                    resp = await client.get(url)
                     if resp.status_code != 200:
                         logger.info("[Snai] %s → %d", lg, resp.status_code)
                         continue
-
                     data = resp.json()
                     rows = _parse_snai_events(data, lg, sk)
                     logger.info("[Snai] %s: %d rows", lg, len(rows))
