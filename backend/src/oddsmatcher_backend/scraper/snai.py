@@ -300,13 +300,22 @@ ALBERATURA_URL = (
 
 
 class SnaiScraper:
-    """Snai scraper — direct httpx calls to betting-snai.flutterseatech.it.
+    """Snai scraper — two-phase:
+    1. httpx to get alberaturaPrematch (works without auth)
+    2. Playwright to navigate snai.it sport pages and intercept flutterseatech API calls
 
-    1. GET alberaturaPrematch → log full structure to find the correct events endpoint
-    2. Try multiple endpoint patterns for each competition to find one that returns data
+    The events endpoint requires a session from snai.it — every direct httpx call
+    returns 404 regardless of path variation.
     """
 
     bookmaker_name = BOOKMAKER
+
+    # Snai sport pages
+    SPORT_PAGES: list[tuple[str, str]] = [
+        ("calcio",  "https://www.snai.it/scommesse/calcio"),
+        ("tennis",  "https://www.snai.it/scommesse/tennis"),
+        ("basket",  "https://www.snai.it/scommesse/basket"),
+    ]
 
     async def scrape_all(self) -> list[MatchOdds]:
         return await self._run(sport=None)
@@ -316,140 +325,155 @@ class SnaiScraper:
 
     async def _run(self, sport: str | None) -> list[MatchOdds]:
         import httpx
+        import urllib.parse as _urlparse
+        from playwright.async_api import async_playwright, Response as _Response
+
         proxy_url = os.environ.get("PROXY_URL")
+        proxy_dict = None
         if proxy_url:
-            import urllib.parse
-            p = urllib.parse.urlparse(proxy_url)
+            p = _urlparse.urlparse(proxy_url)
+            proxy_dict = {
+                "server": f"{p.scheme}://{p.hostname}:{p.port}",
+                "username": p.username or "",
+                "password": p.password or "",
+            }
             logger.info("[Snai] Using proxy: %s:%s", p.hostname, p.port)
 
         results: list[MatchOdds] = []
 
-        async with httpx.AsyncClient(
-            headers=_SNAI_HEADERS,
-            timeout=30,
-            follow_redirects=True,
-            proxy=proxy_url,
-        ) as client:
-            # ── Phase 1: fetch alberaturaPrematch ─────────────────────
-            logger.info("[Snai] Fetching alberaturaPrematch…")
-            try:
+        # ── Phase 1: Get competition list via httpx ─────────────────────
+        logger.info("[Snai] Fetching alberaturaPrematch…")
+        competitions: list[tuple[str, str, int, int]] = []
+        manif_to_league: dict[int, str] = {}
+        try:
+            async with httpx.AsyncClient(
+                headers=_SNAI_HEADERS, timeout=30, follow_redirects=True, proxy=proxy_url,
+            ) as client:
                 resp = await client.get(ALBERATURA_URL)
                 resp.raise_for_status()
                 alberatura = resp.json()
-                # Log the top-level keys and the first competition entry for diagnostics
-                top_keys = list(alberatura.keys()) if isinstance(alberatura, dict) else []
-                logger.info("[Snai] alberaturaPrematch top keys: %s", top_keys)
-                if isinstance(alberatura, dict):
-                    # Log first entry of manifestazioneMap with all its fields
-                    mm = alberatura.get("manifestazioneMap", {})
-                    if mm:
-                        first_key = next(iter(mm))
-                        first_val = mm[first_key]
-                        logger.info("[Snai] manifestazioneMap first entry key=%r fields=%s",
-                                    first_key, list(first_val.keys()) if isinstance(first_val, dict) else str(first_val)[:200])
-                        logger.info("[Snai] manifestazioneMap first entry: %s",
-                                    _json.dumps(first_val, ensure_ascii=False)[:500])
-            except Exception as exc:
-                logger.error("[Snai] alberaturaPrematch failed: %s", exc)
-                return results
+                logger.info("[Snai] alberaturaPrematch ok, top keys: %s",
+                            list(alberatura.keys())[:6] if isinstance(alberatura, dict) else "?")
+                competitions = self._find_competitions(alberatura, sport)
+                for lg, sk, _, mid in competitions:
+                    manif_to_league[mid] = lg
+                logger.info("[Snai] %d competitions found", len(competitions))
+        except Exception as exc:
+            logger.error("[Snai] alberaturaPrematch failed: %s", exc)
+            return results
 
-            # ── Phase 2: find competitions + try multiple endpoint patterns ──
-            competitions = self._find_competitions(alberatura, sport)
-            logger.info("[Snai] %d competitions found", len(competitions))
+        if not competitions:
+            return results
 
-            # GET endpoint patterns to try
-            GET_PATTERNS = [
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList?codiceManifestazione={mid}&offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiPrematch/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/avvenimenti/prematch/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimenti/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/avvenimentiList/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/avvenimentiPrematch/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-quote-sport/palinsesto/prematch/avvenimentiList/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/eventiPrematch/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/liveOraForCards/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/live-ora-for-cards/{mid}?offerId=0&metaTplEnabled=true&deep=true",
-            ]
+        # ── Phase 2: Use Playwright to navigate snai.it and intercept API calls ──
+        all_results: list[MatchOdds] = []
+        sport_keys_wanted = {c[1] for c in competitions}
 
-            # Use Roland Garros (manif=1634) as probe target — it's active right now
-            # Fallback to first found competition
-            probe_manif = 1634  # Roland Garros - definitely has events in May
-            probe_comp = next(
-                (c for c in competitions if c[3] == probe_manif),
-                competitions[0] if competitions else None,
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+                proxy=proxy_dict,
             )
-            working_pattern: str | None = None
-
-            if probe_comp:
-                league_name_0, sport_key_0, _, manif_id_0 = probe_comp
-                logger.info("[Snai] Probing GET endpoints for %s (manif=%d)…", league_name_0, manif_id_0)
-                for pat in GET_PATTERNS:
-                    url = pat.format(mid=manif_id_0)
-                    try:
-                        r = await client.get(url)
-                        logger.info("[Snai] PROBE GET %s → %d", url[:130], r.status_code)
-                        if r.status_code == 200:
-                            preview = r.text[:400]
-                            logger.info("[Snai] PROBE 200 preview: %s", preview)
-                            working_pattern = pat
-                            break
-                    except Exception as exc:
-                        logger.info("[Snai] PROBE error %s: %s", url[:80], exc)
-
-                # Also try POST for avvenimentiList
-                if not working_pattern:
-                    logger.info("[Snai] Trying POST variants…")
-                    post_urls = [
-                        "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList",
-                        "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList/" + str(manif_id_0),
-                    ]
-                    for post_url in post_urls:
-                        for body in [
-                            {"codiceManifestazione": manif_id_0, "offerId": 0},
-                            {"codiceManifestazione": str(manif_id_0)},
-                            [manif_id_0],
-                        ]:
-                            try:
-                                r = await client.post(post_url, json=body)
-                                logger.info("[Snai] PROBE POST %s body=%s → %d", post_url[:80], body, r.status_code)
-                                if r.status_code == 200:
-                                    preview = r.text[:400]
-                                    logger.info("[Snai] PROBE POST 200 preview: %s", preview)
-                                    break
-                            except Exception as exc:
-                                logger.info("[Snai] PROBE POST error: %s", exc)
-
-            if not working_pattern:
-                logger.error("[Snai] No working GET endpoint pattern found — giving up")
-                return results
-
-            logger.info("[Snai] Using pattern: %s", working_pattern)
-
-            for league_name, sport_key, disc_id, manif_id in competitions:
-                url = working_pattern.format(mid=manif_id)
-                logger.info("[Snai] Fetching %s (manif=%d)…", league_name, manif_id)
+            try:
+                context = await browser.new_context(
+                    user_agent=_UA,
+                    locale="it-IT",
+                    timezone_id="Europe/Rome",
+                    viewport={"width": 1280, "height": 800},
+                )
                 try:
-                    resp = await client.get(url)
-                    if resp.status_code == 404:
-                        logger.info("[Snai] %s: 404 (no events)", league_name)
+                    from playwright_stealth import stealth_async as _stealth_async
+                    page = await context.new_page()
+                    await _stealth_async(page)
+                    logger.info("[Snai] playwright-stealth applied")
+                except ImportError:
+                    page = await context.new_page()
+                    logger.warning("[Snai] playwright-stealth not installed")
+
+                for sport_key, sport_url in self.SPORT_PAGES:
+                    if sport and sport_key != sport:
                         continue
-                    resp.raise_for_status()
-                    body = resp.json()
-                except Exception as exc:
-                    logger.error("[Snai] %s: request failed: %s", league_name, exc)
-                    continue
+                    if sport_key not in sport_keys_wanted:
+                        continue
 
-                preview = _json.dumps(body, ensure_ascii=False)[:300] if body else "empty"
-                logger.info("[Snai] %s preview: %s", league_name, preview)
+                    captured: list[MatchOdds] = []
 
-                rows = _parse_snai_events(body, league_name, sport_key)
-                logger.info("[Snai] %s: %d rows", league_name, len(rows))
-                results.extend(rows)
+                    async def _on_response(
+                        resp: _Response,
+                        _sk: str = sport_key,
+                        _cap: list = captured,
+                        _m2l: dict = manif_to_league,
+                    ) -> None:
+                        url = resp.url
+                        if API_HOST not in url:
+                            return
+                        logger.info("[Snai] Intercepted (sport=%s) status=%s: %s",
+                                    _sk, resp.status, url[:140])
+                        if resp.status != 200:
+                            return
+                        try:
+                            data = await resp.json()
+                            # Identify league from manif_id in URL
+                            import re as _re
+                            mid_m = _re.search(r"/(\d{3,6})\b", url)
+                            league_name: str | None = None
+                            if mid_m:
+                                league_name = _m2l.get(int(mid_m.group(1)))
+                            if not league_name:
+                                # Try each league and take first that parses rows
+                                for lg, sk, _, _ in competitions:
+                                    if sk == _sk:
+                                        rows = _parse_snai_events(data, lg, sk)
+                                        if rows:
+                                            league_name = lg
+                                            _cap.extend(rows)
+                                            logger.info("[Snai] %d rows parsed (league=%s) from %s",
+                                                        len(rows), lg, url[:80])
+                                            return
+                                preview = _json.dumps(data, ensure_ascii=False)[:200] if data else "empty"
+                                logger.info("[Snai] 0 rows from %s — preview: %s", url[:80], preview)
+                                return
+                            rows = _parse_snai_events(data, league_name, _sk)
+                            if rows:
+                                logger.info("[Snai] %d rows parsed (league=%s) from %s",
+                                            len(rows), league_name, url[:80])
+                                _cap.extend(rows)
+                            else:
+                                preview = _json.dumps(data, ensure_ascii=False)[:200] if data else "empty"
+                                logger.info("[Snai] 0 rows (league=%s) from %s — preview: %s",
+                                            league_name, url[:80], preview)
+                        except Exception as exc:
+                            logger.info("[Snai] Parse error for %s: %s", url[:80], exc)
 
-        logger.info("[Snai] Total rows: %d", len(results))
-        return results
+                    page.on("response", _on_response)
+                    logger.info("[Snai] Navigating to %s", sport_url)
+                    try:
+                        await page.goto(sport_url, wait_until="networkidle", timeout=45_000)
+                        logger.info("[Snai] %s: networkidle", sport_key)
+                    except Exception as e:
+                        logger.info("[Snai] %s navigation: %s", sport_key, str(e)[:200])
+                    await page.wait_for_timeout(3000)
+                    page.remove_listener("response", _on_response)
+
+                    # Deduplicate by (event_name, market)
+                    seen: dict[tuple[str, str], MatchOdds] = {}
+                    for r in captured:
+                        seen[(r.event_name, r.market)] = r
+                    deduped = list(seen.values())
+                    n_events = len({r.event_name for r in deduped})
+                    logger.info("[Snai] %s: %d events, %d market rows (after dedup)",
+                                sport_key, n_events, len(deduped))
+                    all_results.extend(deduped)
+
+                    import asyncio as _asyncio
+                    await _asyncio.sleep(2.0)
+
+            finally:
+                await browser.close()
+
+        logger.info("[Snai] Total rows: %d", len(all_results))
+        return all_results
 
     def _find_competitions(
         self, alberatura: dict, sport_filter: str | None

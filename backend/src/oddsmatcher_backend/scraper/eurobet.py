@@ -366,101 +366,101 @@ class EurobetScraper:
                     page = await context.new_page()
                     logger.warning("[Eurobet] playwright-stealth not installed")
 
-                # Navigate to calcio page and extract SSR data via window.__NEXT_DATA__
-                # The page uses Next.js SSR — odds are embedded in the initial page data,
-                # not loaded client-side via Kambi CDN (which rate-limits the proxy IP).
-                logger.info("[Eurobet] Navigating to calcio page to read __NEXT_DATA__…")
-                try:
-                    await page.goto(
-                        "https://www.eurobet.it/it/scommesse/sport/calcio/",
-                        wait_until="domcontentloaded",
-                        timeout=45_000,
-                    )
-                    logger.info("[Eurobet] Calcio page loaded")
-                except Exception as e:
-                    logger.info("[Eurobet] Calcio page load error: %s — continuing", type(e).__name__)
-
-                # Read window.__NEXT_DATA__ which contains all SSR props
-                try:
-                    next_data = await page.evaluate("() => window.__NEXT_DATA__")
-                    preview = _json.dumps(next_data, ensure_ascii=False)[:500] if next_data else "null"
-                    logger.info("[Eurobet] __NEXT_DATA__ preview: %s", preview)
-                    if next_data:
-                        # Log all top-level keys recursively to find odds structure
-                        def _log_keys(obj, prefix="", depth=0):
-                            if depth > 3:
-                                return
-                            if isinstance(obj, dict):
-                                logger.info("[Eurobet] __NEXT_DATA__ keys at %s: %s", prefix or "root", list(obj.keys())[:20])
-                                for k, v in obj.items():
-                                    if isinstance(v, (dict, list)) and depth < 2:
-                                        _log_keys(v, f"{prefix}.{k}", depth + 1)
-                            elif isinstance(obj, list) and obj:
-                                logger.info("[Eurobet] __NEXT_DATA__ list at %s len=%d first=%s",
-                                            prefix, len(obj),
-                                            _json.dumps(obj[0], ensure_ascii=False)[:200] if obj else "")
-                        _log_keys(next_data)
-                except Exception as exc:
-                    logger.info("[Eurobet] __NEXT_DATA__ read error: %s", exc)
-
-                # Also try reading from the _next/data URL directly via httpx
-                # using cookies from the browser session
-                cookies = await context.cookies()
-                cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
-                logger.info("[Eurobet] Browser cookies count: %d", len(cookies))
-
-                # Get current page URL to extract buildId
-                current_url = page.url
-                logger.info("[Eurobet] Current page URL: %s", current_url)
+                # Navigate to the Serie A competition page (more likely pre-generated)
+                # and intercept ALL JSON responses for 30 seconds.
+                # The sport overview is SSG isFallback=true — specific competition pages
+                # should be pre-generated with actual odds data embedded.
+                competition_pages: list[tuple[str, str]] = []
+                if not sport_filter or sport_filter == "calcio":
+                    competition_pages += [
+                        ("calcio", "https://www.eurobet.it/it/scommesse/calcio/serie-a/"),
+                        ("calcio", "https://www.eurobet.it/it/scommesse/calcio/champions-league/"),
+                        ("calcio", "https://www.eurobet.it/it/scommesse/calcio/premier-league/"),
+                    ]
+                if not sport_filter or sport_filter == "tennis":
+                    competition_pages += [
+                        ("tennis", "https://www.eurobet.it/it/scommesse/tennis/roland-garros/"),
+                    ]
+                if not sport_filter or sport_filter == "basket":
+                    competition_pages += [
+                        ("basket", "https://www.eurobet.it/it/scommesse/basket/nba/"),
+                    ]
 
                 import httpx as _httpx
                 import re as _re
-                # Try to extract buildId from _next/data URL pattern seen in previous logs
-                # Pattern: /_next/data/{buildId}/it/...
-                try:
-                    page_html = await page.content()
-                    build_match = _re.search(r'"buildId"\s*:\s*"([^"]+)"', page_html)
-                    if build_match:
-                        build_id = build_match.group(1)
-                        logger.info("[Eurobet] buildId: %s", build_id)
-                        # Fetch the _next/data endpoint for each sport via httpx
-                        async with _httpx.AsyncClient(
-                            headers={**_HEADERS, "Cookie": cookie_header},
-                            timeout=20,
-                            follow_redirects=True,
-                        ) as hclient:
-                            for sport_key, _ in self.SPORT_PAGES:
-                                if sport_filter and sport_key != sport_filter:
-                                    continue
-                                next_url = (
-                                    f"https://www.eurobet.it/_next/data/{build_id}"
-                                    f"/it/scommesse/sport/{sport_key}.json"
-                                    f"?language=it&discipline=sport&meeting={sport_key}"
-                                )
-                                logger.info("[Eurobet] Fetching _next/data for %s: %s", sport_key, next_url[:120])
+
+                for sport_key, comp_url in competition_pages:
+                    captured: list[MatchOdds] = []
+                    captured_json_urls: list[str] = []
+
+                    async def _on_resp(
+                        resp: _Response,
+                        _sk: str = sport_key,
+                        _cap: list = captured,
+                        _urls: list = captured_json_urls,
+                    ) -> None:
+                        url = resp.url
+                        ct = resp.headers.get("content-type", "")
+                        # Log any JSON-looking response from eurobet.it or kambi
+                        if ("eurobet.it" in url or "kambi" in url) and "json" in ct:
+                            logger.info("[Eurobet] JSON resp (sport=%s) %d: %s", _sk, resp.status, url[:120])
+                            if resp.status == 200:
+                                _urls.append(url)
                                 try:
-                                    r = await hclient.get(next_url)
-                                    logger.info("[Eurobet] _next/data %s → %d", sport_key, r.status_code)
-                                    if r.status_code == 200:
-                                        data = r.json()
-                                        preview = _json.dumps(data, ensure_ascii=False)[:600]
-                                        logger.info("[Eurobet] _next/data %s preview: %s", sport_key, preview)
-                                        # Try to find Kambi events in the page props
-                                        rows = _parse_kambi_events_sport(
-                                            data, sport_key, wanted_leagues.get(sport_key, set())
-                                        )
-                                        if rows:
-                                            logger.info("[Eurobet] %s: %d rows from _next/data", sport_key, len(rows))
-                                            seen: dict[tuple[str, str], MatchOdds] = {}
-                                            for r2 in rows:
-                                                seen[(r2.event_name, r2.market)] = r2
-                                            all_results.extend(seen.values())
+                                    data = await resp.json()
+                                    rows = _parse_kambi_events_sport(data, _sk, wanted_leagues.get(_sk, set()))
+                                    if rows:
+                                        logger.info("[Eurobet] %d rows from %s", len(rows), url[:80])
+                                        _cap.extend(rows)
+                                    else:
+                                        preview = _json.dumps(data, ensure_ascii=False)[:300]
+                                        logger.info("[Eurobet] 0 rows from %s — preview: %s", url[:60], preview)
                                 except Exception as exc:
-                                    logger.info("[Eurobet] _next/data error for %s: %s", sport_key, exc)
-                    else:
-                        logger.info("[Eurobet] buildId not found in page HTML")
+                                    logger.info("[Eurobet] parse error %s: %s", url[:60], exc)
+
+                    page.on("response", _on_resp)
+                    logger.info("[Eurobet] Navigating to %s", comp_url)
+                    try:
+                        await page.goto(comp_url, wait_until="networkidle", timeout=45_000)
+                        logger.info("[Eurobet] networkidle reached for %s", sport_key)
+                    except Exception as e:
+                        logger.info("[Eurobet] %s nav error: %s", sport_key, str(e)[:100])
+                    # Wait 20s for client-side data loading after SSG fallback
+                    await page.wait_for_timeout(20_000)
+                    page.remove_listener("response", _on_resp)
+                    logger.info("[Eurobet] %s: captured %d JSON URLs, %d rows",
+                                sport_key, len(captured_json_urls), len(captured))
+
+                    seen: dict[tuple[str, str], MatchOdds] = {}
+                    for r2 in captured:
+                        seen[(r2.event_name, r2.market)] = r2
+                    deduped = list(seen.values())
+                    n_events = len({r2.event_name for r2 in deduped})
+                    logger.info("[Eurobet] %s: %d events, %d rows (after dedup)",
+                                sport_key, n_events, len(deduped))
+                    all_results.extend(deduped)
+                    await asyncio.sleep(1.0)
+
+                # Also fetch scommesse.model.json to explore if it has odds data
+                try:
+                    cookies = await context.cookies()
+                    cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
+                    async with _httpx.AsyncClient(
+                        headers={**_HEADERS, "Cookie": cookie_header},
+                        timeout=15,
+                        follow_redirects=True,
+                    ) as hclient:
+                        model_url = "https://www.eurobet.it/it/scommesse.model.json"
+                        r = await hclient.get(model_url)
+                        logger.info("[Eurobet] scommesse.model.json → %d", r.status_code)
+                        if r.status_code == 200:
+                            model_data = r.json()
+                            preview = _json.dumps(model_data, ensure_ascii=False)[:600]
+                            logger.info("[Eurobet] scommesse.model.json preview: %s", preview)
+                            if isinstance(model_data, dict):
+                                logger.info("[Eurobet] scommesse.model.json top keys: %s", list(model_data.keys())[:20])
                 except Exception as exc:
-                    logger.info("[Eurobet] buildId extraction error: %s", exc)
+                    logger.info("[Eurobet] scommesse.model.json error: %s", exc)
 
             finally:
                 await browser.close()
