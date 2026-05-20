@@ -490,23 +490,40 @@ class EurobetScraper:
                         logger.warning("[Eurobet] Warmup navigation error: %s", wup_e)
 
                     async def _fetch_league(league_name: str, discipline: str, alias: str) -> list[MatchOdds]:
-                        """Navigate to league page, intercept detail-service response."""
+                        """Navigate to league page; extract data from __NEXT_DATA__ or intercepted API."""
                         bet_url = f"https://www.eurobet.it/it/scommesse/{discipline}/{alias}"
                         captured: dict[str, Any] = {}
                         captured_lock = asyncio.Lock()
+                        all_urls_seen: list[str] = []
 
                         async def on_response(response) -> None:
                             url = response.url
-                            if "detail-service" in url and "meeting" in url:
+                            ct = response.headers.get("content-type", "")
+                            # Log ALL non-static responses for diagnostics
+                            if not any(ext in url for ext in (".js", ".css", ".png", ".svg", ".woff", ".ico")):
+                                all_urls_seen.append(f"{response.status} {url[:120]}")
+                            # Capture any JSON response that might have betting data
+                            if "json" in ct or any(kw in url for kw in (
+                                "detail-service", "sport-schedule", "_next/data", "api/", "meeting",
+                                "prematch", "scommesse", "palinsesto"
+                            )):
                                 try:
                                     body = await response.json()
                                     async with captured_lock:
                                         captured[url] = body
-                                    logger.info("[Eurobet] %s detail-service: code=%s desc=%s len=%d",
-                                                league_name,
-                                                body.get("code") if isinstance(body, dict) else "?",
-                                                str(body.get("description") or "")[:60] if isinstance(body, dict) else "?",
-                                                len(str(body)))
+                                    if isinstance(body, dict) and any(kw in str(body) for kw in (
+                                        "betGroupList", "eventList", "betGroups", "descrizione",
+                                        "startDate", "dataOra", "avveniment",
+                                    )):
+                                        logger.info("[Eurobet] %s MATCH url=%s code=%s keys=%s",
+                                                    league_name, url[:100],
+                                                    body.get("code") if isinstance(body, dict) else "?",
+                                                    list(body.keys())[:8] if isinstance(body, dict) else "?")
+                                    elif "detail-service" in url or "_next/data" in url:
+                                        logger.info("[Eurobet] %s API url=%s status=%d keys=%s preview=%.200s",
+                                                    league_name, url[:100], response.status,
+                                                    list(body.keys())[:8] if isinstance(body, dict) else type(body).__name__,
+                                                    str(body)[:200])
                                 except Exception:
                                     pass
 
@@ -519,18 +536,54 @@ class EurobetScraper:
                         finally:
                             page.remove_listener("response", on_response)
 
+                        # Diagnostic: log all URLs seen (first league only)
+                        if league_name == meetings[0][0]:
+                            logger.info("[Eurobet] %s all responses (%d): %s",
+                                        league_name, len(all_urls_seen),
+                                        " | ".join(all_urls_seen[:30]))
+
+                        # Strategy 1: Check captured JSON responses for event data
                         for cap_url, cap_data in captured.items():
                             if isinstance(cap_data, dict) and cap_data.get("code") in (1, "1"):
                                 events = _extract_events(cap_data)
                                 if events:
                                     rows = _parse_events(events, league_name, discipline)
-                                    logger.info("[Eurobet] %s: %d events, %d rows", league_name, len(events), len(rows))
+                                    logger.info("[Eurobet] %s: %d events, %d rows (from API)", league_name, len(events), len(rows))
                                     return rows
+
+                        # Strategy 2: Extract __NEXT_DATA__ from page HTML
+                        try:
+                            html = await page.content()
+                            nd_m = re.search(r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+                            if nd_m:
+                                nd_text = nd_m.group(1)
+                                nd_data = _json.loads(nd_text)
+                                props = nd_data.get("props", {}).get("pageProps", {})
+                                is_fallback = nd_data.get("isFallback", False)
+                                logger.info("[Eurobet] %s NEXT_DATA: isFallback=%s pageProps keys=%s",
+                                            league_name, is_fallback, list(props.keys())[:10])
+                                if props and any(kw in str(props) for kw in (
+                                    "betGroupList", "eventList", "betGroups", "avveniment"
+                                )):
+                                    events = _extract_events(props)
+                                    if events:
+                                        rows = _parse_events(events, league_name, discipline)
+                                        logger.info("[Eurobet] %s: %d events, %d rows (from NEXT_DATA)", league_name, len(events), len(rows))
+                                        return rows
+                                    else:
+                                        logger.info("[Eurobet] %s NEXT_DATA has event keywords but extract failed | preview=%.400s",
+                                                    league_name, str(props)[:400])
+                                elif is_fallback:
+                                    logger.info("[Eurobet] %s NEXT_DATA: isFallback=True, page not yet hydrated | pageProps=%.200s",
+                                                league_name, str(props)[:200])
                                 else:
-                                    logger.info("[Eurobet] %s: events not extracted from code=1 response | keys=%s | preview=%.400s",
-                                                league_name,
-                                                list(cap_data.keys())[:10],
-                                                _json.dumps(cap_data, ensure_ascii=False)[:400])
+                                    logger.info("[Eurobet] %s NEXT_DATA: no event data | pageProps preview=%.300s",
+                                                league_name, str(props)[:300])
+                            else:
+                                logger.info("[Eurobet] %s: no __NEXT_DATA__ found in HTML (len=%d)", league_name, len(html))
+                        except Exception as nd_err:
+                            logger.warning("[Eurobet] %s NEXT_DATA extraction error: %s", league_name, nd_err)
+
                         logger.info("[Eurobet] %s: 0 rows", league_name)
                         return []
 
