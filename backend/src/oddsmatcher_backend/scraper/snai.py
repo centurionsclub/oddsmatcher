@@ -353,7 +353,6 @@ class SnaiScraper:
         # ── Phase 3: Fetch odds per event via schedaAvvenimento ──────────
         logger.info("[Snai] Fetching odds per event via schedaAvvenimento…")
         all_results: list[MatchOdds] = []
-        first_diag_done = False
 
         async with httpx.AsyncClient(
             headers=_SNAI_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
@@ -361,6 +360,7 @@ class SnaiScraper:
             for mid, evs in our_events.items():
                 lg, sk = manif_to_league[mid]
                 league_rows: list[MatchOdds] = []
+                league_diag_done = False
 
                 for ev in evs[:40]:  # cap per league to avoid timeout
                     ev_key = ev.get("key") or (
@@ -375,22 +375,22 @@ class SnaiScraper:
 
                         odds_data = resp.json()
 
-                        # Diagnostic: log structure of first event across ALL leagues
-                        if not first_diag_done and isinstance(odds_data, dict):
-                            first_diag_done = True
+                        # Diagnostic: log structure of first event per league
+                        if not league_diag_done and isinstance(odds_data, dict):
+                            league_diag_done = True
                             s_map = odds_data.get("scommessaMap") or {}
                             ia_map = odds_data.get("infoAggiuntivaMap") or {}
-                            s_summary = {k: {"cod": v.get("codiceScommessa"), "desc": v.get("descrizione")} for k,v in list(s_map.items())[:5]} if isinstance(s_map, dict) else s_map
+                            s_summary = {k: {"cod": v.get("codiceScommessa"), "desc": v.get("descrizione"), "stato": v.get("stato")} for k,v in list(s_map.items())[:5]} if isinstance(s_map, dict) else {}
                             ia_keys = list(ia_map.keys())[:3] if isinstance(ia_map, dict) else []
                             ia_first = {}
                             if ia_keys:
                                 ia_v = ia_map[ia_keys[0]]
-                                ia_first = {"cod_s": ia_v.get("codiceScommessa"), "esitoList_len": len(ia_v.get("esitoList") or []), "first_esito": (ia_v.get("esitoList") or [{}])[0] if ia_v.get("esitoList") else None}
-                            logger.info("[Snai] DIAG event=%s cluster=%s scommessaMap=%s ia_keys=%s ia_first=%s",
-                                ev_key,
+                                esiti = ia_v.get("esitoList") or []
+                                ia_first = {"cod_s": ia_v.get("codiceScommessa"), "esitoList_len": len(esiti), "first_esito": esiti[0] if esiti else None}
+                            logger.info("[Snai] DIAG %s event=%s cluster=%s scommessaMap=%s ia_first=%s",
+                                lg, ev_key,
                                 odds_data.get("codiceClusterSelected"),
                                 _json.dumps(s_summary, ensure_ascii=False),
-                                ia_keys,
                                 _json.dumps(ia_first, ensure_ascii=False),
                             )
 
