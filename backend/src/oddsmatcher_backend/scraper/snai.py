@@ -533,74 +533,57 @@ class SnaiScraper:
             async with httpx.AsyncClient(
                 headers=_SNAI_HEADERS, timeout=15, follow_redirects=True, proxy=proxy_url,
             ) as client:
-                # ── Step 1: Probe Spring Boot actuator sub-endpoints ──────────
+                # ── Step 1: Fetch FULL loggers to discover class/controller names ──
                 _ACTUATOR_BASE = f"https://{API_HOST}/api/lettura-palinsesto-sport/actuator"
-                # First get the actuator _links to see what's exposed
                 try:
-                    act_resp = await client.get(_ACTUATOR_BASE)
-                    logger.info("[Snai] ACTUATOR root → %d | FULL=%s",
-                                act_resp.status_code, act_resp.text[:2000])
-                    if act_resp.status_code == 200:
-                        # Parse links and probe each one
-                        try:
-                            act_data = act_resp.json()
-                            links = act_data.get("_links", {})
-                            logger.info("[Snai] ACTUATOR links available: %s", list(links.keys()))
-                            for link_name, link_info in links.items():
-                                href = link_info.get("href", "") if isinstance(link_info, dict) else ""
-                                if not href or link_name in ("health", "health-path"):
-                                    continue
+                    log_resp = await client.get(f"{_ACTUATOR_BASE}/loggers")
+                    if log_resp.status_code == 200:
+                        log_data = log_resp.json()
+                        all_loggers = list((log_data.get("loggers") or {}).keys())
+                        logger.info("[Snai] ALL logger names (%d): %s",
+                                    len(all_loggers), all_loggers)
+                        # Extract Sisal-specific packages
+                        sisal_loggers = [l for l in all_loggers if "sisal" in l.lower() or "snai" in l.lower() or "palinsesto" in l.lower() or "scommessa" in l.lower()]
+                        logger.info("[Snai] Sisal/Snai logger names: %s", sisal_loggers)
+                except Exception as e:
+                    logger.info("[Snai] loggers fetch error: %s", e)
+
+                # ── Step 2: Probe Snai website JS for API patterns ──────────────
+                try:
+                    snai_resp = await client.get("https://www.snai.it/scommesse/calcio/premier-league",
+                                                 follow_redirects=True)
+                    logger.info("[Snai] www.snai.it page → %d | type=%s | len=%d",
+                                snai_resp.status_code,
+                                snai_resp.headers.get("content-type","?"),
+                                len(snai_resp.text))
+                    if snai_resp.status_code == 200:
+                        # Look for API URL patterns in the HTML
+                        import re as _re
+                        api_patterns = _re.findall(r'["\']([^"\']*betting-snai[^"\']*)["\']',
+                                                   snai_resp.text)
+                        logger.info("[Snai] API patterns in HTML: %s", api_patterns[:20])
+                        # Look for JS bundle URLs
+                        js_urls = _re.findall(r'src=["\']([^"\']+\.js[^"\']*)["\']',
+                                              snai_resp.text)
+                        logger.info("[Snai] JS bundles found: %s", js_urls[:10])
+                        if js_urls:
+                            # Fetch first significant JS bundle and look for API calls
+                            for js_url in js_urls[:3]:
+                                if not js_url.startswith("http"):
+                                    js_url = "https://www.snai.it" + js_url
                                 try:
-                                    sub_resp = await client.get(href)
-                                    logger.info("[Snai] ACTUATOR/%s → %d | FULL=%.2000s",
-                                                link_name, sub_resp.status_code, sub_resp.text)
-                                except Exception as sub_exc:
-                                    logger.info("[Snai] ACTUATOR/%s error: %s", link_name, sub_exc)
-                        except Exception as parse_exc:
-                            logger.info("[Snai] ACTUATOR parse error: %s", parse_exc)
-                except Exception as act_exc:
-                    logger.info("[Snai] ACTUATOR probe error: %s", act_exc)
-
-                # ── Step 2: Probe known useful actuator paths directly ──────────
-                for sub in ("httptrace", "httpexchanges", "beans", "env", "info",
-                            "mappings", "caches", "metrics", "scheduledtasks"):
-                    try:
-                        r = await client.get(f"{_ACTUATOR_BASE}/{sub}")
-                        logger.info("[Snai] ACTUATOR/%s → %d | %.1500s",
-                                    sub, r.status_code, r.text)
-                    except Exception as e:
-                        logger.info("[Snai] ACTUATOR/%s error: %s", sub, e)
-
-                # ── Step 3: Fetch avvenimentiPrematch?codiceManifestazione=209 ──
-                # (Serie A - previous run flagged this as a discovery hit)
-                _manif_ids = [str(m) for m in list(manif_to_league.keys())[:4]]
-                for manif_id_str in _manif_ids:
-                    try:
-                        r209 = await client.get(
-                            f"{PFX}/palinsesto/prematch/avvenimentiPrematch?codiceManifestazione={manif_id_str}"
-                        )
-                        if r209.status_code == 200:
-                            try:
-                                d209 = r209.json()
-                                if isinstance(d209, dict):
-                                    logger.info("[Snai] avvenimentiPrematch?manif=%s TOP keys: %s",
-                                                manif_id_str, list(d209.keys()))
-                                    for k, v in d209.items():
-                                        if isinstance(v, dict) and v:
-                                            first_v = next(iter(v.values()), {})
-                                            logger.info("[Snai] avvenimentiPrematch[%r] dict(%d) | first-keys=%s | first=%.300s",
-                                                        k, len(v),
-                                                        list(first_v.keys())[:12] if isinstance(first_v, dict) else "?",
-                                                        _json.dumps(first_v, ensure_ascii=False)[:300])
-                                        elif isinstance(v, list):
-                                            logger.info("[Snai] avvenimentiPrematch[%r] list(%d)", k, len(v))
-                                        else:
-                                            logger.info("[Snai] avvenimentiPrematch[%r] = %s", k, str(v)[:100])
-                            except Exception:
-                                logger.info("[Snai] avvenimentiPrematch?manif=%s raw=%.500s",
-                                            manif_id_str, r209.text)
-                    except Exception as e:
-                        logger.info("[Snai] avvenimentiPrematch?manif=%s error: %s", manif_id_str, e)
+                                    js_resp = await client.get(js_url)
+                                    if js_resp.status_code == 200:
+                                        js_text = js_resp.text
+                                        # Find API call patterns
+                                        api_calls = _re.findall(r'["\']([^"\']*palinsesto[^"\']*)["\']',
+                                                                js_text)
+                                        logger.info("[Snai] JS bundle %s → api_calls=%s",
+                                                    js_url[:80], api_calls[:20])
+                                except Exception as js_e:
+                                    logger.info("[Snai] JS fetch error: %s", js_e)
+                except Exception as snai_e:
+                    logger.info("[Snai] www.snai.it probe error: %s", snai_e)
 
         if working_odds_template is None:
             logger.warning("[Snai] No working odds endpoint found — logging full first event for analysis")

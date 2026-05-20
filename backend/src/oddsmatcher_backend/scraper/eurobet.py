@@ -472,15 +472,75 @@ class EurobetScraper:
                     except Exception as exc:
                         logger.info("[Eurobet] GET action=%s error: %s", action, str(exc)[:60])
 
-            # ── Try web.eurobet.it root and other discovery paths ──────────────────
+            # ── Swagger/OpenAPI on integration-bridge (Spring Boot) ────────────────
             if not working_url_template:
-                for disc_path in ["/", "/webeb/", "/webeb/services", "/api/", "/rest/"]:
+                swagger_paths = [
+                    f"{WEB_BASE}/integration-bridge/swagger-ui.html",
+                    f"{WEB_BASE}/integration-bridge/swagger-ui/",
+                    f"{WEB_BASE}/integration-bridge/v3/api-docs",
+                    f"{WEB_BASE}/integration-bridge/v2/api-docs",
+                    f"{WEB_BASE}/integration-bridge/openapi",
+                    f"{WEB_BASE}/integration-bridge/openapi.json",
+                ]
+                for sw_url in swagger_paths:
                     try:
-                        r = await client.get(f"{WEB_BASE}{disc_path}")
-                        logger.info("[Eurobet] ROOT %s → %d | %.400s",
-                                    disc_path, r.status_code, r.text)
+                        r = await client.get(sw_url)
+                        logger.info("[Eurobet] SWAGGER %s → %d | %.600s",
+                                    sw_url, r.status_code, r.text)
+                        if r.status_code == 200 and any(kw in r.text for kw in
+                                                        ("openapi", "swagger", "paths", "components")):
+                            logger.info("[Eurobet] ✅ SWAGGER found! full=%.3000s", r.text)
+                            break
                     except Exception as e:
-                        logger.info("[Eurobet] ROOT %s error: %s", disc_path, str(e)[:60])
+                        logger.info("[Eurobet] SWAGGER %s error: %s", sw_url, str(e)[:60])
+
+            # ── Try Eurobet mobile/alternative domains ──────────────────────────
+            if not working_url_template:
+                alt_bases = [
+                    "https://m.eurobet.it",
+                    "https://api.eurobet.it",
+                    "https://mobile.eurobet.it",
+                ]
+                for alt_base in alt_bases:
+                    try:
+                        test_url = f"{alt_base}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0"
+                        r = await client.get(test_url)
+                        logger.info("[Eurobet] ALT %s → %d | %.400s",
+                                    test_url[:100], r.status_code, r.text)
+                        if r.status_code == 200 and any(kw in r.text for kw in
+                                                        ("description", "betGroupList", "events")):
+                            logger.info("[Eurobet] ✅ ALT domain works: %s", alt_base)
+                            break
+                    except Exception as e:
+                        logger.info("[Eurobet] ALT %s error: %s", alt_base, str(e)[:60])
+
+            # ── webeb/rest action log: try lower/upper/mixed case + short names ──
+            if not working_url_template:
+                extra_actions = [
+                    # Very short / simple
+                    "odds", "schedule", "events", "prematch", "meeting", "sport",
+                    "calendar", "bet", "quote", "scommessa",
+                    # Lowercase Italian
+                    "getpalinsesto", "getavvenimenti", "getscommesse", "getquote",
+                    # Upper case
+                    "ODDS", "SCHEDULE", "GET_EVENTS", "GET_ODDS",
+                    # camelCase specific Eurobet patterns
+                    "getOddsForMeeting", "getEventsForMeeting", "getScheduleForSport",
+                    "loadPrematch", "loadSchedule", "loadOdds",
+                    "estraiPalinsesto", "leggiPalinsesto", "leggiScommesse",
+                ]
+                for action in extra_actions:
+                    try:
+                        body = {"action": action, "sport": first_disc, "meeting": first_alias}
+                        r = await client.post(f"{WEB_BASE}/webeb/rest", json=body)
+                        if r.status_code == 200 and "valid 'action' value" not in r.text:
+                            logger.info("[Eurobet] ✅ EXTRA action=%s → 200 | %.500s",
+                                        action, r.text)
+                            break
+                        elif r.status_code == 200:
+                            pass  # still "invalid action" - skip logging
+                    except Exception as e:
+                        logger.info("[Eurobet] EXTRA action=%s error: %s", action, str(e)[:40])
 
         if working_url_template is None:
             logger.warning("[Eurobet] No working API found — all probes failed")
