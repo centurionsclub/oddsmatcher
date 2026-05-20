@@ -486,29 +486,24 @@ class BwinScraper(BasePlaywrightScraper):
         assert self._page is not None
         captured: list[MatchOdds] = []
 
-        _cds_urls_seen: set = set()
-        _next_data_seen: set = set()
+        _req_urls_seen: set = set()
+
+        async def _on_request(req) -> None:
+            """Log all unique request URLs for discovery."""
+            u = req.url
+            # Log every unique URL containing fixture-like keywords
+            key = u.split("?")[0]
+            if key not in _req_urls_seen and any(kw in u for kw in (
+                "fixture", "competition", "sport", "offer", "event", "match", "grid"
+            )):
+                _req_urls_seen.add(key)
+                # Include query string for bettingoffer/fixtures (contains competitionIds)
+                if "bettingoffer/fixtures" in u:
+                    logger.info("[Bwin] REQ fixtures: %s", u[:400])
+                else:
+                    logger.info("[Bwin] REQ: %s", key[:120])
 
         async def _on_response(resp: _Response) -> None:
-            # Log any CDS API URL we haven't seen before (for discovery)
-            if "cds-api" in resp.url:
-                path = resp.url.split("?")[0].split("cds-api/")[-1][:80]
-                if path not in _cds_urls_seen:
-                    _cds_urls_seen.add(path)
-                    logger.info("[Bwin] CDS endpoint: %s", path)
-
-            # ── Intercept Next.js SSR data (/_next/data/*.json) ───────────
-            if "_next/data/" in resp.url and resp.url.endswith(".json"):
-                path_key = resp.url.split("_next/data/")[-1][:80]
-                if path_key not in _next_data_seen:
-                    _next_data_seen.add(path_key)
-                    try:
-                        nd = await resp.json()
-                        snippet = _json.dumps(nd)[:800]
-                        logger.info("[Bwin] NextData[%s]: %s", path_key[:50], snippet)
-                    except Exception as exc:
-                        logger.info("[Bwin] NextData parse error: %s", exc)
-
             # ── Parse CDS fixtures ────────────────────────────────────────
             if "cds-api/bettingoffer/fixtures" not in resp.url:
                 return
@@ -524,6 +519,7 @@ class BwinScraper(BasePlaywrightScraper):
             except Exception as exc:
                 logger.info("[Bwin] CDS resp parse error: %s", exc)
 
+        self._page.on("request", _on_request)
         self._page.on("response", _on_response)
         url = self.base_url + sport_path
         self._log.info("[Bwin] Navigating to %s", url)
@@ -534,18 +530,35 @@ class BwinScraper(BasePlaywrightScraper):
             self._log.info("[Bwin] %s: %s — continuing", sport_key, type(e).__name__)
         await self._page.wait_for_timeout(3000)
 
-        # ── Extract __NEXT_DATA__ from rendered page ──────────────────────
+        # ── Extract fixture names from DOM (what is actually displayed) ───
         try:
-            next_data_raw = await self._page.evaluate(
-                "JSON.stringify(window.__NEXT_DATA__ || null)"
-            )
-            if next_data_raw and next_data_raw != "null":
-                nd = _json.loads(next_data_raw)
-                snippet = _json.dumps(nd)[:1000]
-                logger.info("[Bwin] __NEXT_DATA__ for %s: %s", sport_path[:40], snippet)
+            names = await self._page.evaluate("""
+                () => {
+                    // Try multiple selectors for event names
+                    const sels = [
+                        '[data-qa="event-name"]',
+                        '.KambiBC-event-item__participant-name',
+                        '.participant-name',
+                        '[class*="participant"]',
+                        '[class*="event-name"]',
+                        '[class*="fixture-name"]',
+                    ];
+                    for (const s of sels) {
+                        const els = document.querySelectorAll(s);
+                        if (els.length > 0)
+                            return [...els].slice(0, 10).map(e => e.textContent.trim());
+                    }
+                    return [];
+                }
+            """)
+            if names:
+                logger.info("[Bwin] DOM names on %s: %s", sport_path[:40], names[:10])
+            else:
+                logger.info("[Bwin] DOM: no event names found on %s", sport_path[:40])
         except Exception as exc:
-            logger.info("[Bwin] __NEXT_DATA__ eval error: %s", exc)
+            logger.info("[Bwin] DOM eval error: %s", exc)
 
+        self._page.remove_listener("request", _on_request)
         self._page.remove_listener("response", _on_response)
         return captured
 
