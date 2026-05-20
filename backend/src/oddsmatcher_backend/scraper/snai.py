@@ -183,9 +183,11 @@ def _parse_schedaAvvenimento(
         }
 
         # ── 1X2 ──────────────────────────────────────────────────────
+        _mname_up = mname.upper()
         if any(kw in mname for kw in ("Esito Finale", "1X2", "Risultato Finale",
                                        "Risultato 1X2", "1 X 2", "Match Result",
-                                       "Testa a Testa", "Head to Head")):
+                                       "Testa a Testa", "Head to Head")) and "COMBO" not in _mname_up:
+            logger.info("[Snai] 1X2 market found: event=%r mname=%r esiti=%d", name, mname, len(esiti))
             odds_dict: dict[str, float] = {}
             for e in esiti:
                 if not isinstance(e, dict):
@@ -199,7 +201,7 @@ def _parse_schedaAvvenimento(
                 stato = e.get("stato", 0)
                 try:
                     q = float(q_raw) / 100 if q_raw is not None else None
-                    if q and q > 1.0 and stato == 0:
+                    if q and q > 1.0:  # accept stato 0 (active) and 1 (suspended)
                         odds_dict[canonical] = q
                 except (TypeError, ValueError):
                     pass
@@ -225,7 +227,7 @@ def _parse_schedaAvvenimento(
                 stato = e.get("stato", 0)
                 try:
                     q = float(q_raw) / 100 if q_raw is not None else None
-                    if q and q > 1.0 and stato == 0:
+                    if q and q > 1.0:  # accept suspended too
                         odds_dc[canonical] = q
                 except (TypeError, ValueError):
                     pass
@@ -257,7 +259,7 @@ def _parse_schedaAvvenimento(
                 stato = e.get("stato", 0)
                 try:
                     q = float(q_raw) / 100 if q_raw is not None else None
-                    if side and q and q > 1.0 and stato == 0:
+                    if side and q and q > 1.0:  # accept suspended too
                         odds_uo[f"{side} {sp}"] = q
                 except (TypeError, ValueError):
                     pass
@@ -380,17 +382,22 @@ class SnaiScraper:
                             league_diag_done = True
                             s_map = odds_data.get("scommessaMap") or {}
                             ia_map = odds_data.get("infoAggiuntivaMap") or {}
-                            s_summary = {k: {"cod": v.get("codiceScommessa"), "desc": v.get("descrizione"), "stato": v.get("stato")} for k,v in list(s_map.items())[:5]} if isinstance(s_map, dict) else {}
-                            ia_keys = list(ia_map.keys())[:3] if isinstance(ia_map, dict) else []
+                            # Log markets matching our keywords (1X2, DC, OU)
+                            kw_markets = {}
+                            for k, v in (s_map.items() if isinstance(s_map, dict) else []):
+                                desc = str(v.get("descrizione") or "")
+                                if any(kw in desc for kw in ("Esito Finale", "1X2", "Doppia Chance", "Over/Under", "Testa a Testa")) and "COMBO" not in desc.upper():
+                                    kw_markets[k] = {"cod": v.get("codiceScommessa"), "desc": desc, "stato": v.get("stato")}
+                            ia_keys = list(ia_map.keys())[:2] if isinstance(ia_map, dict) else []
                             ia_first = {}
                             if ia_keys:
                                 ia_v = ia_map[ia_keys[0]]
                                 esiti = ia_v.get("esitoList") or []
                                 ia_first = {"cod_s": ia_v.get("codiceScommessa"), "esitoList_len": len(esiti), "first_esito": esiti[0] if esiti else None}
-                            logger.info("[Snai] DIAG %s event=%s cluster=%s scommessaMap=%s ia_first=%s",
+                            logger.info("[Snai] DIAG %s event=%s cluster=%s kw_markets=%s ia_first=%s",
                                 lg, ev_key,
                                 odds_data.get("codiceClusterSelected"),
-                                _json.dumps(s_summary, ensure_ascii=False),
+                                _json.dumps(kw_markets, ensure_ascii=False),
                                 _json.dumps(ia_first, ensure_ascii=False),
                             )
 
