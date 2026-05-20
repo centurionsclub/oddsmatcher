@@ -1,12 +1,18 @@
 """Snai Italy pregame odds scraper.
 
 Strategy:
-  Phase 1 — httpx to alberaturaPrematch → competition tree (disc/manif IDs). ✅
-  Phase 2 — httpx probe of many event endpoint patterns (no Playwright needed).
-             The first URL that returns a 200 with event-like content is used
-             for all remaining competitions.
+  Phase 1 — httpx alberaturaPrematch → competition tree (disc/manif IDs). ✅
+  Phase 2 — httpx avvenimentiPrematch → event keys per league.
+  Phase 3 — httpx schedaAvvenimento/{key} per event → full odds.
 
 API base: https://betting-snai.flutterseatech.it/api/lettura-palinsesto-sport
+
+Response format (schedaAvvenimento):
+  {
+    "avvenimentoFe":    { "descrizione": "Team A - Team B", "data": "...", ... },
+    "scommessaMap":     { "3": { "codiceScommessa": 3, "descrizioneScommessa": "Esito Finale 1X2" }, ... },
+    "infoAggiuntivaMap":{ "key": { "codiceScommessa": 3, "esitoMap": {"1": {"quota": 1.85, ...}, ...} }, ... }
+  }
 """
 
 import json as _json
@@ -78,6 +84,8 @@ LEAGUE_PATTERNS: dict[str, list[tuple[str, list[str]]]] = {
 }
 
 ALBERATURA_URL = f"{API_BASE}/palinsesto/prematch/alberaturaPrematch"
+AVVENIMENTI_URL = f"{API_BASE}/palinsesto/prematch/avvenimentiPrematch"
+SCHEDA_AVVENIMENTO = f"{API_BASE}/palinsesto/prematch/schedaAvvenimento/{{key}}"
 
 
 def _match_league(descrizione: str, sport_key: str) -> str | None:
@@ -107,197 +115,156 @@ def _parse_date(s: str) -> str | None:
         return s
 
 
-def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
-    """Parse Snai API event response."""
+def _parse_schedaAvvenimento(
+    data: dict, league_name: str, sport_key: str
+) -> list[MatchOdds]:
+    """Parse schedaAvvenimento response (Sisal nested format).
+
+    Top-level keys: avvenimentoFe, scommessaMap, infoAggiuntivaMap.
+    scommessaMap:     codiceScommessa → {descrizioneScommessa, ...}
+    infoAggiuntivaMap: key            → {codiceScommessa, esitoMap: {codiceEsito: {quota, descrizioneEsito}}}
+    """
     results: list[MatchOdds] = []
-    if not data:
+    if not isinstance(data, dict):
         return results
 
-    # Log top-level structure for discovery
-    if isinstance(data, dict):
-        logger.info("[Snai] %s response top keys: %s", league_name, list(data.keys())[:12])
+    # ── Event metadata ─────────────────────────────────────────────────
+    avv = data.get("avvenimentoFe") or {}
+    name_raw = str(avv.get("descrizione") or "").strip()
+    name = re.sub(r"\s+[-–]\s+", " - ", name_raw)
+    if not name:
+        return results
 
-    events: list = []
-    if isinstance(data, list):
-        events = data
-    elif isinstance(data, dict):
-        # avvenimentoFeMap / avvenimentiMap: dict keyed by event ID → convert to list
-        for map_key in ("avvenimentoFeMap", "avvenimentiMap", "avvenimentiFeMap",
-                        "eventMap", "avvenimentiFe"):
-            avm = data.get(map_key)
-            if isinstance(avm, dict) and avm:
-                events = list(avm.values())
-                logger.info("[Snai] %s: found %d events in %s", league_name, len(events), map_key)
-                break
-        if not events:
-            for key in ("avvenimenti", "eventi", "events", "data", "result",
-                        "matches", "fixtures", "palinsesto", "avv",
-                        "avvenimentiList", "listaAvvenimenti", "items"):
-                val = data.get(key)
-                if isinstance(val, list) and val:
-                    events = val
-                    break
-                if isinstance(val, dict):
-                    for k2 in ("avvenimenti", "eventi", "events", "avv", "list", "items"):
-                        v2 = val.get(k2)
-                        if isinstance(v2, list) and v2:
-                            events = v2
-                            break
-                    if events:
-                        break
-            # Try nested under any single key
-            if not events:
-                for val in data.values():
-                    if isinstance(val, list) and val and isinstance(val[0], dict):
-                        sample = val[0]
-                        if any(k in sample for k in ("descrizione", "description", "name",
-                                                       "dataOra", "startDate", "scommesse",
-                                                       "quota", "betGroupList")):
-                            events = val
-                            break
-    if events:
-        first = events[0] if isinstance(events[0], dict) else {}
-        logger.info("[Snai] %s: first event keys=%s | preview=%.300s",
-                    league_name, list(first.keys())[:12],
-                    _json.dumps(first, ensure_ascii=False)[:300])
+    time_raw = avv.get("data") or avv.get("dataOra") or ""
+    event_time = _parse_date(str(time_raw)) if time_raw else None
+    match_url = f"{BASE_URL}/scommesse/"
 
-    for ev in events:
-        if not isinstance(ev, dict):
-            continue
+    parts = name.split(" - ", 1)
+    home = parts[0].strip() if len(parts) == 2 else name
+    away = parts[1].strip() if len(parts) == 2 else ""
 
-        name_raw = (
-            ev.get("descrizione") or ev.get("description") or
-            ev.get("eventDescription") or ev.get("name") or
-            ev.get("da") or ev.get("en") or ""
-        )
-        name = re.sub(r"\s+[-–v]\s+", " - ", str(name_raw)).strip()
-        if not name:
-            continue
-
-        time_raw = (
-            ev.get("dataOra") or ev.get("data") or ev.get("startTime") or
-            ev.get("startDate") or ev.get("eventDate") or ev.get("ts") or ""
-        )
-        event_time = _parse_date(str(time_raw)) if time_raw else None
-        match_url = f"{BASE_URL}/scommesse/"
-
-        parts = name.split(" - ", 1)
-        home = parts[0].strip() if len(parts) == 2 else name
-        away = parts[1].strip() if len(parts) == 2 else ""
-
-        mkts_raw = (
-            ev.get("scommesse") or ev.get("mercati") or ev.get("markets") or
-            ev.get("quote") or ev.get("odds") or ev.get("betGroupList") or []
-        )
-        if isinstance(mkts_raw, dict):
-            mkts_raw = list(mkts_raw.values())
-
-        for mkt in mkts_raw:
-            if not isinstance(mkt, dict):
-                continue
-
-            mname = str(
-                mkt.get("descrizione") or mkt.get("description") or
-                mkt.get("name") or mkt.get("tipo") or mkt.get("marketName") or ""
+    # ── Market name lookup ─────────────────────────────────────────────
+    scommessa_map = data.get("scommessaMap") or {}
+    scommessa_names: dict[str, str] = {}
+    for s_key, s_val in scommessa_map.items():
+        if isinstance(s_val, dict):
+            desc = str(
+                s_val.get("descrizioneScommessa") or
+                s_val.get("descrizione") or ""
             ).strip()
+            if desc:
+                scommessa_names[str(s_key)] = desc
 
-            if any(kw in mname for kw in ("1X2", "Esito Finale", "Finale", "Risultato Finale",
-                                           "1 X 2", "Match Result", "Testa a Testa")):
-                sels_raw = (
-                    mkt.get("esiti") or mkt.get("selections") or
-                    mkt.get("outcomes") or mkt.get("quote") or
-                    mkt.get("betList") or []
-                )
-                if isinstance(sels_raw, dict):
-                    sels_raw = list(sels_raw.values())
-                odds_dict: dict[str, float] = {}
-                OUTCOME_MAP = {
-                    "1": "1", "Casa": "1", "Home": "1",
-                    "X": "X", "Pareggio": "X", "Draw": "X",
-                    "2": "2", "Ospite": "2", "Away": "2",
-                }
-                for sel in sels_raw:
-                    if not isinstance(sel, dict):
-                        continue
-                    lbl = str(
-                        sel.get("descrizione") or sel.get("esito") or
-                        sel.get("name") or sel.get("outcome") or sel.get("label") or ""
-                    ).strip()
-                    canonical = OUTCOME_MAP.get(lbl, lbl)
-                    q_raw = sel.get("quota") or sel.get("odds") or sel.get("price") or sel.get("q")
-                    try:
-                        q = float(q_raw) if q_raw is not None else None
-                        if q and q > 1.0:
-                            odds_dict[canonical] = q
-                    except (TypeError, ValueError):
-                        pass
-                if odds_dict:
-                    results.append(MatchOdds(
-                        sport=sport_key, league=league_name,
-                        home_team=home, away_team=away,
-                        event_name=name, event_time=event_time,
-                        match_url=match_url, market="1X2",
-                        bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
-                    ))
+    # ── Iterate infoAggiuntivaMap (one entry per market × sub-market) ──
+    info_agg_map = data.get("infoAggiuntivaMap") or {}
+    for ia_key, ia_val in info_agg_map.items():
+        if not isinstance(ia_val, dict):
+            continue
 
-            elif any(kw in mname for kw in ("Doppia Chance", "Double Chance")):
-                sels_raw = (
-                    mkt.get("esiti") or mkt.get("selections") or
-                    mkt.get("outcomes") or []
-                )
-                if isinstance(sels_raw, dict):
-                    sels_raw = list(sels_raw.values())
-                DC_MAP = {"1X": "1X", "X2": "X2", "12": "12"}
-                odds_dc: dict[str, float] = {}
-                for sel in sels_raw:
-                    lbl = str(sel.get("descrizione") or sel.get("esito") or sel.get("name") or "").strip()
-                    canonical = DC_MAP.get(lbl, lbl)
-                    q_raw = sel.get("quota") or sel.get("odds") or sel.get("price")
-                    try:
-                        q = float(q_raw) if q_raw is not None else None
-                        if q and q > 1.0:
-                            odds_dc[canonical] = q
-                    except (TypeError, ValueError):
-                        pass
-                if odds_dc:
-                    results.append(MatchOdds(
-                        sport=sport_key, league=league_name,
-                        home_team=home, away_team=away,
-                        event_name=name, event_time=event_time,
-                        match_url=match_url, market="DC",
-                        bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dc}],
-                    ))
+        cod_s = str(ia_val.get("codiceScommessa") or "")
+        mname = scommessa_names.get(cod_s, "")
+        if not mname:
+            continue
 
-            elif any(kw in mname for kw in ("Over/Under", "U/O", "Totale Gol", "Over Under")):
-                sp_m = re.search(r"(\d+[.,]\d+)", mname)
-                if not sp_m:
+        esito_map = ia_val.get("esitoMap") or {}
+        if isinstance(esito_map, dict):
+            esiti = list(esito_map.values())
+        else:
+            esiti = list(esito_map)
+
+        OUTCOME_MAP = {
+            "1": "1", "Casa": "1", "Home": "1",
+            "X": "X", "Pareggio": "X", "Draw": "X",
+            "2": "2", "Ospite": "2", "Away": "2",
+        }
+
+        # ── 1X2 ──────────────────────────────────────────────────────
+        if any(kw in mname for kw in ("Esito Finale", "1X2", "Risultato Finale",
+                                       "Risultato 1X2", "1 X 2", "Match Result",
+                                       "Testa a Testa", "Head to Head")):
+            odds_dict: dict[str, float] = {}
+            for e in esiti:
+                if not isinstance(e, dict):
                     continue
-                sp = sp_m.group(1).replace(",", ".")
-                if sp not in {"1.5", "2.5", "3.5"}:
+                lbl = str(
+                    e.get("descrizioneEsito") or e.get("esito") or
+                    e.get("descrizione") or ""
+                ).strip()
+                canonical = OUTCOME_MAP.get(lbl, lbl)
+                q_raw = e.get("quota")
+                stato = e.get("stato", 0)
+                try:
+                    q = float(q_raw) if q_raw is not None else None
+                    if q and q > 1.0 and stato == 0:
+                        odds_dict[canonical] = q
+                except (TypeError, ValueError):
+                    pass
+            if len(odds_dict) >= 2:
+                results.append(MatchOdds(
+                    sport=sport_key, league=league_name,
+                    home_team=home, away_team=away,
+                    event_name=name, event_time=event_time,
+                    match_url=match_url, market="1X2",
+                    bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
+                ))
+
+        # ── Double Chance ────────────────────────────────────────────
+        elif any(kw in mname for kw in ("Doppia Chance", "Double Chance")):
+            DC_MAP = {"1X": "1X", "X2": "X2", "12": "12"}
+            odds_dc: dict[str, float] = {}
+            for e in esiti:
+                if not isinstance(e, dict):
                     continue
-                sels_raw = mkt.get("esiti") or mkt.get("selections") or mkt.get("outcomes") or []
-                if isinstance(sels_raw, dict):
-                    sels_raw = list(sels_raw.values())
-                SIDE_MAP = {"Over": "Over", "Oltre": "Over", "Under": "Under", "Meno": "Under"}
-                odds_uo: dict[str, float] = {}
-                for sel in sels_raw:
-                    lbl = str(sel.get("descrizione") or sel.get("esito") or sel.get("name") or "").strip()
-                    side = SIDE_MAP.get(lbl)
-                    q_raw = sel.get("quota") or sel.get("odds") or sel.get("price")
-                    try:
-                        q = float(q_raw) if q_raw is not None else None
-                        if side and q and q > 1.0:
-                            odds_uo[f"{side} {sp}"] = q
-                    except (TypeError, ValueError):
-                        pass
-                if odds_uo:
-                    results.append(MatchOdds(
-                        sport=sport_key, league=league_name,
-                        home_team=home, away_team=away,
-                        event_name=name, event_time=event_time,
-                        match_url=match_url, market=f"Over/Under {sp}",
-                        bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_uo}],
-                    ))
+                lbl = str(e.get("descrizioneEsito") or e.get("esito") or "").strip()
+                canonical = DC_MAP.get(lbl, lbl)
+                q_raw = e.get("quota")
+                stato = e.get("stato", 0)
+                try:
+                    q = float(q_raw) if q_raw is not None else None
+                    if q and q > 1.0 and stato == 0:
+                        odds_dc[canonical] = q
+                except (TypeError, ValueError):
+                    pass
+            if len(odds_dc) >= 2:
+                results.append(MatchOdds(
+                    sport=sport_key, league=league_name,
+                    home_team=home, away_team=away,
+                    event_name=name, event_time=event_time,
+                    match_url=match_url, market="DC",
+                    bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dc}],
+                ))
+
+        # ── Over/Under ───────────────────────────────────────────────
+        elif any(kw in mname for kw in ("Over/Under", "U/O", "Totale Gol", "Over Under")):
+            sp_m = re.search(r"(\d+[.,]\d+)", mname)
+            if not sp_m:
+                continue
+            sp = sp_m.group(1).replace(",", ".")
+            if sp not in {"1.5", "2.5", "3.5"}:
+                continue
+            SIDE_MAP = {"Over": "Over", "Oltre": "Over", "Under": "Under", "Meno": "Under"}
+            odds_uo: dict[str, float] = {}
+            for e in esiti:
+                if not isinstance(e, dict):
+                    continue
+                lbl = str(e.get("descrizioneEsito") or e.get("esito") or "").strip()
+                side = SIDE_MAP.get(lbl)
+                q_raw = e.get("quota")
+                stato = e.get("stato", 0)
+                try:
+                    q = float(q_raw) if q_raw is not None else None
+                    if side and q and q > 1.0 and stato == 0:
+                        odds_uo[f"{side} {sp}"] = q
+                except (TypeError, ValueError):
+                    pass
+            if len(odds_uo) >= 2:
+                results.append(MatchOdds(
+                    sport=sport_key, league=league_name,
+                    home_team=home, away_team=away,
+                    event_name=name, event_time=event_time,
+                    match_url=match_url, market=f"Over/Under {sp}",
+                    bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_uo}],
+                ))
 
     return results
 
@@ -305,8 +272,9 @@ def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[Matc
 class SnaiScraper:
     """Snai scraper — httpx only.
 
-    Phase 1: alberaturaPrematch → competition IDs ✅
-    Phase 2: probe event endpoint patterns via httpx (no Playwright — avoids timeout).
+    Phase 1: alberaturaPrematch → competition IDs
+    Phase 2: avvenimentiPrematch → event keys per league
+    Phase 3: schedaAvvenimento/{key} per event → full odds in Sisal nested format
     """
 
     bookmaker_name = BOOKMAKER
@@ -324,8 +292,6 @@ class SnaiScraper:
             p = _up.urlparse(proxy_url)
             logger.info("[Snai] Using proxy: %s:%s", p.hostname, p.port)
 
-        PFX = API_BASE  # https://betting-snai.flutterseatech.it/api/lettura-palinsesto-sport
-
         # ── Phase 1: Competition tree ────────────────────────────────────
         logger.info("[Snai] Fetching alberaturaPrematch…")
         competitions: list[tuple[str, str, int, int]] = []
@@ -336,8 +302,6 @@ class SnaiScraper:
                 resp = await client.get(ALBERATURA_URL)
                 resp.raise_for_status()
                 alberatura_raw = resp.json()
-                logger.info("[Snai] alberaturaPrematch ok, top keys: %s",
-                            list(alberatura_raw.keys())[:8] if isinstance(alberatura_raw, dict) else "?")
                 competitions = self._find_competitions(alberatura_raw, sport)
                 logger.info("[Snai] %d competitions found", len(competitions))
         except Exception as exc:
@@ -347,222 +311,94 @@ class SnaiScraper:
         if not competitions:
             return []
 
-        # Build a set of manifestazione IDs we care about → (league_name, sport_key)
+        # manif_id → (league_name, sport_key)
         manif_to_league: dict[int, tuple[str, str]] = {
             manif: (lg, sk) for lg, sk, _, manif in competitions
         }
-        disc_to_manif: dict[int, list[int]] = {}
-        for lg, sk, disc, manif in competitions:
-            disc_to_manif.setdefault(disc, []).append(manif)
 
-        # ── Phase 2: Get events for each league via schedaManifestazione ────
-        # Swagger-confirmed endpoint: /palinsesto/prematch/schedaManifestazione/{filter}/{key}
-        # where filter is a time filter (try "T" = tutti, "0", "1") and key is the
-        # manifestazione key from alberaturaPrematch manifestazioneMap dict keys.
-        # Also try schedaManifestazioneSpeciale/{filter}/{disc}/{manif} (uses numeric IDs).
-        #
-        # Fallback: per-event via schedaAvvenimento/{key} using event keys from avvenimentiPrematch.
+        # ── Phase 2: Get all event keys from avvenimentiPrematch ─────────
+        logger.info("[Snai] Fetching avvenimentiPrematch…")
+        all_events: list[dict] = []
+        try:
+            async with httpx.AsyncClient(
+                headers=_SNAI_HEADERS, timeout=30, follow_redirects=True, proxy=proxy_url,
+            ) as client:
+                resp = await client.get(AVVENIMENTI_URL)
+                resp.raise_for_status()
+                data = resp.json()
+                avm = data.get("avvenimentoFeMap") or {}
+                all_events = list(avm.values()) if isinstance(avm, dict) else []
+                logger.info("[Snai] Got %d total events", len(all_events))
+        except Exception as exc:
+            logger.error("[Snai] avvenimentiPrematch failed: %s", exc)
+            return []
 
+        # Filter events for our leagues
+        our_events: dict[int, list[dict]] = {}
+        for ev in all_events:
+            if not isinstance(ev, dict):
+                continue
+            mid = ev.get("codiceManifestazione")
+            if mid and int(mid) in manif_to_league:
+                our_events.setdefault(int(mid), []).append(ev)
+
+        for mid, evs in our_events.items():
+            lg, _ = manif_to_league[mid]
+            logger.info("[Snai] %s: %d events", lg, len(evs))
+
+        # ── Phase 3: Fetch odds per event via schedaAvvenimento ──────────
+        logger.info("[Snai] Fetching odds per event via schedaAvvenimento…")
         all_results: list[MatchOdds] = []
-        SCHEDA_AVVENIMENTO = f"{PFX}/palinsesto/prematch/schedaAvvenimento/{{key}}"
-        SCHEDA_MANIF_SPECIALE = f"{PFX}/palinsesto/prematch/schedaManifestazioneSpeciale/{{filter}}/{{disc}}/{{manif}}"
-        SCHEDA_MANIF = f"{PFX}/palinsesto/prematch/schedaManifestazione/{{filter}}/{{key}}"
 
         async with httpx.AsyncClient(
-            headers=_SNAI_HEADERS, timeout=30, follow_redirects=True, proxy=proxy_url,
+            headers=_SNAI_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
         ) as client:
-            first_comp = competitions[0]
-            first_lg, first_sk, first_disc, first_manif = first_comp
+            for mid, evs in our_events.items():
+                lg, sk = manif_to_league[mid]
+                league_rows: list[MatchOdds] = []
+                first_event_logged = False
 
-            # ── Step 2a: Probe /palinsesto/prematch/init to understand available filters ──
-            try:
-                init_resp = await client.get(f"{PFX}/palinsesto/prematch/init")
-                logger.info("[Snai] prematch/init → %d | preview=%.800s",
-                            init_resp.status_code, init_resp.text[:800])
-            except Exception as ie:
-                logger.info("[Snai] prematch/init error: %s", ie)
-
-            # ── Step 2b: Test schedaAvvenimento/{key} with a known event ─────────────
-            # First get events list to get valid keys
-            test_events: list[dict] = []
-            try:
-                ev_resp = await client.get(f"{PFX}/palinsesto/prematch/avvenimentiPrematch")
-                if ev_resp.status_code == 200:
-                    ev_data = ev_resp.json()
-                    avm = ev_data.get("avvenimentoFeMap") or {}
-                    test_events = list(avm.values())[:10]
-                    logger.info("[Snai] Got %d test events", len(test_events))
-            except Exception as te:
-                logger.info("[Snai] avvenimentiPrematch test error: %s", te)
-
-            # Test schedaAvvenimento with first available event
-            schedaAvv_works = False
-            if test_events:
-                test_ev = test_events[0]
-                test_key = test_ev.get("key", f"{test_ev.get('codicePalinsesto')}-{test_ev.get('codiceAvvenimento')}")
-                test_url = SCHEDA_AVVENIMENTO.format(key=test_key)
-                try:
-                    r = await client.get(test_url)
-                    logger.info("[Snai] schedaAvvenimento/%s → %d | preview=%.600s",
-                                test_key, r.status_code, r.text[:600])
-                    if r.status_code == 200:
-                        schedaAvv_works = True
-                        scheda_data = r.json()
-                        logger.info("[Snai] schedaAvvenimento top keys: %s | has_scommesse=%s",
-                                    list(scheda_data.keys())[:12] if isinstance(scheda_data, dict) else "?",
-                                    "scommessaMap" in str(scheda_data) or "scommesse" in str(scheda_data))
-                except Exception as se:
-                    logger.info("[Snai] schedaAvvenimento test error: %s", se)
-
-            # ── Step 2c: Try schedaManifestazioneSpeciale with extended filter values ──
-            working_manif_filter: str | None = None
-            # filter=0 returns empty (today only). Try day ranges that include next-week matches.
-            for f_val in ("H+168", "H+336", "7", "14", "30", "1", "2", "3", "5",
-                          "H+48", "H+72", "H+96", "H+120", "H+144"):
-                url = SCHEDA_MANIF_SPECIALE.format(filter=f_val, disc=first_disc, manif=first_manif)
-                try:
-                    resp = await client.get(url)
-                    text = resp.text[:250]
-                    n_events = '"avvenimentoFeList"' in resp.text and len(
-                        _json.loads(resp.text).get("avvenimentoFeList", [])) if resp.status_code == 200 else 0
-                    logger.info("[Snai] schedaManifestazioneSpeciale filter=%s → %d | events=%s | %s",
-                                f_val, resp.status_code, n_events, text[:150])
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        events_list = data.get("avvenimentoFeList", [])
-                        if events_list:
-                            logger.info("[Snai] ✅ filter=%s returns %d events! First: %.400s",
-                                        f_val, len(events_list), _json.dumps(events_list[0], ensure_ascii=False))
-                            working_manif_filter = f_val
-                            break
-                        # Even if empty, keep trying — log cluster info
-                        clusters = data.get("clusterMenu", {}).get("clusterList", [])
-                        logger.info("[Snai] filter=%s: empty events, clusters=%s", f_val, clusters[:3])
-                except Exception as e:
-                    logger.info("[Snai] schedaManifestazioneSpeciale filter=%s error: %s", f_val, str(e)[:80])
-
-            # Also try schedaManifestazione (non-Speciale) — needs string key from manifestazioneMap
-            if working_manif_filter is None:
-                # Log manifestazioneMap keys from alberaturaPrematch for schedaManifestazione
-                try:
-                    alb_resp = await client.get(ALBERATURA_URL)
-                    if alb_resp.status_code == 200:
-                        alb_data = alb_resp.json()
-                        manif_map = alb_data.get("manifestazioneMap", {})
-                        # Get keys for leagues we care about
-                        for mk, mv in manif_map.items():
-                            if int(mv.get("codiceManifestazione", 0)) in manif_to_league:
-                                lg_name = manif_to_league[int(mv.get("codiceManifestazione", 0))][0]
-                                logger.info("[Snai] manifestazioneMap key=%r → %s (manif=%s disc=%s)",
-                                            mk, lg_name, mv.get("codiceManifestazione"), mv.get("codiceDisciplina"))
-                        # Try schedaManifestazione with a few filter+key combos
-                        sample_keys = list(manif_map.keys())[:3]
-                        for mk in sample_keys:
-                            for f_val in ("H+168", "7", "0"):
-                                sm_url = SCHEDA_MANIF.format(filter=f_val, key=mk)
-                                try:
-                                    r = await client.get(sm_url)
-                                    logger.info("[Snai] schedaManifestazione filter=%s key=%r → %d | %.200s",
-                                                f_val, mk, r.status_code, r.text[:200])
-                                    if r.status_code == 200:
-                                        sm_data = r.json()
-                                        sm_events = sm_data.get("avvenimentoFeList", [])
-                                        if sm_events:
-                                            logger.info("[Snai] schedaManifestazione WORKS filter=%s key=%r!", f_val, mk)
-                                            break
-                                except Exception as sme:
-                                    logger.info("[Snai] schedaManifestazione error: %s", sme)
-                except Exception as alb_e:
-                    logger.info("[Snai] alberatura re-fetch error: %s", alb_e)
-
-            if working_manif_filter is not None:
-                # Fetch all leagues using schedaManifestazioneSpeciale
-                logger.info("[Snai] Using schedaManifestazioneSpeciale (filter=%s)", working_manif_filter)
-                for lg, sk, disc, manif in competitions:
-                    url = SCHEDA_MANIF_SPECIALE.format(filter=working_manif_filter, disc=disc, manif=manif)
+                for ev in evs[:40]:  # cap per league to avoid timeout
+                    ev_key = ev.get("key") or (
+                        f"{ev.get('codicePalinsesto')}-{ev.get('codiceAvvenimento')}"
+                    )
+                    url = SCHEDA_AVVENIMENTO.format(key=ev_key)
                     try:
                         resp = await client.get(url)
                         if resp.status_code != 200:
-                            logger.info("[Snai] %s: schedaManifestazioneSpeciale → %d", lg, resp.status_code)
+                            logger.debug("[Snai] %s event %s → %d", lg, ev_key, resp.status_code)
                             continue
-                        data = resp.json()
-                        rows = _parse_snai_events(data, lg, sk)
-                        logger.info("[Snai] %s (schedaManifestazioneSpeciale): %d rows", lg, len(rows))
-                        all_results.extend(rows)
+
+                        odds_data = resp.json()
+
+                        if not first_event_logged and isinstance(odds_data, dict):
+                            scommessa_map = odds_data.get("scommessaMap") or {}
+                            info_agg_map = odds_data.get("infoAggiuntivaMap") or {}
+                            # Log first few market names for diagnosis
+                            market_names = [
+                                v.get("descrizioneScommessa", "?")
+                                for v in list(scommessa_map.values())[:5]
+                                if isinstance(v, dict)
+                            ]
+                            # Log first infoAggiuntiva entry structure
+                            first_ia = next(iter(info_agg_map.values()), {}) if info_agg_map else {}
+                            ia_keys = list(first_ia.keys())[:8] if isinstance(first_ia, dict) else "?"
+                            first_esito = next(iter((first_ia.get("esitoMap") or {}).values()), {})
+                            logger.info(
+                                "[Snai] %s first event=%s | scommessaMap markets=%s | "
+                                "infoAgg first keys=%s | first esito=%s",
+                                lg, ev_key, market_names, ia_keys,
+                                _json.dumps(first_esito, ensure_ascii=False)[:200]
+                            )
+                            first_event_logged = True
+
+                        rows = _parse_schedaAvvenimento(odds_data, lg, sk)
+                        league_rows.extend(rows)
                     except Exception as exc:
-                        logger.error("[Snai] %s schedaManifestazioneSpeciale error: %s", lg, exc)
+                        logger.debug("[Snai] %s event %s error: %s", lg, ev_key, exc)
 
-            elif schedaAvv_works:
-                logger.info("[Snai] schedaManifestazioneSpeciale empty — using schedaAvvenimento per-event")
-                # ── Step 2b: Fallback — get event keys from avvenimentiPrematch then
-                #            fetch each event via schedaAvvenimento/{key} ──────────────
-                logger.info("[Snai] schedaManifestazioneSpeciale failed — fetching events via avvenimentiPrematch")
-                all_events: list[dict] = []
-                EVENTS_URL = f"{PFX}/palinsesto/prematch/avvenimentiPrematch"
-                try:
-                    resp = await client.get(EVENTS_URL)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    if isinstance(data, dict):
-                        logger.info("[Snai] avvenimentiPrematch top keys: %s", list(data.keys()))
-                    avm = data.get("avvenimentoFeMap") or {}
-                    all_events = list(avm.values()) if isinstance(avm, dict) else []
-                    logger.info("[Snai] Got %d total events", len(all_events))
-                    if all_events:
-                        logger.info("[Snai] First event: %s",
-                                    _json.dumps(all_events[0], ensure_ascii=False)[:300])
-                except Exception as exc:
-                    logger.error("[Snai] avvenimentiPrematch failed: %s", exc)
-                    return []
-
-                # Filter for our leagues
-                our_events: dict[int, list[dict]] = {}
-                for ev in all_events:
-                    if not isinstance(ev, dict):
-                        continue
-                    mid = ev.get("codiceManifestazione")
-                    if mid and int(mid) in manif_to_league:
-                        our_events.setdefault(int(mid), []).append(ev)
-                for mid, evs in our_events.items():
-                    lg, sk = manif_to_league[mid]
-                    logger.info("[Snai] %s: %d events", lg, len(evs))
-
-                # Fetch each event via schedaAvvenimento/{key}
-                logger.info("[Snai] Fetching odds per event via schedaAvvenimento…")
-
-                # First probe one event to confirm the endpoint works
-                test_ev = next((evs[0] for evs in our_events.values() if evs), None)
-                if test_ev:
-                    test_key = test_ev.get("key", f"{test_ev.get('codicePalinsesto')}-{test_ev.get('codiceAvvenimento')}")
-                    test_url = SCHEDA_AVVENIMENTO.format(key=test_key)
-                    try:
-                        r = await client.get(test_url)
-                        logger.info("[Snai] schedaAvvenimento TEST %s → %d | preview=%.600s",
-                                    test_url, r.status_code, r.text[:600])
-                    except Exception as e:
-                        logger.info("[Snai] schedaAvvenimento test error: %s", e)
-
-                for mid, evs in our_events.items():
-                    lg, sk = manif_to_league[mid]
-                    league_rows: list[MatchOdds] = []
-                    for ev in evs[:40]:  # cap to avoid timeout
-                        ev_key = ev.get("key", f"{ev.get('codicePalinsesto')}-{ev.get('codiceAvvenimento')}")
-                        url = SCHEDA_AVVENIMENTO.format(key=ev_key)
-                        try:
-                            resp = await client.get(url)
-                            if resp.status_code != 200:
-                                continue
-                            odds_data = resp.json()
-                            if not league_rows and isinstance(odds_data, dict):
-                                logger.info("[Snai] %s first event keys: %s | preview=%.500s",
-                                            lg, list(odds_data.keys())[:10],
-                                            _json.dumps(odds_data, ensure_ascii=False)[:500])
-                            rows = _parse_snai_events(odds_data, lg, sk)
-                            league_rows.extend(rows)
-                        except Exception as exc:
-                            logger.debug("[Snai] %s event %s error: %s", lg, ev_key, exc)
-                    logger.info("[Snai] %s: %d rows from %d events", lg, len(league_rows), len(evs))
-                    all_results.extend(league_rows)
+                logger.info("[Snai] %s: %d rows from %d events", lg, len(league_rows), len(evs))
+                all_results.extend(league_rows)
 
         # Deduplicate by (event_name, market)
         seen: dict[tuple[str, str], MatchOdds] = {}
@@ -576,10 +412,7 @@ class SnaiScraper:
     def _find_competitions(
         self, alberatura: dict, sport_filter: str | None
     ) -> list[tuple[str, str, int, int]]:
-        """
-        Parse manifestazioneMap to find competitions we want.
-        Returns list of (league_name, sport_key, codiceDisciplina, codiceManifestazione).
-        """
+        """Parse manifestazioneMap to find competitions we want."""
         out: list[tuple[str, str, int, int]] = []
         if not isinstance(alberatura, dict):
             return out
@@ -589,27 +422,20 @@ class SnaiScraper:
             logger.warning("[Snai] manifestazioneMap missing or wrong type")
             return out
 
-        logger.info("[Snai] manifestazioneMap has %d entries", len(manif_map))
         seen_leagues: set[str] = set()
-
         for key, entry in manif_map.items():
             if not isinstance(entry, dict):
                 continue
-
             disc_id = entry.get("codiceDisciplina")
             manif_id = entry.get("codiceManifestazione")
             descrizione = str(entry.get("descrizione") or "").strip()
-
             if not disc_id or not manif_id or not descrizione:
                 continue
-
             sport_key = SPORT_CODE_MAP.get(int(disc_id))
             if not sport_key:
                 continue
-
             if sport_filter and sport_key != sport_filter:
                 continue
-
             league_name = _match_league(descrizione, sport_key)
             if league_name and league_name not in seen_leagues:
                 out.append((league_name, sport_key, int(disc_id), int(manif_id)))
