@@ -49,26 +49,39 @@ LEAGUES: list[tuple[str, str, str]] = [
 
 # Competition ID → (league_name, sport_key).
 # Bwin uses internal CDS competition IDs that differ from URL path IDs.
-# Discovered by running the scraper with diagnostic logging.
-# NOTE: Calcio league IDs (Serie A, Premier League, etc.) may change between seasons —
-#       add them here once discovered from diagnostic logs when those leagues are active.
 _COMP_ID_TO_LEAGUE: dict[int, tuple[str, str]] = {
-    # ── Calcio (current) ─────────────────────────────────────────────
+    # ── Calcio (current — IDs discovered from diagnostic logging) ────
     102855: ("Champions League",  "calcio"),
     102919: ("Conference League", "calcio"),
-    # Season IDs to be discovered when active (use diagnostic logs):
-    # ???: ("Serie A",           "calcio"),
-    # ???: ("Serie B",           "calcio"),
-    # ???: ("Premier League",    "calcio"),
-    # ???: ("La Liga",           "calcio"),
-    # ???: ("Bundesliga",        "calcio"),
-    # ???: ("Ligue 1",           "calcio"),
-    # ???: ("Europa League",     "calcio"),
-
     # ── Basket ───────────────────────────────────────────────────────
     8548: ("NBA",            "basket"),
     8545: ("Eurolega",       "basket"),
     8533: ("Serie A Basket", "basket"),
+}
+
+# Competition NAME → sport_key → (league_name, sport_key).
+# Used as fallback when comp_id is not yet in _COMP_ID_TO_LEAGUE.
+# Keys are lowercase. sport_key context breaks "Serie A" calcio vs basket ambiguity.
+_COMP_NAME_TO_LEAGUE: dict[str, dict[str, tuple[str, str]]] = {
+    "serie a": {
+        "calcio": ("Serie A",          "calcio"),
+        "basket": ("Serie A Basket",   "basket"),
+    },
+    "serie b": {"calcio": ("Serie B",          "calcio")},
+    "premier league":        {"calcio": ("Premier League",   "calcio")},
+    "primera division":      {"calcio": ("La Liga",          "calcio")},
+    "la liga":               {"calcio": ("La Liga",          "calcio")},
+    "bundesliga":            {"calcio": ("Bundesliga",       "calcio")},
+    "ligue 1":               {"calcio": ("Ligue 1",          "calcio")},
+    "europa league":         {"calcio": ("Europa League",    "calcio")},
+    "uefa europa league":    {"calcio": ("Europa League",    "calcio")},
+    "champions league":      {"calcio": ("Champions League", "calcio")},
+    "uefa champions league": {"calcio": ("Champions League", "calcio")},
+    "conference league":     {"calcio": ("Conference League","calcio")},
+    "uefa conference league":{"calcio": ("Conference League","calcio")},
+    "nba":                   {"basket": ("NBA",              "basket")},
+    "eurolega":              {"basket": ("Eurolega",         "basket")},
+    "eurolega - uomini":     {"basket": ("Eurolega",         "basket")},
 }
 
 # For tennis we accept ALL competition IDs and label them "ATP"
@@ -176,26 +189,41 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                     fix.get("fixture", {}).get("competition") or {})
         if isinstance(comp_obj, dict):
             comp_id = comp_obj.get("id")
+            comp_name_raw = _get_name_str(comp_obj.get("name", ""))
+            comp_name_lc = comp_name_raw.lower().strip()
+
+            # 1) Try comp_id mapping (most reliable)
             if comp_id is not None:
                 try:
                     cid = int(comp_id)
                     mapping = _COMP_ID_TO_LEAGUE.get(cid)
                     if mapping:
                         fix_league, fix_sport = mapping
+                    else:
+                        raise ValueError("not in id map")
+                except (TypeError, ValueError):
+                    # 2) Fall back to competition name mapping
+                    name_map = _COMP_NAME_TO_LEAGUE.get(comp_name_lc, {})
+                    mapping = name_map.get(sport_key)
+                    if mapping:
+                        fix_league, fix_sport = mapping
                     elif sport_key == "tennis":
-                        # Tennis: accept all tournaments, label as ATP
                         fix_league = _TENNIS_CATCHALL_LEAGUE
                         fix_sport = "tennis"
                     else:
-                        # Calcio/basket: unknown competition — log once, skip
+                        # Unknown league — skip and log once
+                        try:
+                            cid = int(comp_id)
+                        except Exception:
+                            cid = comp_id
                         if cid not in _unknown_logged:
                             _unknown_logged.add(cid)
-                            comp_name = _get_name_str(comp_obj.get("name", ""))
-                            logger.info("[Bwin] Unknown comp_id=%s name=%r sport=%s — add to _COMP_ID_TO_LEAGUE",
-                                        cid, comp_name, sport_key)
+                            logger.info("[Bwin] Skipping comp_id=%s name=%r sport=%s",
+                                        cid, comp_name_raw, sport_key)
                         continue
-                except (TypeError, ValueError):
-                    pass
+            elif sport_key == "tennis":
+                fix_league = _TENNIS_CATCHALL_LEAGUE
+                fix_sport = "tennis"
 
         # ── Extract event name and time ────────────────────────────────
         name_obj = fix.get("name") or fix.get("fixture", {}).get("name", "")
@@ -428,15 +456,18 @@ class BwinScraper(BasePlaywrightScraper):
         except ImportError:
             self._log.warning("[Bwin] playwright-stealth not installed")
 
-        # Navigate to each sport overview page.
-        # CDS fixture objects contain competition.id — _parse_cds_fixtures
-        # uses _COMP_ID_TO_LEAGUE to determine the real league per fixture.
-        SPORT_PAGES: list[tuple[str, str]] = [
-            ("calcio",  "/it/sports/calcio-4/"),
-            ("basket",  "/it/sports/basket-7/"),
-            ("tennis",  "/it/sports/tennis-5/"),
-        ]
-        for sport_key, sport_path in SPORT_PAGES:
+        # Calcio: navigate per-league so each league's fixtures are loaded.
+        # The calcio overview page only shows "featured" matches (CL, Conference League).
+        # League-specific pages load the actual Serie A / Premier League / etc. fixtures.
+        calcio_pages = [(name, path) for name, sport, path in LEAGUES if sport == "calcio"]
+        for league_name, league_path in calcio_pages:
+            rows = await self._navigate_and_capture("calcio", league_path)
+            self._captured_rows.extend(rows)
+            self._log.info("[Bwin] %s page: %d rows", league_name, len(rows))
+
+        # Basket + tennis: sport overview pages work fine (all leagues visible)
+        for sport_key, sport_path in [("basket", "/it/sports/basket-7/"),
+                                       ("tennis", "/it/sports/tennis-5/")]:
             rows = await self._navigate_and_capture(sport_key, sport_path)
             self._captured_rows.extend(rows)
             self._log.info("[Bwin] %s: %d rows captured during navigation",
@@ -519,11 +550,14 @@ class BwinScraper(BasePlaywrightScraper):
         # Filter by sport if requested
         rows = [r for r in self._captured_rows if r.sport == sport] if sport else list(self._captured_rows)
 
-        # Deduplicate: same event may appear in multiple CDS responses during navigation.
-        # Keep the last captured entry per (event_name, market) to avoid DB unique-key conflicts.
-        seen: dict[tuple[str, str], MatchOdds] = {}
+        # Deduplicate: same event appears in multiple CDS responses.
+        # Keep the FIRST seen entry per (event_name, league, market) so the
+        # correctly-labelled row from the league's own page wins.
+        seen: dict[tuple[str, str, str], MatchOdds] = {}
         for r in rows:
-            seen[(r.event_name, r.market)] = r
+            key = (r.event_name, r.league, r.market)
+            if key not in seen:
+                seen[key] = r
         filtered = list(seen.values())
 
         n_before = len(rows)
