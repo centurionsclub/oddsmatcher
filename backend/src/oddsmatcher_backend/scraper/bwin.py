@@ -323,14 +323,6 @@ class BwinScraper(BasePlaywrightScraper):
     warmup_path = "/it/sports/calcio-4/"
     leagues = LEAGUES
 
-    # Sport-level pages to navigate in order to capture all fixture data.
-    # Each navigation triggers CDS API calls whose bodies we intercept.
-    SPORT_PAGES: list[tuple[str, str]] = [
-        ("calcio",  "/it/sports/calcio-4/"),
-        ("basket",  "/it/sports/basket-7/"),
-        ("tennis",  "/it/sports/tennis-5/"),
-    ]
-
     def __init__(self):
         super().__init__()
         self._captured_rows: list[MatchOdds] = []  # responses captured during navigation
@@ -379,17 +371,30 @@ class BwinScraper(BasePlaywrightScraper):
         except ImportError:
             self._log.warning("[Bwin] playwright-stealth not installed")
 
-        # Navigate to each sport page and intercept CDS fixture bodies
-        for sport_key, sport_path in self.SPORT_PAGES:
-            rows = await self._navigate_and_capture(sport_key, sport_path)
+        # Warm up on the main calcio page first (establishes session/cookies)
+        self._log.info("[Bwin] Warmup: navigating to /it/sports/calcio-4/")
+        try:
+            await self._page.goto(
+                BASE_URL + "/it/sports/calcio-4/",
+                wait_until="domcontentloaded",
+                timeout=30_000,
+            )
+            await self._page.wait_for_timeout(2000)
+        except Exception as e:
+            self._log.warning("[Bwin] Warmup failed: %s", e)
+
+        # Navigate to each individual league page so CDS calls include
+        # competitionIds=X in the URL — this is the only way to map
+        # intercepted responses back to real league names.
+        for league_name, sport_key, league_path in LEAGUES:
+            rows = await self._navigate_and_capture(sport_key, league_path, league_name)
             self._captured_rows.extend(rows)
-            self._log.info("[Bwin] %s: %d rows captured during navigation",
-                           sport_key, len(rows))
+            self._log.info("[Bwin] %s: %d rows captured", league_name, len(rows))
 
     async def _navigate_and_capture(
-        self, sport_key: str, sport_path: str
+        self, sport_key: str, sport_path: str, default_league: str | None = None
     ) -> list[MatchOdds]:
-        """Navigate to a sport page and capture all CDS fixture responses."""
+        """Navigate to a league page and capture all CDS fixture responses."""
         from playwright.async_api import Response as _Response
 
         assert self._page is not None
@@ -398,11 +403,10 @@ class BwinScraper(BasePlaywrightScraper):
         async def _on_response(resp: _Response) -> None:
             if "cds-api/bettingoffer/fixtures" not in resp.url:
                 return
-            # Determine league_name from competition info in URL
+            # Determine league_name from competition ID in URL
             m_comp = re.search(r"competitionIds=(\d+)", resp.url)
             comp_id = m_comp.group(1) if m_comp else ""
-            # Find league from our LEAGUES list by comp_id
-            league_name = sport_key  # fallback
+            league_name = default_league or sport_key  # use expected league as fallback
             for lg_name, lg_sport, lg_path in LEAGUES:
                 if lg_sport == sport_key:
                     ids = re.findall(r"-(\d+)", lg_path)
@@ -416,8 +420,8 @@ class BwinScraper(BasePlaywrightScraper):
                     logger.info("[Bwin] Intercepted %s (comp=%s): %d rows", league_name, comp_id, len(rows))
                     captured.extend(rows)
                 else:
-                    preview = _json.dumps(body, ensure_ascii=False)[:300] if body else "empty"
-                    logger.info("[Bwin] CDS resp (comp=%s) 0 rows — preview: %s", comp_id, preview)
+                    preview = _json.dumps(body, ensure_ascii=False)[:200] if body else "empty"
+                    logger.debug("[Bwin] CDS resp (comp=%s) 0 rows — preview: %s", comp_id, preview)
             except Exception as exc:
                 logger.debug("[Bwin] CDS resp parse error: %s", exc)
 
@@ -426,9 +430,9 @@ class BwinScraper(BasePlaywrightScraper):
         self._log.info("[Bwin] Navigating to %s", url)
         try:
             await self._page.goto(url, wait_until="networkidle", timeout=45_000)
-            self._log.info("[Bwin] %s: networkidle", sport_key)
+            self._log.info("[Bwin] %s: networkidle", default_league or sport_key)
         except Exception as e:
-            self._log.info("[Bwin] %s: %s — continuing", sport_key, type(e).__name__)
+            self._log.info("[Bwin] %s: %s — continuing", default_league or sport_key, type(e).__name__)
         await self._page.wait_for_timeout(3000)
         self._page.remove_listener("response", _on_response)
         return captured
