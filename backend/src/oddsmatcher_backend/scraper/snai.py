@@ -357,38 +357,72 @@ class SnaiScraper:
             competitions = self._find_competitions(alberatura, sport)
             logger.info("[Snai] %d competitions found", len(competitions))
 
-            # Candidate endpoint patterns to try (in order) for each manif_id
-            ENDPOINT_PATTERNS = [
+            # GET endpoint patterns to try
+            GET_PATTERNS = [
                 "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList/{mid}?offerId=0&metaTplEnabled=true&deep=true",
                 "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList?codiceManifestazione={mid}&offerId=0&metaTplEnabled=true&deep=true",
                 "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiPrematch/{mid}?offerId=0&metaTplEnabled=true&deep=true",
                 "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/{mid}?offerId=0&metaTplEnabled=true&deep=true",
                 "https://" + API_HOST + "/api/lettura-palinsesto-sport/avvenimenti/prematch/{mid}?offerId=0&metaTplEnabled=true&deep=true",
+                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimenti/{mid}?offerId=0&metaTplEnabled=true&deep=true",
+                "https://" + API_HOST + "/api/lettura-palinsesto-sport/avvenimentiList/{mid}?offerId=0&metaTplEnabled=true&deep=true",
+                "https://" + API_HOST + "/api/lettura-palinsesto-sport/avvenimentiPrematch/{mid}?offerId=0&metaTplEnabled=true&deep=true",
+                "https://" + API_HOST + "/api/lettura-quote-sport/palinsesto/prematch/avvenimentiList/{mid}?offerId=0&metaTplEnabled=true&deep=true",
+                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/eventiPrematch/{mid}?offerId=0&metaTplEnabled=true&deep=true",
+                "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/liveOraForCards/{mid}?offerId=0&metaTplEnabled=true&deep=true",
                 "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/live-ora-for-cards/{mid}?offerId=0&metaTplEnabled=true&deep=true",
             ]
 
-            # Try all patterns on the FIRST competition to find which one works
-            first_comp = competitions[0] if competitions else None
+            # Use Roland Garros (manif=1634) as probe target — it's active right now
+            # Fallback to first found competition
+            probe_manif = 1634  # Roland Garros - definitely has events in May
+            probe_comp = next(
+                (c for c in competitions if c[3] == probe_manif),
+                competitions[0] if competitions else None,
+            )
             working_pattern: str | None = None
 
-            if first_comp:
-                league_name_0, sport_key_0, _, manif_id_0 = first_comp
-                logger.info("[Snai] Probing endpoints for %s (manif=%d)…", league_name_0, manif_id_0)
-                for pat in ENDPOINT_PATTERNS:
+            if probe_comp:
+                league_name_0, sport_key_0, _, manif_id_0 = probe_comp
+                logger.info("[Snai] Probing GET endpoints for %s (manif=%d)…", league_name_0, manif_id_0)
+                for pat in GET_PATTERNS:
                     url = pat.format(mid=manif_id_0)
                     try:
                         r = await client.get(url)
-                        logger.info("[Snai] PROBE %s → %d", url[:120], r.status_code)
+                        logger.info("[Snai] PROBE GET %s → %d", url[:130], r.status_code)
                         if r.status_code == 200:
-                            preview = r.text[:300]
+                            preview = r.text[:400]
                             logger.info("[Snai] PROBE 200 preview: %s", preview)
                             working_pattern = pat
                             break
                     except Exception as exc:
                         logger.info("[Snai] PROBE error %s: %s", url[:80], exc)
 
+                # Also try POST for avvenimentiList
+                if not working_pattern:
+                    logger.info("[Snai] Trying POST variants…")
+                    post_urls = [
+                        "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList",
+                        "https://" + API_HOST + "/api/lettura-palinsesto-sport/palinsesto/prematch/avvenimentiList/" + str(manif_id_0),
+                    ]
+                    for post_url in post_urls:
+                        for body in [
+                            {"codiceManifestazione": manif_id_0, "offerId": 0},
+                            {"codiceManifestazione": str(manif_id_0)},
+                            [manif_id_0],
+                        ]:
+                            try:
+                                r = await client.post(post_url, json=body)
+                                logger.info("[Snai] PROBE POST %s body=%s → %d", post_url[:80], body, r.status_code)
+                                if r.status_code == 200:
+                                    preview = r.text[:400]
+                                    logger.info("[Snai] PROBE POST 200 preview: %s", preview)
+                                    break
+                            except Exception as exc:
+                                logger.info("[Snai] PROBE POST error: %s", exc)
+
             if not working_pattern:
-                logger.error("[Snai] No working endpoint pattern found")
+                logger.error("[Snai] No working GET endpoint pattern found — giving up")
                 return results
 
             logger.info("[Snai] Using pattern: %s", working_pattern)
