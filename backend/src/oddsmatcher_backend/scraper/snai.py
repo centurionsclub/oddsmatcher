@@ -113,35 +113,50 @@ def _parse_snai_events(data: Any, league_name: str, sport_key: str) -> list[Matc
     if not data:
         return results
 
+    # Log top-level structure for discovery
+    if isinstance(data, dict):
+        logger.info("[Snai] %s response top keys: %s", league_name, list(data.keys())[:12])
+
     events: list = []
     if isinstance(data, list):
         events = data
     elif isinstance(data, dict):
-        for key in ("avvenimenti", "eventi", "events", "data", "result",
-                    "matches", "fixtures", "palinsesto", "avv",
-                    "avvenimentiList", "listaAvvenimenti", "items"):
-            val = data.get(key)
-            if isinstance(val, list) and val:
-                events = val
-                break
-            if isinstance(val, dict):
-                for k2 in ("avvenimenti", "eventi", "events", "avv", "list", "items"):
-                    v2 = val.get(k2)
-                    if isinstance(v2, list) and v2:
-                        events = v2
-                        break
-                if events:
+        # avvenimentiMap: dict keyed by event ID → convert to list
+        avm = data.get("avvenimentiMap")
+        if isinstance(avm, dict) and avm:
+            events = list(avm.values())
+            logger.info("[Snai] %s: found %d events in avvenimentiMap", league_name, len(events))
+        else:
+            for key in ("avvenimenti", "eventi", "events", "data", "result",
+                        "matches", "fixtures", "palinsesto", "avv",
+                        "avvenimentiList", "listaAvvenimenti", "items"):
+                val = data.get(key)
+                if isinstance(val, list) and val:
+                    events = val
                     break
-        # Try nested under any single key
-        if not events:
-            for val in data.values():
-                if isinstance(val, list) and val and isinstance(val[0], dict):
-                    sample = val[0]
-                    if any(k in sample for k in ("descrizione", "description", "name",
-                                                   "dataOra", "startDate", "scommesse",
-                                                   "quota", "betGroupList")):
-                        events = val
+                if isinstance(val, dict):
+                    for k2 in ("avvenimenti", "eventi", "events", "avv", "list", "items"):
+                        v2 = val.get(k2)
+                        if isinstance(v2, list) and v2:
+                            events = v2
+                            break
+                    if events:
                         break
+            # Try nested under any single key
+            if not events:
+                for val in data.values():
+                    if isinstance(val, list) and val and isinstance(val[0], dict):
+                        sample = val[0]
+                        if any(k in sample for k in ("descrizione", "description", "name",
+                                                       "dataOra", "startDate", "scommesse",
+                                                       "quota", "betGroupList")):
+                            events = val
+                            break
+    if events:
+        first = events[0] if isinstance(events[0], dict) else {}
+        logger.info("[Snai] %s: first event keys=%s | preview=%.300s",
+                    league_name, list(first.keys())[:12],
+                    _json.dumps(first, ensure_ascii=False)[:300])
 
     for ev in events:
         if not isinstance(ev, dict):
@@ -401,10 +416,11 @@ class SnaiScraper:
                     logger.info("[Snai] PROBE %s → %d | %s", probe_url[:100], resp.status_code, text)
 
                     if resp.status_code == 200:
-                        # Check for event-like content
+                        # Check for event-like content (require specific event keywords,
+                        # not just "descrizione" which appears in navigation metadata too)
                         if any(kw in resp.text for kw in (
-                            "avvenimento", "descrizione", "scommesse", "quota",
-                            "events", "startDate", "dataOra", "betGroup",
+                            "avvenimentiMap", "avvenimento", "scommesse", "quota",
+                            "startDate", "dataOra", "betGroup",
                         )):
                             logger.info("[Snai] ✅ Working URL found: %s (template: %s)",
                                         probe_url, url_template)

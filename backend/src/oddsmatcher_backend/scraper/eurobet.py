@@ -322,16 +322,42 @@ class EurobetScraper:
                 except Exception as e:
                     logger.warning("[Eurobet] Homepage warm-up failed: %s", str(e)[:100])
 
+                # Navigate general sport pages (less Cloudflare-challenged than specific competition pages)
+                # Then search for any embedded JSON data (script vars, window globals, etc.)
+                seen_disciplines_nav: set[str] = set()
                 for league_name, discipline, alias, page_url in pages:
+                    # Navigate each competition page; if Cloudflare blocks after the first,
+                    # fall back to the general sport page which loads more reliably
+                    if discipline not in seen_disciplines_nav:
+                        sport_url = f"{BASE_URL}/scommesse-sportive/{discipline}"
+                        seen_disciplines_nav.add(discipline)
+                        try:
+                            logger.info("[Eurobet] Navigating to sport page %s", sport_url)
+                            try:
+                                await page.goto(sport_url, wait_until="networkidle", timeout=30_000)
+                            except Exception:
+                                pass
+                            await page.wait_for_timeout(3000)
+                        except Exception as e:
+                            logger.warning("[Eurobet] Sport page nav error: %s", str(e)[:100])
+
                     try:
                         logger.info("[Eurobet] Navigating to %s", page_url)
                         try:
-                            await page.goto(page_url, wait_until="networkidle", timeout=30_000)
+                            await page.goto(page_url, wait_until="networkidle", timeout=25_000)
                         except Exception:
                             pass  # timeout is ok — page still has content
                         await page.wait_for_timeout(2000)
 
-                        # Extract __NEXT_DATA__ from the page
+                        # Check current URL and page title (detect Cloudflare challenge)
+                        try:
+                            title = await page.title()
+                            final_url = page.url
+                            logger.info("[Eurobet] %s: title=%r url=%s", league_name, title, final_url)
+                        except Exception:
+                            pass
+
+                        # Strategy 1: Extract __NEXT_DATA__ (Next.js pages)
                         next_data_str = await page.evaluate("""
                             () => {
                                 const el = document.getElementById('__NEXT_DATA__');
@@ -339,50 +365,77 @@ class EurobetScraper:
                             }
                         """)
 
-                        if not next_data_str:
-                            logger.warning("[Eurobet] %s: no __NEXT_DATA__ found", league_name)
-                            # Log HTML snippet to understand page structure
+                        if next_data_str:
                             try:
-                                html = await page.evaluate("document.documentElement.innerHTML")
-                                logger.info("[Eurobet] %s: HTML snippet=%.2000s", league_name, html)
-                            except Exception:
-                                pass
-                            continue
+                                next_data = _json.loads(next_data_str)
+                                page_props = (next_data.get("props") or {}).get("pageProps") or {}
+                                logger.info("[Eurobet] %s: __NEXT_DATA__ pageProps keys=%s | preview=%.1000s",
+                                            league_name, list(page_props.keys())[:15],
+                                            _json.dumps(page_props, ensure_ascii=False)[:1000])
+                                events = _extract_events(page_props)
+                                if events:
+                                    rows = _parse_events(events, league_name, discipline)
+                                    logger.info("[Eurobet] %s: %d rows from __NEXT_DATA__", league_name, len(rows))
+                                    all_results.extend(rows)
+                                    continue
+                            except Exception as e:
+                                logger.warning("[Eurobet] %s: __NEXT_DATA__ error: %s", league_name, e)
 
-                        try:
-                            next_data = _json.loads(next_data_str)
-                        except Exception as e:
-                            logger.warning("[Eurobet] %s: __NEXT_DATA__ JSON parse error: %s", league_name, e)
-                            continue
+                        # Strategy 2: Extract window globals / embedded JSON from script tags
+                        embedded_json = await page.evaluate("""
+                            () => {
+                                const results = {};
+                                // Check common window globals
+                                for (const k of ['__INITIAL_STATE__', '__REDUX_STATE__', '__APP_STATE__',
+                                                  '__data__', '__PRELOADED_STATE__', 'initialData',
+                                                  '__eb_data__', '__sport_data__']) {
+                                    if (window[k] !== undefined) {
+                                        results[k] = window[k];
+                                    }
+                                }
+                                // Search script tags for JSON
+                                const scripts = document.querySelectorAll('script:not([src])');
+                                for (const s of scripts) {
+                                    const txt = s.textContent;
+                                    if (txt && (txt.includes('eventList') || txt.includes('avvenimenti')
+                                                || txt.includes('betGroup') || txt.includes('quota'))) {
+                                        results['_script_snippet'] = txt.slice(0, 2000);
+                                        break;
+                                    }
+                                }
+                                // Check data attributes on main content elements
+                                const evEl = document.querySelector('[data-events],[data-odds],[data-sport]');
+                                if (evEl) {
+                                    results['_data_attr'] = evEl.getAttribute('data-events')
+                                                         || evEl.getAttribute('data-odds')
+                                                         || evEl.getAttribute('data-sport');
+                                }
+                                return results;
+                            }
+                        """)
+                        if embedded_json and isinstance(embedded_json, dict):
+                            non_empty = {k: v for k, v in embedded_json.items() if v}
+                            if non_empty:
+                                logger.info("[Eurobet] %s: embedded globals found: %s | preview=%.500s",
+                                            league_name, list(non_empty.keys()),
+                                            _json.dumps(non_empty, ensure_ascii=False)[:500])
+                                for k, v in non_empty.items():
+                                    if k.startswith("_"):
+                                        continue  # script snippets handled below
+                                    events = _extract_events(v)
+                                    if events:
+                                        rows = _parse_events(events, league_name, discipline)
+                                        logger.info("[Eurobet] %s: %d rows from window[%s]", league_name, len(rows), k)
+                                        all_results.extend(rows)
+                                        break
 
-                        # Log structure for discovery (first league)
+                        # Strategy 3: Log HTML body for structure discovery (first league only)
                         if not all_results:
-                            logger.info("[Eurobet] %s: __NEXT_DATA__ top keys=%s",
-                                        league_name, list(next_data.keys()))
-                            page_props = (next_data.get("props") or {}).get("pageProps") or {}
-                            logger.info("[Eurobet] %s: pageProps keys=%s | preview=%.2000s",
-                                        league_name, list(page_props.keys())[:20],
-                                        _json.dumps(page_props, ensure_ascii=False)[:2000])
-
-                        # Parse events from pageProps
-                        page_props = (next_data.get("props") or {}).get("pageProps") or {}
-                        events = _extract_events(page_props)
-
-                        if not events:
-                            logger.warning("[Eurobet] %s: no events found in __NEXT_DATA__ pageProps "
-                                           "(pageProps keys=%s)", league_name,
-                                           list(page_props.keys())[:15])
-                            continue
-
-                        logger.info("[Eurobet] %s: found %d events in __NEXT_DATA__", league_name, len(events))
-                        if events:
-                            logger.info("[Eurobet] %s: first event keys=%s | preview=%.400s",
-                                        league_name, list(events[0].keys())[:15] if isinstance(events[0], dict) else "?",
-                                        _json.dumps(events[0], ensure_ascii=False)[:400])
-
-                        rows = _parse_events(events, league_name, discipline)
-                        logger.info("[Eurobet] %s: %d rows parsed", league_name, len(rows))
-                        all_results.extend(rows)
+                            try:
+                                body_html = await page.evaluate("document.body ? document.body.innerHTML : ''")
+                                logger.info("[Eurobet] %s: BODY HTML=%.3000s", league_name, body_html)
+                            except Exception as e:
+                                logger.warning("[Eurobet] %s: body HTML error: %s", league_name, e)
 
                     except Exception as exc:
                         logger.error("[Eurobet] %s error: %s", league_name, exc, exc_info=True)
