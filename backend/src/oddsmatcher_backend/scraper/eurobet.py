@@ -487,88 +487,72 @@ class EurobetScraper:
                     except Exception as wup_e:
                         logger.warning("[Eurobet] Warmup navigation error: %s", wup_e)
 
-                    async def _fetch_league_data(league_name: str, discipline: str, alias: str) -> list[MatchOdds]:
-                        """Navigate to one league page, intercept API responses, return rows."""
-                        bet_url = f"https://www.eurobet.it/it/scommesse/{discipline}/{alias}"
-                        captured: dict[str, Any] = {}
-                        captured_lock = asyncio.Lock()
+                    async def _browser_fetch(url: str) -> Any:
+                        """Fetch URL from within browser context (uses CF session cookies)."""
+                        js = f"""
+                        async () => {{
+                            try {{
+                                const r = await fetch('{url}', {{
+                                    credentials: 'include',
+                                    headers: {{ 'Accept': 'application/json' }}
+                                }});
+                                if (!r.ok) return {{_status: r.status, _error: 'http_error'}};
+                                return await r.json();
+                            }} catch(e) {{
+                                return {{_error: String(e)}};
+                            }}
+                        }}
+                        """
+                        return await page.evaluate(js)
 
-                        async def on_response(response) -> None:
-                            url = response.url
-                            ct = response.headers.get("content-type", "")
-                            # Log ALL API calls (JSON responses) to discover betting data endpoint
-                            if "json" in ct and "eurobet.it" in url:
-                                try:
-                                    body = await response.json()
-                                    body_str = str(body)
-                                    # Always log the URL and brief preview
-                                    logger.info("[Eurobet] API %s → len=%d | preview=%.200s",
-                                                url[-120:], len(body_str), body_str[:200])
-                                    # Check if it looks like event data
-                                    has_events = any(kw in body_str for kw in (
-                                        "betGroupList", "betGroups", "eventList",
-                                        "description", "startDate", "quota", "odds"
-                                    ))
-                                    if has_events or "_next/data/" in url:
-                                        async with captured_lock:
-                                            captured[url] = body
-                                except Exception:
-                                    pass
+                    # ── Step 1: Get sport-level meeting list from detail-service ──
+                    # This tells us correct meeting aliases and structure
+                    sport_data: dict[str, Any] = {}
+                    for disc in set(d for _, d, _ in meetings):
+                        url = f"https://www.eurobet.it/detail-service/sport-schedule/services/sport/{disc}?prematch=1&live=0"
+                        result = await _browser_fetch(url)
+                        if isinstance(result, dict) and "_error" not in result:
+                            status = result.get("_status")
+                            if status:
+                                logger.info("[Eurobet] sport-list %s → status=%d", disc, status)
+                            else:
+                                logger.info("[Eurobet] sport-list %s → keys=%s | preview=%.500s",
+                                            disc, list(result.keys())[:10],
+                                            _json.dumps(result, ensure_ascii=False)[:500])
+                                sport_data[disc] = result
+                        else:
+                            logger.info("[Eurobet] sport-list %s error: %s", disc, result)
 
-                        page.on("response", on_response)
-                        try:
-                            # networkidle waits for all JS fetches including /_next/data/ to complete
-                            await page.goto(bet_url, wait_until="networkidle", timeout=45_000)
-                            await page.wait_for_timeout(2000)
-                        except Exception as e:
-                            logger.warning("[Eurobet] %s navigation error: %s", league_name, e)
-                        finally:
-                            page.remove_listener("response", on_response)
+                    # Also check prematch-menu-service (known to return 63KB with meeting info)
+                    for disc in set(d for _, d, _ in meetings):
+                        url = f"https://www.eurobet.it/prematch-menu-service/api/v2/sport-schedule/services/sport-list/{disc}"
+                        result = await _browser_fetch(url)
+                        if isinstance(result, dict) and "_error" not in result:
+                            logger.info("[Eurobet] prematch-menu %s → preview=%.1000s", disc,
+                                        _json.dumps(result, ensure_ascii=False)[:1000])
 
-                        logger.info("[Eurobet] %s: captured %d responses", league_name, len(captured))
-
-                        # Try to parse each captured response
-                        for cap_url, cap_data in captured.items():
-                            events = _extract_events(cap_data)
+                    # ── Step 2: Fetch each meeting via detail-service using browser context ──
+                    for league_name, discipline, alias in meetings:
+                        url = f"https://www.eurobet.it/detail-service/sport-schedule/services/meeting/{discipline}/{alias}?prematch=1&live=0"
+                        result = await _browser_fetch(url)
+                        if isinstance(result, dict) and "_error" not in result:
+                            status = result.get("_status")
+                            if status:
+                                logger.info("[Eurobet] %s → status=%d", league_name, status)
+                                continue
+                            logger.info("[Eurobet] %s → code=%s desc=%s keys=%s | preview=%.300s",
+                                        league_name, result.get("code"), result.get("description"),
+                                        list(result.keys())[:8],
+                                        _json.dumps(result, ensure_ascii=False)[:300])
+                            events = _extract_events(result)
                             if events:
                                 rows = _parse_events(events, league_name, discipline)
-                                logger.info("[Eurobet] %s: %d rows from %s", league_name, len(rows), cap_url[-80:])
+                                logger.info("[Eurobet] %s: %d rows from detail-service", league_name, len(rows))
+                                all_results.extend(rows)
                                 if rows:
-                                    return rows
-
-                        # No API data captured — check page state and __NEXT_DATA__ (may be updated)
-                        try:
-                            next_data_text = await page.evaluate(
-                                "() => document.getElementById('__NEXT_DATA__')?.textContent || ''"
-                            )
-                            logger.info("[Eurobet] %s __NEXT_DATA__ len=%d | preview=%.600s",
-                                        league_name, len(next_data_text), next_data_text[:600])
-                            if next_data_text and len(next_data_text) > 500:
-                                nd_json = _json.loads(next_data_text)
-                                events = _extract_events(nd_json)
-                                if events:
-                                    rows = _parse_events(events, league_name, discipline)
-                                    logger.info("[Eurobet] %s: %d rows from __NEXT_DATA__", league_name, len(rows))
-                                    return rows
-                        except Exception as e:
-                            logger.debug("[Eurobet] %s __NEXT_DATA__ read error: %s", league_name, e)
-
-                        logger.info("[Eurobet] %s: 0 rows (no data captured)", league_name)
-                        return []
-
-                    # Test with first league
-                    test_league, test_disc, test_alias = meetings[0]
-                    test_rows = await _fetch_league_data(test_league, test_disc, test_alias)
-                    all_results.extend(test_rows)
-                    if test_rows:
-                        working_url_template = "PLAYWRIGHT_INTERCEPT"
-
-                    # Fetch remaining leagues if first worked (or always try)
-                    for league_name, discipline, alias in meetings[1:]:
-                        rows = await _fetch_league_data(league_name, discipline, alias)
-                        if rows:
-                            working_url_template = "PLAYWRIGHT_INTERCEPT"
-                        all_results.extend(rows)
+                                    working_url_template = "BROWSER_FETCH"
+                        else:
+                            logger.info("[Eurobet] %s fetch error: %s", league_name, result)
 
                     await browser.close()
 
