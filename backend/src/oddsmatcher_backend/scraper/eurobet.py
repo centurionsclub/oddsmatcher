@@ -539,23 +539,31 @@ class EurobetScraper:
                         else:
                             logger.info("[Eurobet] prematch-menu %s error: %s", disc, result)
 
-                    # ── Step 2: Fetch each meeting via detail-service ──
+                    # ── Step 2: Navigate to each league page, then fetch with correct alias ──
+                    # CF only allows detail-service calls when Referer is a valid scommesse page
                     for league_name, discipline, alias in meetings:
-                        # Use correct alias from prematch-menu if found, else our guess
                         correct_alias = disc_aliases.get(discipline, {}).get(league_name, alias)
-                        url = f"https://www.eurobet.it/detail-service/sport-schedule/services/meeting/{discipline}/{correct_alias}?prematch=1&live=0"
-                        result = await _browser_fetch(url)
+                        nav_url = f"https://www.eurobet.it/it/scommesse/{discipline}/{alias}"
+                        try:
+                            await page.goto(nav_url, wait_until="domcontentloaded", timeout=30_000)
+                            await page.wait_for_timeout(1000)
+                        except Exception as e:
+                            logger.warning("[Eurobet] %s nav error: %s", league_name, e)
+
+                        # Now fetch detail-service from within this page context (correct Referer)
+                        api_url = f"/detail-service/sport-schedule/services/meeting/{discipline}/{correct_alias}?prematch=1&live=0"
+                        result = await _browser_fetch(api_url)
                         if isinstance(result, dict) and "_error" not in result:
                             status = result.get("_status")
                             if status:
                                 logger.info("[Eurobet] %s → HTTP %d (alias=%r)", league_name, status, correct_alias)
                                 continue
                             code = result.get("code")
-                            desc = result.get("description")
-                            logger.info("[Eurobet] %s → code=%s desc=%s alias=%r | preview=%.300s",
-                                        league_name, code, desc, correct_alias,
+                            desc_r = result.get("description")
+                            logger.info("[Eurobet] %s → code=%s %s alias=%r | preview=%.300s",
+                                        league_name, code, desc_r, correct_alias,
                                         _json.dumps(result, ensure_ascii=False)[:300])
-                            if code in (1, "1"):
+                            if code in (1, "1", 1):
                                 events = _extract_events(result)
                                 if events:
                                     rows = _parse_events(events, league_name, discipline)
