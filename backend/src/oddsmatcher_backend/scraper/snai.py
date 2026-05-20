@@ -16,6 +16,7 @@ Response format (schedaAvvenimento):
   Note: quota is integer × 100 (185 → 1.85). stato: 0=active, 1=suspended.
 """
 
+import json as _json
 import logging
 import os
 import re
@@ -352,6 +353,7 @@ class SnaiScraper:
         # ── Phase 3: Fetch odds per event via schedaAvvenimento ──────────
         logger.info("[Snai] Fetching odds per event via schedaAvvenimento…")
         all_results: list[MatchOdds] = []
+        first_diag_done = False
 
         async with httpx.AsyncClient(
             headers=_SNAI_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
@@ -373,10 +375,29 @@ class SnaiScraper:
 
                         odds_data = resp.json()
 
+                        # Diagnostic: log structure of first event across ALL leagues
+                        if not first_diag_done and isinstance(odds_data, dict):
+                            first_diag_done = True
+                            s_map = odds_data.get("scommessaMap") or {}
+                            ia_map = odds_data.get("infoAggiuntivaMap") or {}
+                            s_summary = {k: {"cod": v.get("codiceScommessa"), "desc": v.get("descrizione")} for k,v in list(s_map.items())[:5]} if isinstance(s_map, dict) else s_map
+                            ia_keys = list(ia_map.keys())[:3] if isinstance(ia_map, dict) else []
+                            ia_first = {}
+                            if ia_keys:
+                                ia_v = ia_map[ia_keys[0]]
+                                ia_first = {"cod_s": ia_v.get("codiceScommessa"), "esitoList_len": len(ia_v.get("esitoList") or []), "first_esito": (ia_v.get("esitoList") or [{}])[0] if ia_v.get("esitoList") else None}
+                            logger.info("[Snai] DIAG event=%s cluster=%s scommessaMap=%s ia_keys=%s ia_first=%s",
+                                ev_key,
+                                odds_data.get("codiceClusterSelected"),
+                                _json.dumps(s_summary, ensure_ascii=False),
+                                ia_keys,
+                                _json.dumps(ia_first, ensure_ascii=False),
+                            )
+
                         rows = _parse_schedaAvvenimento(odds_data, lg, sk)
                         league_rows.extend(rows)
                     except Exception as exc:
-                        logger.debug("[Snai] %s event %s error: %s", lg, ev_key, exc)
+                        logger.warning("[Snai] %s event %s error: %s", lg, ev_key, exc)
 
                 logger.info("[Snai] %s: %d rows from %d events", lg, len(league_rows), len(evs))
                 all_results.extend(league_rows)
