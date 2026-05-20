@@ -293,34 +293,35 @@ class EurobetScraper:
         working_url_template: str | None = None  # with {disc}/{alias} placeholders
 
         # Probe candidates on web.eurobet.it (not Cloudflare-protected)
+        # integration-bridge is confirmed as a real Spring Boot API (returns JSON 404 on wrong paths)
         probe_candidates: list[tuple[str, str]] = [
-            # detail-service (known internal API for sport schedule)
-            (f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
-             f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
-            (f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1",
-             f"{WEB_BASE}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1"),
-            (f"{WEB_BASE}/detail-service/sport-schedule/services/sport/{first_disc}?prematch=1&live=0",
-             f"{WEB_BASE}/detail-service/sport-schedule/services/sport/{{disc}}?prematch=1&live=0"),
-            # webeb/rest paths (health check found at /webeb/rest)
-            (f"{WEB_BASE}/webeb/rest/prematch/sport/{first_disc}/meeting/{first_alias}",
-             f"{WEB_BASE}/webeb/rest/prematch/sport/{{disc}}/meeting/{{alias}}"),
-            (f"{WEB_BASE}/webeb/rest/prematch/meeting/{first_alias}",
-             f"{WEB_BASE}/webeb/rest/prematch/meeting/{{alias}}"),
-            (f"{WEB_BASE}/webeb/rest/sport/{first_disc}/events",
-             f"{WEB_BASE}/webeb/rest/sport/{{disc}}/events"),
-            (f"{WEB_BASE}/webeb/rest/events?sport={first_disc}&meeting={first_alias}",
-             f"{WEB_BASE}/webeb/rest/events?sport={{disc}}&meeting={{alias}}"),
-            # integration-bridge (known internal API from FullStory monitoring)
-            (f"{WEB_BASE}/integration-bridge/prematch/{first_disc}/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/prematch/{{disc}}/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/sport-schedule/{first_disc}/{first_alias}",
-             f"{WEB_BASE}/integration-bridge/sport-schedule/{{disc}}/{{alias}}"),
-            (f"{WEB_BASE}/integration-bridge/events?sport={first_disc}&meeting={first_alias}",
-             f"{WEB_BASE}/integration-bridge/events?sport={{disc}}&meeting={{alias}}"),
-            # prematch-menu-service (seen in probe logs before)
-            (f"{WEB_BASE}/prematch-menu-service/api/v2/sport-schedule/services/sport/{first_disc}?prematch=1",
-             f"{WEB_BASE}/prematch-menu-service/api/v2/sport-schedule/services/sport/{{disc}}?prematch=1"),
-            # Try www.eurobet.it paths via httpx (might work without browser)
+            # integration-bridge — same sub-path as detail-service on www.eurobet.it
+            (f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
+             f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
+            (f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1",
+             f"{WEB_BASE}/integration-bridge/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1"),
+            # integration-bridge — other path patterns
+            (f"{WEB_BASE}/integration-bridge/sport-schedule/services/sport/{first_disc}?prematch=1&live=0",
+             f"{WEB_BASE}/integration-bridge/sport-schedule/services/sport/{{disc}}?prematch=1&live=0"),
+            (f"{WEB_BASE}/integration-bridge/api/v1/sport/{first_disc}/meeting/{first_alias}?prematch=1",
+             f"{WEB_BASE}/integration-bridge/api/v1/sport/{{disc}}/meeting/{{alias}}?prematch=1"),
+            (f"{WEB_BASE}/integration-bridge/api/v1/events?sport={first_disc}&meeting={first_alias}&prematch=1",
+             f"{WEB_BASE}/integration-bridge/api/v1/events?sport={{disc}}&meeting={{alias}}&prematch=1"),
+            (f"{WEB_BASE}/integration-bridge/api/sports/{first_disc}/meetings/{first_alias}/events?prematch=1",
+             f"{WEB_BASE}/integration-bridge/api/sports/{{disc}}/meetings/{{alias}}/events?prematch=1"),
+            (f"{WEB_BASE}/integration-bridge/v1/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/v1/{{disc}}/{{alias}}"),
+            (f"{WEB_BASE}/integration-bridge/prematch/sport-schedule/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/integration-bridge/prematch/sport-schedule/{{disc}}/{{alias}}"),
+            # integration-bridge — log all paths for discovery
+            (f"{WEB_BASE}/integration-bridge",
+             f"{WEB_BASE}/integration-bridge"),
+            (f"{WEB_BASE}/integration-bridge/",
+             f"{WEB_BASE}/integration-bridge/"),
+            # webeb/rest — try POST-compatible alternative paths
+            (f"{WEB_BASE}/webeb/rest/api/prematch/{first_disc}/{first_alias}",
+             f"{WEB_BASE}/webeb/rest/api/prematch/{{disc}}/{{alias}}"),
+            # www.eurobet.it detail-service via httpx (might bypass Cloudflare for non-browser)
             (f"{BASE_URL}/detail-service/sport-schedule/services/meeting/{first_disc}/{first_alias}?prematch=1&live=0",
              f"{BASE_URL}/detail-service/sport-schedule/services/meeting/{{disc}}/{{alias}}?prematch=1&live=0"),
         ]
