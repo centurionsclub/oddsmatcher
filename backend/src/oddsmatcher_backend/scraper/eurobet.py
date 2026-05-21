@@ -810,26 +810,50 @@ class EurobetScraper:
                                 # (e.g. 1 event for Serie A). Clicking "Giornata" triggers
                                 # a detail-service API call with the full round fixture,
                                 # which our _on_resp interceptor will capture.
+                                # IMPORTANT exclusions to avoid false positives:
+                                #   - "accetta tutti i cookie" → cookie banner
+                                #   - "pronostici 38ª giornata serie a" → promo link
                                 try:
                                     clicked_tab_txt = await pg.evaluate("""
                                         () => {
                                             const keywords = [
                                                 'giornata', 'tutte le partite',
                                                 'tutti gli incontri', 'tutti i match',
-                                                'tutte le gare', 'tutti'
+                                                'tutte le gare'
                                             ];
-                                            const candidates = document.querySelectorAll(
-                                                'button, a, li, span[role], div[role="tab"], ' +
-                                                '[role="tab"], [role="button"], [class*="tab"], ' +
-                                                '[class*="Tab"], [class*="nav"], [class*="filter"]'
+                                            // Exclude cookie banners and promo links
+                                            const excludes = [
+                                                'cookie', 'accetta', 'pronostic',
+                                                'bonus', 'promo', 'offerta', 'scommett'
+                                            ];
+                                            const matchesKw = (txt) => keywords.some(kw => txt.includes(kw));
+                                            const hasExclude = (txt) => excludes.some(ex => txt.includes(ex));
+
+                                            // Phase 1: prefer role="tab" elements (navigation tabs)
+                                            const tabEls = document.querySelectorAll(
+                                                '[role="tab"], [class*="tab-item"], [class*="tabItem"], ' +
+                                                '[class*="TabItem"], [class*="filter-item"], ' +
+                                                'ul[role="tablist"] li, ul[role="tablist"] button'
                                             );
-                                            for (const el of candidates) {
+                                            for (const el of tabEls) {
                                                 const txt = el.textContent.trim().toLowerCase();
-                                                for (const kw of keywords) {
-                                                    if (txt.includes(kw) && txt.length < 60) {
-                                                        el.click();
-                                                        return txt;
-                                                    }
+                                                if (hasExclude(txt)) continue;
+                                                if (matchesKw(txt) && txt.length < 50) {
+                                                    el.click();
+                                                    return txt;
+                                                }
+                                            }
+
+                                            // Phase 2: broader search with strict exclusions + short text
+                                            const all = document.querySelectorAll(
+                                                'button, a, li, span[role="button"], div[role="button"]'
+                                            );
+                                            for (const el of all) {
+                                                const txt = el.textContent.trim().toLowerCase();
+                                                if (hasExclude(txt)) continue;
+                                                if (matchesKw(txt) && txt.length < 35) {
+                                                    el.click();
+                                                    return txt;
                                                 }
                                             }
                                             return null;
