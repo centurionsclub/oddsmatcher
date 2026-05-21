@@ -17,7 +17,7 @@ def setup_logging(verbose: bool = False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Oddsmatcher Backend — CentroQuote scraper",
+        description="Oddsmatcher Backend — scraper",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -31,7 +31,7 @@ def main():
     )
     scrape_parser.add_argument(
         "--bookmaker",
-        choices=["centroquote", "lottomatica", "sisal", "eurobet", "snai", "bwin", "betsson", "williamhill", "bet365", "betfair"],
+        choices=["lottomatica", "sisal", "eurobet", "snai", "bwin", "betsson", "williamhill", "bet365", "betfair"],
         default=None,
         help="Scrape only this bookmaker (default: all)",
     )

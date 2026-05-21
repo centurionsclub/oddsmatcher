@@ -9,7 +9,7 @@ from supabase import create_client, Client
 from oddsmatcher_backend.config.settings import settings
 
 if TYPE_CHECKING:
-    from oddsmatcher_backend.scraper.centroquote import MatchOdds
+    from oddsmatcher_backend.scraper.models import MatchOdds
 
 logger = logging.getLogger(__name__)
 

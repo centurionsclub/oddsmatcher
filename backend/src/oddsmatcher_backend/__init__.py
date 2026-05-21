@@ -1,3 +1,3 @@
-"""Oddsmatcher Backend - CentroQuote scraper and odds pipeline."""
+"""Oddsmatcher Backend — multi-bookmaker odds scraper."""
 
 __version__ = "0.1.0"

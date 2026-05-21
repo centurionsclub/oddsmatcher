@@ -25,7 +25,7 @@ from typing import Any
 
 import httpx
 
-from oddsmatcher_backend.scraper.centroquote import MatchOdds
+from oddsmatcher_backend.scraper.models import MatchOdds
 
 logger = logging.getLogger(__name__)
 

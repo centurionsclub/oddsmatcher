@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from oddsmatcher_backend.scraper._base_playwright import BasePlaywrightScraper
-from oddsmatcher_backend.scraper.centroquote import MatchOdds
+from oddsmatcher_backend.scraper.models import MatchOdds
 
 logger = logging.getLogger(__name__)
 

@@ -21,7 +21,7 @@ from typing import Any
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, Response, async_playwright
 
-from oddsmatcher_backend.scraper.centroquote import MatchOdds
+from oddsmatcher_backend.scraper.models import MatchOdds
 
 logger = logging.getLogger(__name__)
 
