@@ -600,7 +600,13 @@ class EurobetScraper:
                         meeting_result: Any = {"_error": "not_tried"}
                         ctx = None
                         pg = None
+                        # Events captured by intercepting /_next/data/ and detail-service
+                        # responses — these contain the FULL event list for the league,
+                        # not just the single featured meeting returned by the meeting API.
+                        intercepted: list[dict] = []
+
                         for attempt in range(3):
+                            intercepted.clear()
                             if ctx:
                                 await ctx.close()
                             ctx = await browser.new_context(
@@ -612,9 +618,46 @@ class EurobetScraper:
                             pg = await ctx.new_page()
                             if _STEALTH:
                                 await _stealth_async(pg)
+
+                            # Intercept /_next/data/ (Next.js ISR hydration payload)
+                            # and /detail-service/ JSON responses to capture the full
+                            # event list that the page loads after initial render.
+                            _iref = intercepted  # mutable ref — safe for closure
+                            async def _on_resp(resp, _cap=_iref, _ln=league_name):
+                                url = resp.url
+                                if not any(kw in url for kw in (
+                                        '/_next/data/', '/detail-service/',
+                                        '/sport-schedule/')):
+                                    return
+                                try:
+                                    ct = resp.headers.get('content-type', '')
+                                    if 'json' not in ct:
+                                        return
+                                    body = await resp.json()
+                                    if not isinstance(body, (dict, list)):
+                                        return
+                                    body_str = _json.dumps(body, ensure_ascii=False)
+                                    if any(kw in body_str for kw in (
+                                            'betGroupList', 'oddGroupList',
+                                            'eventList', 'startDate')):
+                                        evs = _extract_events(body)
+                                        if evs:
+                                            logger.info(
+                                                "[Eurobet] %s: 🌐 intercepted %d events from %s",
+                                                _ln, len(evs), url[:80])
+                                            _cap.extend(evs)
+                                except Exception:
+                                    pass
+
+                            pg.on("response", _on_resp)
+
                             try:
-                                await pg.goto(bet_url, wait_until="domcontentloaded", timeout=30_000)
-                                await pg.wait_for_timeout(2000)
+                                # Use "load" (not "domcontentloaded") so the browser
+                                # also fires the /_next/data/ XHR that Next.js makes
+                                # after initial render to hydrate ISR page props.
+                                await pg.goto(bet_url, wait_until="load", timeout=45_000)
+                                # Extra 4 s for the /_next/data/ fetch + React hydration
+                                await pg.wait_for_timeout(4000)
                                 meeting_result = await pg.evaluate(_FETCH_JS, meeting_api)
                             except Exception as e:
                                 logger.warning("[Eurobet] %s attempt %d error: %s",
@@ -627,9 +670,25 @@ class EurobetScraper:
                                 continue
                             break
 
-                        # ── Parse meeting response → extract event list ──
+                        # ── Parse: intercepted events first (full list), then meeting ──
                         league_rows: list[MatchOdds] = []
-                        if (isinstance(meeting_result, dict)
+
+                        if intercepted:
+                            logger.info("[Eurobet] %s: using %d intercepted events from network",
+                                        league_name, len(intercepted))
+                            if isinstance(intercepted[0], dict):
+                                cap_og_names = [
+                                    og.get("oddGroupDescription", "?")
+                                    for bg in (intercepted[0].get("betGroupList") or [])
+                                    if isinstance(bg, dict)
+                                    for og in (bg.get("oddGroupList") or [])
+                                    if isinstance(og, dict)
+                                ]
+                                logger.info("[Eurobet] %s: intercepted ev0 markets: %s",
+                                            league_name, cap_og_names[:20])
+                            league_rows.extend(_parse_events(intercepted, league_name, discipline))
+
+                        elif (isinstance(meeting_result, dict)
                                 and meeting_result.get("code") in (1, "1")):
 
                             meeting_events = _extract_events(meeting_result)
@@ -676,9 +735,8 @@ class EurobetScraper:
                                             break
 
                                 if not event_code:
-                                    logger.info("[Eurobet] %s: no eventCode in event, parsing meeting data only",
+                                    logger.info("[Eurobet] %s: no eventCode, parsing meeting data only",
                                                 league_name)
-                                    # Still parse whatever we got from the meeting
                                     league_rows.extend(_parse_events([ev], league_name, discipline))
                                     continue
 
@@ -696,7 +754,6 @@ class EurobetScraper:
                                         and detail_result.get("code") in (1, "1")):
                                     detail_events = _extract_events(detail_result)
                                     if detail_events:
-                                        # Log market names for first event detail (once per league)
                                         if not league_rows:
                                             det_ev0 = detail_events[0] if isinstance(detail_events[0], dict) else {}
                                             det_og_names = [
@@ -714,10 +771,9 @@ class EurobetScraper:
                                     else:
                                         logger.info("[Eurobet] %s event %s: detail code=1 but no events",
                                                     league_name, event_code)
-                                        # Fallback to meeting event data
                                         league_rows.extend(_parse_events([ev], league_name, discipline))
                                 elif isinstance(detail_result, dict) and "_error" in detail_result:
-                                    logger.info("[Eurobet] %s event %s: detail error %s %s — fallback to meeting",
+                                    logger.info("[Eurobet] %s event %s: detail %s %s — fallback",
                                                 league_name, event_code,
                                                 detail_result.get("_status", "?"),
                                                 detail_result.get("_error"))
