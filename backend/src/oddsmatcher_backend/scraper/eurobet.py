@@ -804,6 +804,49 @@ class EurobetScraper:
                                 await pg.goto(bet_url, wait_until="load", timeout=45_000)
                                 # Extra 4 s for the /_next/data/ fetch + React hydration
                                 await pg.wait_for_timeout(4000)
+
+                                # ── Click "Giornata" tab to load ALL matches in the round ──
+                                # The default tab "Più Giocate" only shows featured matches
+                                # (e.g. 1 event for Serie A). Clicking "Giornata" triggers
+                                # a detail-service API call with the full round fixture,
+                                # which our _on_resp interceptor will capture.
+                                try:
+                                    clicked_tab_txt = await pg.evaluate("""
+                                        () => {
+                                            const keywords = [
+                                                'giornata', 'tutte le partite',
+                                                'tutti gli incontri', 'tutti i match',
+                                                'tutte le gare', 'tutti'
+                                            ];
+                                            const candidates = document.querySelectorAll(
+                                                'button, a, li, span[role], div[role="tab"], ' +
+                                                '[role="tab"], [role="button"], [class*="tab"], ' +
+                                                '[class*="Tab"], [class*="nav"], [class*="filter"]'
+                                            );
+                                            for (const el of candidates) {
+                                                const txt = el.textContent.trim().toLowerCase();
+                                                for (const kw of keywords) {
+                                                    if (txt.includes(kw) && txt.length < 60) {
+                                                        el.click();
+                                                        return txt;
+                                                    }
+                                                }
+                                            }
+                                            return null;
+                                        }
+                                    """)
+                                    if clicked_tab_txt:
+                                        logger.info("[Eurobet] %s: clicked tab %r — waiting for events…",
+                                                    league_name, clicked_tab_txt[:40])
+                                        # Wait for the API response triggered by tab click
+                                        await pg.wait_for_timeout(3000)
+                                    else:
+                                        logger.info("[Eurobet] %s: no Giornata tab found on page",
+                                                    league_name)
+                                except Exception as _e_tab:
+                                    logger.info("[Eurobet] %s: tab click error: %s",
+                                                league_name, _e_tab)
+
                                 meeting_result = await pg.evaluate(_FETCH_JS, meeting_api)
                             except Exception as e:
                                 logger.warning("[Eurobet] %s attempt %d error: %s",
