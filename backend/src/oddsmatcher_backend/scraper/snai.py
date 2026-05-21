@@ -307,8 +307,10 @@ def _parse_schedaAvvenimento(
                     raw_sp = int(key_parts[1])
                     sp = f"{raw_sp / 100:.4g}"  # 250→"2.5", 350→"3.5"
                 else:
+                    logger.info("[Snai] DIAG_OU skip %s ia_key=%s mname=%r reason=no_sp", name, ia_key, mname)
                     continue
             if sp not in {"1.5", "2.5", "3.5"}:
+                logger.info("[Snai] DIAG_OU skip %s ia_key=%s sp=%s reason=sp_not_in_set", name, ia_key, sp)
                 continue
             SIDE_MAP = {"OVER": "Over", "OLTRE": "Over", "UNDER": "Under", "MENO": "Under"}
             odds_uo: dict[str, float] = {}
@@ -324,6 +326,7 @@ def _parse_schedaAvvenimento(
                         odds_uo[f"{side} {sp}"] = q
                 except (TypeError, ValueError):
                     pass
+            logger.info("[Snai] DIAG_OU %s ia_key=%s sp=%s odds_uo=%s", name, ia_key, sp, odds_uo)
             if len(odds_uo) >= 2:
                 results.append(MatchOdds(
                     sport=sport_key, league=league_name,
