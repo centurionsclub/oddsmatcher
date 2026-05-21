@@ -805,6 +805,31 @@ class EurobetScraper:
                                 # Extra 4 s for the /_next/data/ fetch + React hydration
                                 await pg.wait_for_timeout(4000)
 
+                                # ── Dump page tab texts (diagnostic, first attempt only) ──
+                                if attempt == 0:
+                                    try:
+                                        _page_texts = await pg.evaluate("""
+                                            () => {
+                                                const els = document.querySelectorAll(
+                                                    'button, a, li, [role="tab"], [role="button"], ' +
+                                                    '[class*="tab"], [class*="Tab"], [class*="nav"], ' +
+                                                    '[class*="filter"], span'
+                                                );
+                                                const out = [];
+                                                for (const el of els) {
+                                                    const t = el.textContent.trim();
+                                                    if (t.length > 1 && t.length < 60) out.push(t);
+                                                }
+                                                // Deduplicate
+                                                return [...new Set(out)].slice(0, 50);
+                                            }
+                                        """)
+                                        logger.info("[Eurobet] %s: page element texts: %s",
+                                                    league_name, _page_texts[:40])
+                                    except Exception as _e_dump:
+                                        logger.info("[Eurobet] %s: dump error: %s",
+                                                    league_name, _e_dump)
+
                                 # ── Click "Giornata" tab to load ALL matches in the round ──
                                 # The default tab "Più Giocate" only shows featured matches
                                 # (e.g. 1 event for Serie A). Clicking "Giornata" triggers
