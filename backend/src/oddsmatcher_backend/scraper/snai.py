@@ -286,7 +286,7 @@ def _parse_schedaAvvenimento(
                     sp = f"{raw_sp / 100:.4g}"  # 250→"2.5", 350→"3.5"
                 else:
                     continue
-            if sp not in {"1.5", "2.5", "3.5"}:
+            if sp not in {"0.5", "1.5", "2.5", "3.5", "4.5", "5.5"}:
                 continue
             SIDE_MAP = {"OVER": "Over", "OLTRE": "Over", "UNDER": "Under", "MENO": "Under"}
             odds_uo: dict[str, float] = {}
