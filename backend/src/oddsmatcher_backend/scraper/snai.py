@@ -54,13 +54,15 @@ SPORT_CODE_MAP: dict[int, str] = {
     3: "tennis",
 }
 
-# Each entry: (our_league_name, [keywords_ALL_must_appear_in_descrizione])
-LEAGUE_PATTERNS: dict[str, list[tuple[str, list[str]]]] = {
+# Each entry: (our_league_name, [include_keywords], [exclude_keywords_optional])
+# A competition matches when ALL include keywords are present AND NO exclude keyword is present.
+LEAGUE_PATTERNS: dict[str, list[tuple]] = {
     "calcio": [
         ("Serie A",           ["ITA", "Serie A"]),
         ("Serie B",           ["ITA", "Serie B"]),
         ("Premier League",    ["ENG", "Premier"]),
-        ("La Liga",           ["ESP", "Primera"]),
+        # Snai: "ESP Liga" = La Liga, "ESP Liga Adelante" = Serie B España → exclude "Adelante"
+        ("La Liga",           ["ESP", "Liga"],          ["Adelante", "Segunda"]),
         ("Bundesliga",        ["GER", "Bundesliga"]),
         ("Ligue 1",           ["FRA", "Ligue 1"]),
         ("Champions League",  ["Champions League"]),
@@ -78,7 +80,9 @@ LEAGUE_PATTERNS: dict[str, list[tuple[str, list[str]]]] = {
         ("Strasburgo",       ["Strasburgo"]),
     ],
     "basket": [
-        ("NBA",            ["NBA"]),
+        # "WNBA" contains "NBA" → match WNBA first, then NBA with exclusion
+        ("WNBA",           ["WNBA"]),
+        ("NBA",            ["NBA"],                     ["WNBA"]),
         ("Serie A Basket", ["ITA", "Serie A"]),
         ("Eurolega",       ["Eurolega"]),
     ],
@@ -90,8 +94,11 @@ SCHEDA_AVVENIMENTO = f"{API_BASE}/palinsesto/prematch/schedaAvvenimento/{{key}}"
 
 
 def _match_league(descrizione: str, sport_key: str) -> str | None:
-    for league_name, keywords in LEAGUE_PATTERNS.get(sport_key, []):
-        if all(kw in descrizione for kw in keywords):
+    for entry in LEAGUE_PATTERNS.get(sport_key, []):
+        league_name = entry[0]
+        keywords    = entry[1]
+        excludes    = entry[2] if len(entry) > 2 else []
+        if all(kw in descrizione for kw in keywords) and not any(ex in descrizione for ex in excludes):
             return league_name
     return None
 
@@ -251,12 +258,28 @@ def _parse_schedaAvvenimento(
                 ))
 
         # ── Over/Under ───────────────────────────────────────────────
-        # Match "UNDER/OVER X.X" patterns; exclude COMBO, HANDICAP, QUARTO
-        elif ("OVER/UNDER" in _mname_up or "UNDER/OVER" in _mname_up) and "COMBO" not in _mname_up and "QUARTO" not in _mname_up:
+        # Snai market name: " UNDER/OVER" (no spread in name).
+        # Spread is encoded in the last segment of ia_key: e.g. "...-7989-250" → 2.5
+        # Also matches "UNDER/OVER X.X" variants from other leagues.
+        # Exclude COMBO, QUARTO, TEMPO (half-time), SQUADRA, CORNER.
+        elif ("OVER/UNDER" in _mname_up or "UNDER/OVER" in _mname_up) \
+                and "COMBO" not in _mname_up \
+                and "QUARTO" not in _mname_up \
+                and "TEMPO" not in _mname_up \
+                and "SQUADRA" not in _mname_up \
+                and "CORNER" not in _mname_up:
+            # Try to get spread from market name first
             sp_m = re.search(r"(\d+[.,]\d+)", mname)
-            if not sp_m:
-                continue
-            sp = sp_m.group(1).replace(",", ".")
+            if sp_m:
+                sp = sp_m.group(1).replace(",", ".")
+            else:
+                # Fall back to ia_key last segment: "...-7989-250" → 250 → "2.5"
+                key_parts = ia_key.rsplit("-", 1)
+                if len(key_parts) == 2 and key_parts[1].isdigit():
+                    raw_sp = int(key_parts[1])
+                    sp = f"{raw_sp / 100:.4g}"  # 250→"2.5", 350→"3.5"
+                else:
+                    continue
             if sp not in {"1.5", "2.5", "3.5"}:
                 continue
             SIDE_MAP = {"OVER": "Over", "OLTRE": "Over", "UNDER": "Under", "MENO": "Under"}
@@ -280,6 +303,39 @@ def _parse_schedaAvvenimento(
                     event_name=name, event_time=event_time,
                     match_url=match_url, market=f"Over/Under {sp}",
                     bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_uo}],
+                ))
+
+        # ── Goal / No Goal ───────────────────────────────────────────
+        # Snai market name: " GOAL/NOGOAL". Exclude half-time and combo variants.
+        elif "GOAL/NOGOAL" in _mname_up \
+                and "TEMPO" not in _mname_up \
+                and "COMBO" not in _mname_up \
+                and "1T" not in _mname_up \
+                and "2T" not in _mname_up:
+            GG_MAP = {
+                "GOAL": "Goal",   "GG": "Goal",  "SI": "Goal",
+                "NOGOAL": "No Goal", "NG": "No Goal", "NO": "No Goal",
+            }
+            odds_gg: dict[str, float] = {}
+            for e in esiti:
+                if not isinstance(e, dict):
+                    continue
+                lbl = str(e.get("descrizione") or e.get("descrizioneEsito") or e.get("esito") or "").strip().upper()
+                canonical = GG_MAP.get(lbl)
+                q_raw = e.get("quota")
+                try:
+                    q = float(q_raw) / 100 if q_raw is not None else None
+                    if canonical and q and q > 1.0:
+                        odds_gg[canonical] = q
+                except (TypeError, ValueError):
+                    pass
+            if len(odds_gg) >= 2:
+                results.append(MatchOdds(
+                    sport=sport_key, league=league_name,
+                    home_team=home, away_team=away,
+                    event_name=name, event_time=event_time,
+                    match_url=match_url, market="BTTS",
+                    bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_gg}],
                 ))
 
     return results
@@ -398,8 +454,10 @@ class SnaiScraper:
                                 desc = str(v.get("descrizione") or "").upper()
                                 if (("ESITO FINALE" in desc and "TEMPO" not in desc)
                                         or "TESTA A TESTA RISULTATO" in desc
-                                        or "DOPPIA CHANCE" in desc
-                                        or ("OVER/UNDER" in desc and "COMBO" not in desc and "QUARTO" not in desc)):
+                                        or ("DOPPIA CHANCE" in desc and "TEMPO" not in desc and "COMBO" not in desc)
+                                        or ("OVER/UNDER" in desc and "COMBO" not in desc and "QUARTO" not in desc)
+                                        or ("UNDER/OVER" in desc and "COMBO" not in desc and "TEMPO" not in desc and "SQUADRA" not in desc)
+                                        or ("GOAL/NOGOAL" in desc and "TEMPO" not in desc and "COMBO" not in desc and "1T" not in desc)):
                                     kw_markets[k] = {"cod": v.get("codiceScommessa"), "desc": v.get("descrizione"), "stato": v.get("stato")}
                             ia_keys = list(ia_map.keys())[:2] if isinstance(ia_map, dict) else []
                             ia_first = {}
