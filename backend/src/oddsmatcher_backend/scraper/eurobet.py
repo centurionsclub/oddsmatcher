@@ -583,12 +583,119 @@ class EurobetScraper:
                     logger.info("[Eurobet] %s: %d events → %d rows", league_name, len(events), len(rows))
                     return rows
 
+                # JavaScript snippet to fetch any URL from within the page context.
+                # Returns JSON body on success or {_status, _error, _ct, _body} on failure.
+                _FETCH_ANY_JS = """
+                async (url) => {
+                    try {
+                        const r = await fetch(url, {
+                            credentials: 'include',
+                            headers: {'Accept': 'application/json, text/html, */*'}
+                        });
+                        const ct = r.headers.get('content-type') || '';
+                        const finalUrl = r.url;
+                        if (ct.includes('json')) {
+                            return {_status: r.status, _url: finalUrl, _ct: ct,
+                                    _data: await r.json()};
+                        }
+                        const txt = await r.text();
+                        return {_status: r.status, _url: finalUrl, _ct: ct,
+                                _body: txt.slice(0, 2000)};
+                    } catch(e) {
+                        return {_error: String(e)};
+                    }
+                }
+                """
+
                 async with async_playwright() as pw:
                     browser = await pw.chromium.launch(
                         headless=True,
                         args=["--no-sandbox", "--disable-dev-shm-usage"],
                         proxy=proxy_cfg,
                     )
+
+                    # ── Phase 0: probe web.eurobet.it/webeb/scommesse-sportive ──
+                    # This JBoss endpoint returns ALL betting data for a sport/league
+                    # but requires a valid JSESSIONID (established when the browser
+                    # makes same-origin API calls after loading www.eurobet.it).
+                    # Strategy: navigate to main scommesse page first (CF warm-up +
+                    # JSESSIONID), then navigate directly to the webeb endpoint.
+                    _webeb_all_events: list[MatchOdds] = []
+                    try:
+                        ctx0 = await browser.new_context(
+                            user_agent=_UA, locale="it-IT",
+                            timezone_id="Europe/Rome",
+                            viewport={"width": 1280, "height": 800},
+                        )
+                        pg0 = await ctx0.new_page()
+                        if _STEALTH:
+                            await _stealth_async(pg0)
+
+                        # Step 1: land on main betting page → establishes CF clearance
+                        # + triggers API calls that set JSESSIONID on web.eurobet.it
+                        logger.info("[Eurobet] Phase0: warming up CF + JSESSIONID…")
+                        await pg0.goto("https://www.eurobet.it/it/scommesse",
+                                       wait_until="load", timeout=45_000)
+                        await pg0.wait_for_timeout(4000)
+
+                        # Step 2: try to navigate directly to webeb endpoint
+                        webeb_url = "https://web.eurobet.it/webeb/scommesse-sportive"
+                        logger.info("[Eurobet] Phase0: navigating to %s", webeb_url)
+                        resp0 = await pg0.goto(webeb_url,
+                                               wait_until="domcontentloaded",
+                                               timeout=20_000)
+                        final_url = pg0.url
+                        status0 = resp0.status if resp0 else "?"
+                        ct0 = (resp0.headers.get("content-type", "") if resp0 else "")
+                        logger.info("[Eurobet] Phase0: webeb → status=%s url=%s ct=%s",
+                                    status0, final_url[:100], ct0[:60])
+
+                        if "web.eurobet.it" in final_url:
+                            # Did not get redirected away — we have a session!
+                            content0 = await pg0.content()
+                            logger.info("[Eurobet] Phase0: content preview=%.1000s",
+                                        content0[:1000])
+                            # Try to parse JSON from page body
+                            try:
+                                import json as _j
+                                body_txt = await pg0.evaluate(
+                                    "() => document.body ? document.body.innerText : document.documentElement.innerText"
+                                )
+                                data0 = _j.loads(body_txt)
+                                evs0 = _extract_events(data0)
+                                logger.info("[Eurobet] Phase0: webeb returned %d events", len(evs0))
+                                # We don't know the league here — will handle per-league
+                                # by calling the webeb endpoint from within context later
+                            except Exception as e:
+                                logger.info("[Eurobet] Phase0: not JSON: %s | preview=%.300s",
+                                            e, content0[:300])
+                        else:
+                            logger.info("[Eurobet] Phase0: redirected to %s (no session yet)",
+                                        final_url[:80])
+
+                        # Step 3: regardless of Phase0 result, also try fetching webeb
+                        # with credentials from within the page context after CF warm-up
+                        # (will retry later in the per-league loop if needed)
+                        for disc in ("calcio", "tennis", "basket"):
+                            webeb_disc_url = f"https://web.eurobet.it/webeb/scommesse-sportive?disciplina={disc}"
+                            res_disc = await pg0.evaluate(_FETCH_ANY_JS, webeb_disc_url)
+                            s = res_disc.get("_status", "?")
+                            u = res_disc.get("_url", "")[:80]
+                            ct = res_disc.get("_ct", "")
+                            logger.info("[Eurobet] Phase0 fetch %s → status=%s url=%s ct=%s",
+                                        disc, s, u, ct)
+                            if res_disc.get("_data"):
+                                evs = _extract_events(res_disc["_data"])
+                                logger.info("[Eurobet] Phase0 %s: %d events | preview=%.500s",
+                                            disc, len(evs),
+                                            _json.dumps(res_disc["_data"], ensure_ascii=False)[:500])
+                            elif res_disc.get("_body"):
+                                logger.info("[Eurobet] Phase0 %s: body=%.500s",
+                                            disc, res_disc["_body"][:500])
+
+                        await ctx0.close()
+                    except Exception as e0:
+                        logger.warning("[Eurobet] Phase0 failed: %s", e0)
 
                     for league_name, discipline, alias in meetings:
                         bet_url = f"https://www.eurobet.it/it/scommesse/{discipline}/{alias}"
