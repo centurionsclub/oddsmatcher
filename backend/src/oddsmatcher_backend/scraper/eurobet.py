@@ -266,12 +266,13 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
                         ))
 
                 # ── Over/Under ──
-                elif any(kw in og_name for kw in ("Over/Under", "O/U", "Totale Gol", "Over Under")):
+                elif any(kw in og_name for kw in ("Over/Under", "O/U", "Totale Gol", "Over Under",
+                                                    "Gol: O/U", "GOL O/U", "TOTALE GOL")):
                     sp_m = re.search(r"(\d+[.,]\d+)", og_name)
                     if not sp_m:
                         continue
                     sp = sp_m.group(1).replace(",", ".")
-                    if sp not in {"1.5", "2.5", "3.5"}:
+                    if sp not in {"0.5", "1.5", "2.5", "3.5", "4.5", "5.5"}:
                         continue
                     odds_dict = {}
                     for odd in odds_items:
@@ -283,13 +284,40 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
                             continue
                         q = _get_q(odd)
                         if q:
-                            odds_dict[f"{side} {sp}"] = q
+                            odds_dict[side] = q   # "Over"/"Under" — spread is in market name
                     if odds_dict:
                         results.append(MatchOdds(
                             sport=discipline, league=league_name,
                             home_team=home, away_team=away,
                             event_name=name, event_time=event_time,
                             match_url=f"{BASE_URL}/scommesse-sportive/", market=f"Over/Under {sp}",
+                            bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
+                        ))
+
+                # ── Goal / No Goal (BTTS) ──
+                elif any(kw in og_name for kw in ("Goal/No Goal", "Goal No Goal",
+                                                    "GOAL/NO GOAL", "GG/NG",
+                                                    "Entrambe le squadre segnano",
+                                                    "ENTRAMBE LE SQUADRE")):
+                    odds_dict = {}
+                    for odd in odds_items:
+                        if not isinstance(odd, dict):
+                            continue
+                        lbl = _get_lbl(odd)
+                        q = _get_q(odd)
+                        if not q:
+                            continue
+                        lbl_up = lbl.upper()
+                        if lbl_up in ("SI", "SÌ", "YES", "GOAL", "GG"):
+                            odds_dict["Goal"] = q
+                        elif lbl_up in ("NO", "NO GOAL", "NG"):
+                            odds_dict["No Goal"] = q
+                    if len(odds_dict) >= 2:
+                        results.append(MatchOdds(
+                            sport=discipline, league=league_name,
+                            home_team=home, away_team=away,
+                            event_name=name, event_time=event_time,
+                            match_url=f"{BASE_URL}/scommesse-sportive/", market="BTTS",
                             bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
                         ))
 
@@ -557,13 +585,17 @@ class EurobetScraper:
 
                     for league_name, discipline, alias in meetings:
                         bet_url = f"https://www.eurobet.it/it/scommesse/{discipline}/{alias}"
-                        api_url = (f"/detail-service/sport-schedule/services/meeting"
-                                   f"/{discipline}/{alias}?prematch=1&live=0")
+                        meeting_api = (f"/detail-service/sport-schedule/services/meeting"
+                                       f"/{discipline}/{alias}?prematch=1&live=0")
 
-                        # Fresh context = fresh CF clearance token per league.
-                        # Retry up to 3 times if CF blocks (stochastic Turnstile failures).
-                        result: Any = {"_error": "not_tried"}
+                        # Fresh context per league → fresh CF clearance token.
+                        # Retry up to 3 times if CF blocks.
+                        meeting_result: Any = {"_error": "not_tried"}
+                        ctx = None
+                        pg = None
                         for attempt in range(3):
+                            if ctx:
+                                await ctx.close()
                             ctx = await browser.new_context(
                                 user_agent=_UA,
                                 locale="it-IT",
@@ -576,23 +608,129 @@ class EurobetScraper:
                             try:
                                 await pg.goto(bet_url, wait_until="domcontentloaded", timeout=30_000)
                                 await pg.wait_for_timeout(2000)
-                                result = await pg.evaluate(_FETCH_JS, api_url)
+                                meeting_result = await pg.evaluate(_FETCH_JS, meeting_api)
                             except Exception as e:
-                                logger.warning("[Eurobet] %s attempt %d error: %s", league_name, attempt + 1, e)
-                                result = {"_error": str(e)}
-                            finally:
-                                await ctx.close()
+                                logger.warning("[Eurobet] %s attempt %d error: %s",
+                                               league_name, attempt + 1, e)
+                                meeting_result = {"_error": str(e)}
 
-                            # If 403, retry with fresh context
-                            if isinstance(result, dict) and result.get("_status") == 403:
-                                logger.info("[Eurobet] %s attempt %d → 403, retrying…", league_name, attempt + 1)
+                            if isinstance(meeting_result, dict) and meeting_result.get("_status") == 403:
+                                logger.info("[Eurobet] %s attempt %d → 403, retrying…",
+                                            league_name, attempt + 1)
                                 continue
                             break
 
-                        rows = _parse_result(result, league_name, discipline)
-                        all_results.extend(rows)
-                        if rows:
+                        # ── Parse meeting response → extract event list ──
+                        league_rows: list[MatchOdds] = []
+                        if (isinstance(meeting_result, dict)
+                                and meeting_result.get("code") in (1, "1")):
+
+                            meeting_events = _extract_events(meeting_result)
+                            logger.info("[Eurobet] %s: meeting returned %d events",
+                                        league_name, len(meeting_events))
+
+                            # Log all market names in first event for diagnostics
+                            if meeting_events and isinstance(meeting_events[0], dict):
+                                ev0 = meeting_events[0]
+                                all_og_names = [
+                                    og.get("oddGroupDescription", "?")
+                                    for bg in (ev0.get("betGroupList") or [])
+                                    if isinstance(bg, dict)
+                                    for og in (bg.get("oddGroupList") or [])
+                                    if isinstance(og, dict)
+                                ]
+                                logger.info("[Eurobet] %s: ev0 market names: %s",
+                                            league_name, all_og_names[:20])
+
+                            # ── For each event, fetch the full event-detail endpoint ──
+                            # The meeting response only has "SCOMMESSE TOP" (1X2 only).
+                            # The event-detail endpoint returns all markets (O/U, BTTS, DC…).
+                            for ev in meeting_events:
+                                if not isinstance(ev, dict):
+                                    continue
+                                ei = ev.get("eventInfo") or {}
+                                event_code = ei.get("eventCode")
+
+                                # Fallback: try to find eventCode inside the betGroupList odds
+                                if not event_code:
+                                    for bg in (ev.get("betGroupList") or []):
+                                        if not isinstance(bg, dict):
+                                            continue
+                                        for og in (bg.get("oddGroupList") or []):
+                                            if not isinstance(og, dict):
+                                                continue
+                                            for odd in (og.get("oddList") or []):
+                                                if isinstance(odd, dict) and odd.get("eventCode"):
+                                                    event_code = odd["eventCode"]
+                                                    break
+                                            if event_code:
+                                                break
+                                        if event_code:
+                                            break
+
+                                if not event_code:
+                                    logger.info("[Eurobet] %s: no eventCode in event, parsing meeting data only",
+                                                league_name)
+                                    # Still parse whatever we got from the meeting
+                                    league_rows.extend(_parse_events([ev], league_name, discipline))
+                                    continue
+
+                                # Fetch full event detail (all markets)
+                                detail_api = (f"/detail-service/sport-schedule/services/event"
+                                              f"/{discipline}/{event_code}?prematch=1&live=0")
+                                try:
+                                    detail_result = await pg.evaluate(_FETCH_JS, detail_api)
+                                except Exception as e:
+                                    logger.warning("[Eurobet] %s event %s detail fetch error: %s",
+                                                   league_name, event_code, e)
+                                    detail_result = {"_error": str(e)}
+
+                                if (isinstance(detail_result, dict)
+                                        and detail_result.get("code") in (1, "1")):
+                                    detail_events = _extract_events(detail_result)
+                                    if detail_events:
+                                        # Log market names for first event detail (once per league)
+                                        if not league_rows:
+                                            det_ev0 = detail_events[0] if isinstance(detail_events[0], dict) else {}
+                                            det_og_names = [
+                                                og.get("oddGroupDescription", "?")
+                                                for bg in (det_ev0.get("betGroupList") or [])
+                                                if isinstance(bg, dict)
+                                                for og in (bg.get("oddGroupList") or [])
+                                                if isinstance(og, dict)
+                                            ]
+                                            logger.info("[Eurobet] %s: event %s detail markets: %s",
+                                                        league_name, event_code, det_og_names[:20])
+                                        league_rows.extend(
+                                            _parse_events(detail_events, league_name, discipline)
+                                        )
+                                    else:
+                                        logger.info("[Eurobet] %s event %s: detail code=1 but no events",
+                                                    league_name, event_code)
+                                        # Fallback to meeting event data
+                                        league_rows.extend(_parse_events([ev], league_name, discipline))
+                                elif isinstance(detail_result, dict) and "_error" in detail_result:
+                                    logger.info("[Eurobet] %s event %s: detail error %s %s — fallback to meeting",
+                                                league_name, event_code,
+                                                detail_result.get("_status", "?"),
+                                                detail_result.get("_error"))
+                                    league_rows.extend(_parse_events([ev], league_name, discipline))
+                                else:
+                                    logger.info("[Eurobet] %s event %s: detail unexpected response",
+                                                league_name, event_code)
+                                    league_rows.extend(_parse_events([ev], league_name, discipline))
+
+                        else:
+                            rows_fb = _parse_result(meeting_result, league_name, discipline)
+                            league_rows.extend(rows_fb)
+
+                        logger.info("[Eurobet] %s: %d rows total", league_name, len(league_rows))
+                        all_results.extend(league_rows)
+                        if league_rows:
                             working_url_template = "PLAYWRIGHT_PER_CTX"
+
+                        if ctx:
+                            await ctx.close()
 
                     await browser.close()
 
