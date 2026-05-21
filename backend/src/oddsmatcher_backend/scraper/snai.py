@@ -183,13 +183,14 @@ def _parse_schedaAvvenimento(
         _seg3 = _parts[2] if len(_parts) >= 4 else ""
         if _seg3 in _diag_target_codes and _seg3 not in _diag_done:
             _diag_done.add(_seg3)
-            _esiti_labels = [str(e.get("descrizione") or "").strip() for e in (_dv.get("esitoList") or [])[:5] if isinstance(e, dict)]
+            _el = _dv.get("esitoList") or []
+            _first_esito = _el[0] if _el else {}
             logger.info(
-                "[Snai] DIAG_MARKET %s ia_key=%s cod_s_field=%s val_keys=%s esiti=%s",
+                "[Snai] DIAG_MARKET %s ia_key=%s cod_s_field=%s all_val_keys=%s first_esito_full=%s",
                 name, _dk,
                 _dv.get("codiceScommessa"),
-                list(_dv.keys())[:8],
-                _esiti_labels,
+                list(_dv.keys()),
+                _json.dumps(_first_esito, ensure_ascii=False),
             )
 
     for ia_key, ia_val in info_agg_map.items():
