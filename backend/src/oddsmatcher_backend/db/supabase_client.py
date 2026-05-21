@@ -13,6 +13,188 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ── Team-name normalisation ──────────────────────────────────────────────────
+# Maps lowercase alias → canonical name used across all bookmakers.
+# Canonical = short Italian-style form used by the majority of Italian sites.
+_TEAM_ALIASES: dict[str, str] = {
+    # ── Italian Serie A / Serie B ────────────────────────────────────────────
+    "hellas verona":            "Verona",
+    "as roma":                  "Roma",
+    "a.s. roma":                "Roma",
+    "ac milan":                 "Milan",
+    "a.c. milan":               "Milan",
+    "inter milan":              "Inter",
+    "fc internazionale":        "Inter",
+    "internazionale":           "Inter",
+    "internazionale milano":    "Inter",
+    "juventus fc":              "Juventus",
+    "juventus f.c.":            "Juventus",
+    "ssc napoli":               "Napoli",
+    "ss lazio":                 "Lazio",
+    "s.s. lazio":               "Lazio",
+    "acf fiorentina":           "Fiorentina",
+    "udinese calcio":           "Udinese",
+    "bologna fc":               "Bologna",
+    "torino fc":                "Torino",
+    "cagliari calcio":          "Cagliari",
+    "atalanta bc":              "Atalanta",
+    "genoa cfc":                "Genoa",
+    "genoa fc":                 "Genoa",
+    "empoli fc":                "Empoli",
+    "como 1907":                "Como",
+    "venezia fc":               "Venezia",
+    "us lecce":                 "Lecce",
+    "ac monza":                 "Monza",
+    "us salernitana":           "Salernitana",
+    "frosinone calcio":         "Frosinone",
+    "us cremonese":             "Cremonese",
+    "ac cesena":                "Cesena",
+    "cosenza calcio":           "Cosenza",
+    "us catanzaro":             "Catanzaro",
+    "ssd palermo":              "Palermo",
+    "palermo fc":               "Palermo",
+    "us sassuolo":              "Sassuolo",
+    "sassuolo calcio":          "Sassuolo",
+    "parma calcio":             "Parma",
+    "fc sudtirol":              "Sudtirol",
+    # ── Spanish La Liga / lower ──────────────────────────────────────────────
+    "fc barcelona":             "Barcellona",
+    "barcelona fc":             "Barcellona",
+    "barcelona":                "Barcellona",
+    "atletico madrid":          "Atletico Madrid",
+    "atlético madrid":          "Atletico Madrid",
+    "atlético de madrid":       "Atletico Madrid",
+    "atletico de madrid":       "Atletico Madrid",
+    "atletico":                 "Atletico Madrid",
+    "athletic bilbao":          "Athletic Bilbao",
+    "athletic club":            "Athletic Bilbao",
+    "real betis":               "Betis",
+    "betis balompie":           "Betis",
+    "rc celta":                 "Celta Vigo",
+    "celta de vigo":            "Celta Vigo",
+    "rcd espanyol":             "Espanyol",
+    "rcd mallorca":             "Maiorca",
+    "mallorca":                 "Maiorca",
+    "deportivo alaves":         "Alavés",
+    "alaves":                   "Alavés",
+    "ca osasuna":               "Osasuna",
+    "getafe cf":                "Getafe",
+    "girona fc":                "Girona",
+    "villarreal cf":            "Villarreal",
+    "sevilla fc":               "Siviglia",
+    "sevilla":                  "Siviglia",
+    "real valladolid":          "Valladolid",
+    "ud las palmas":            "Las Palmas",
+    "real madrid cf":           "Real Madrid",
+    "rayo vallecano":           "Rayo Vallecano",
+    "ud almeria":               "Almeria",
+    "cadiz cf":                 "Cadiz",
+    # ── English Premier League / Championship ────────────────────────────────
+    "manchester utd":           "Manchester United",
+    "man united":               "Manchester United",
+    "man utd":                  "Manchester United",
+    "man city":                 "Manchester City",
+    "manchester city fc":       "Manchester City",
+    "wolverhampton wanderers":  "Wolverhampton",
+    "wolves":                   "Wolverhampton",
+    "nottingham forest":        "Nottingham",
+    "newcastle united":         "Newcastle",
+    "aston villa fc":           "Aston Villa",
+    "west ham united":          "West Ham",
+    "chelsea fc":               "Chelsea",
+    "brighton & hove albion":   "Brighton",
+    "brighton and hove albion": "Brighton",
+    "tottenham hotspur":        "Tottenham",
+    "spurs":                    "Tottenham",
+    "crystal palace fc":        "Crystal Palace",
+    "liverpool fc":             "Liverpool",
+    "arsenal fc":               "Arsenal",
+    "fulham fc":                "Fulham",
+    "burnley fc":               "Burnley",
+    "leeds united":             "Leeds",
+    "leicester city":           "Leicester",
+    "leicester city fc":        "Leicester",
+    "bournemouth afc":          "Bournemouth",
+    "sunderland afc":           "Sunderland",
+    "ipswich town":             "Ipswich",
+    "sheffield united":         "Sheffield United",
+    "brentford fc":             "Brentford",
+    # ── German Bundesliga ────────────────────────────────────────────────────
+    "bayer leverkusen":         "Leverkusen",
+    "bayer 04 leverkusen":      "Leverkusen",
+    "borussia dortmund":        "Dortmund",
+    "bvb":                      "Dortmund",
+    "rb leipzig":               "RB Leipzig",
+    "rasenballsport leipzig":   "RB Leipzig",
+    "eintracht frankfurt":      "Frankfurt",
+    "sc freiburg":              "Freiburg",
+    "vfl wolfsburg":            "Wolfsburg",
+    "vfb stuttgart":            "Stuttgart",
+    "tsg hoffenheim":           "Hoffenheim",
+    "tsg 1899 hoffenheim":      "Hoffenheim",
+    "fc augsburg":              "Augsburg",
+    "sv werder bremen":         "Werder Bremen",
+    "werder bremen":            "Werder Bremen",
+    "1. fc union berlin":       "Union Berlin",
+    "1. fc koln":               "Colonia",
+    "fc koln":                  "Colonia",
+    "borussia monchengladbach": "M'gladbach",
+    "borussia mönchengladbach": "M'gladbach",
+    "greuther fürth":           "Greuther Furth",
+    "fc heidenheim":            "Heidenheim",
+    "1. fc heidenheim":         "Heidenheim",
+    "sv darmstadt 98":          "Darmstadt",
+    "darmstadt":                "Darmstadt",
+    # ── French Ligue 1 ──────────────────────────────────────────────────────
+    "paris saint-germain":      "PSG",
+    "paris sg":                 "PSG",
+    "olympique marseille":      "Marsiglia",
+    "marseille":                "Marsiglia",
+    "olympique lyonnais":       "Lione",
+    "olympique lione":          "Lione",
+    "lyon":                     "Lione",
+    "stade rennais":            "Rennes",
+    "stade rennais fc":         "Rennes",
+    "as monaco":                "Monaco",
+    "losc lille":               "Lille",
+    "lille osc":                "Lille",
+    "ogc nice":                 "Nizza",
+    "rc strasbourg":            "Strasburgo",
+    "stade de reims":           "Reims",
+    "stade brestois 29":        "Brest",
+    "stade brestois":           "Brest",
+    "montpellier hsc":          "Montpellier",
+    "rc lens":                  "Lens",
+    "toulouse fc":              "Tolosa",
+    "havre ac":                 "Le Havre",
+    "le havre ac":              "Le Havre",
+    "clermont foot":            "Clermont",
+    "fc metz":                  "Metz",
+    # ── European / International ─────────────────────────────────────────────
+    "olympiakos":               "Olympiacos",
+    "olympiakos cfp":           "Olympiacos",
+    "fenerbahce sk":            "Fenerbahce",
+    "galatasaray sk":           "Galatasaray",
+    "besiktas jk":              "Besiktas",
+}
+
+
+def _normalize_team(name: str) -> str:
+    """Return canonical team name for cross-bookmaker event matching."""
+    s = name.strip()
+    return _TEAM_ALIASES.get(s.lower(), s)
+
+
+def _normalize_event_name(event_name: str) -> str:
+    """Normalize both team names in 'Home - Away' for cross-bookmaker matching."""
+    sep = " - "
+    idx = event_name.find(sep)
+    if idx >= 0:
+        home = _normalize_team(event_name[:idx])
+        away = _normalize_team(event_name[idx + len(sep):])
+        return f"{home}{sep}{away}"
+    return event_name
+
 
 def _normalize_market_outcome(market: str, outcome: str) -> tuple[str, str]:
     """Convert scraper market/outcome names to the live_odds canonical format.
@@ -126,7 +308,7 @@ class SupabaseWriter:
                         "bookmaker": bookmaker_name,
                         "sport": match.sport,
                         "league": match.league,
-                        "event_name": match.event_name,
+                        "event_name": _normalize_event_name(match.event_name),
                         "market": market_norm,
                         "outcome": outcome_norm,
                         "odds": float(odds_val),
@@ -196,7 +378,7 @@ class SupabaseWriter:
                     row: dict[str, Any] = {
                         "sport": match.sport,
                         "league": match.league,
-                        "event_name": match.event_name,
+                        "event_name": _normalize_event_name(match.event_name),
                         "market": market_norm,
                         "outcome": outcome_norm,
                         "odds": float(odds_val),
@@ -266,6 +448,8 @@ class SupabaseWriter:
             return 0
 
         bookmaker_name = "Betfair Exchange"
+        # Normalize team names so Betfair events match other bookmakers in the DB
+        rows = [{**r, "event_name": _normalize_event_name(r["event_name"])} for r in rows]
         event_names = list({r["event_name"] for r in rows})
 
         try:
