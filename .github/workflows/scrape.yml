@@ -2,7 +2,7 @@ name: Scrape odds
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # ogni 15 minuti
+    - cron: "*/30 * * * *"   # ogni 30 minuti (20 min/run × 96/day esauriva i 2000 min/mese GitHub)
   workflow_dispatch:
 
 env:

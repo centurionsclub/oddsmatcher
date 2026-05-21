@@ -25,7 +25,7 @@ LOGIN_URLS = [
 ]
 BETTING_URL  = "https://api.betfair.com/exchange/betting/rest/v1.0/"
 BOOKMAKER    = "Betfair Exchange"
-EXPIRES_HOURS = 24   # keep rows visible even if scraper skips a cycle
+EXPIRES_HOURS = 36   # keep rows visible even if scraper skips a cycle (30-min schedule → buffer)
 
 # Betfair eventTypeId → our sport key
 # NOTE: 7 = Horse Racing (NOT basketball). Basketball is 7522.
