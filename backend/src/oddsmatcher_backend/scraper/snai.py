@@ -171,11 +171,38 @@ def _parse_schedaAvvenimento(
 
     # ── Iterate infoAggiuntivaMap (one entry per market × sub-market) ──
     info_agg_map = data.get("infoAggiuntivaMap") or {}
+
+    # One-shot diagnostic: log ALL ia entries for target market codes to debug
+    # Under/Over (7989) and Goal/NoGoal (18) parsing failures.
+    _diag_target_codes = {"7989", "18"}
+    _diag_done: set[str] = set()
+    for _dk, _dv in info_agg_map.items():
+        if not isinstance(_dv, dict):
+            continue
+        _parts = _dk.split("-")
+        _seg3 = _parts[2] if len(_parts) >= 4 else ""
+        if _seg3 in _diag_target_codes and _seg3 not in _diag_done:
+            _diag_done.add(_seg3)
+            _esiti_labels = [str(e.get("descrizione") or "").strip() for e in (_dv.get("esitoList") or [])[:5] if isinstance(e, dict)]
+            logger.info(
+                "[Snai] DIAG_MARKET %s ia_key=%s cod_s_field=%s val_keys=%s esiti=%s",
+                name, _dk,
+                _dv.get("codiceScommessa"),
+                list(_dv.keys())[:8],
+                _esiti_labels,
+            )
+
     for ia_key, ia_val in info_agg_map.items():
         if not isinstance(ia_val, dict):
             continue
 
+        # Try field first; fall back to 3rd segment of ia_key
+        # ia_key format: "{codicePalinsesto}-{codiceAvvenimento}-{codiceScommessa}-{infoAgg}"
         cod_s = str(ia_val.get("codiceScommessa") or "")
+        if not cod_s:
+            _kp = ia_key.split("-")
+            cod_s = _kp[2] if len(_kp) >= 4 else ""
+
         mname = scommessa_names.get(cod_s, "")
         if not mname:
             continue
