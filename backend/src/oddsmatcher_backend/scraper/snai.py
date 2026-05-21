@@ -171,28 +171,6 @@ def _parse_schedaAvvenimento(
 
     # ── Iterate infoAggiuntivaMap (one entry per market × sub-market) ──
     info_agg_map = data.get("infoAggiuntivaMap") or {}
-
-    # One-shot diagnostic: log ALL ia entries for target market codes to debug
-    # Under/Over (7989) and Goal/NoGoal (18) parsing failures.
-    _diag_target_codes = {"7989", "18"}
-    _diag_done: set[str] = set()
-    for _dk, _dv in info_agg_map.items():
-        if not isinstance(_dv, dict):
-            continue
-        _parts = _dk.split("-")
-        _seg3 = _parts[2] if len(_parts) >= 4 else ""
-        if _seg3 in _diag_target_codes and _seg3 not in _diag_done:
-            _diag_done.add(_seg3)
-            _el = _dv.get("esitoList") or []
-            _first_esito = _el[0] if _el else {}
-            logger.info(
-                "[Snai] DIAG_MARKET %s ia_key=%s cod_s_field=%s all_val_keys=%s first_esito_full=%s",
-                name, _dk,
-                _dv.get("codiceScommessa"),
-                list(_dv.keys()),
-                _json.dumps(_first_esito, ensure_ascii=False),
-            )
-
     for ia_key, ia_val in info_agg_map.items():
         if not isinstance(ia_val, dict):
             continue
@@ -307,10 +285,8 @@ def _parse_schedaAvvenimento(
                     raw_sp = int(key_parts[1])
                     sp = f"{raw_sp / 100:.4g}"  # 250→"2.5", 350→"3.5"
                 else:
-                    logger.info("[Snai] DIAG_OU skip %s ia_key=%s mname=%r reason=no_sp", name, ia_key, mname)
                     continue
             if sp not in {"1.5", "2.5", "3.5"}:
-                logger.info("[Snai] DIAG_OU skip %s ia_key=%s sp=%s reason=sp_not_in_set", name, ia_key, sp)
                 continue
             SIDE_MAP = {"OVER": "Over", "OLTRE": "Over", "UNDER": "Under", "MENO": "Under"}
             odds_uo: dict[str, float] = {}
@@ -323,10 +299,9 @@ def _parse_schedaAvvenimento(
                 try:
                     q = float(q_raw) / 100 if q_raw is not None else None
                     if side and q and q > 1.0:
-                        odds_uo[f"{side} {sp}"] = q
+                        odds_uo[side] = q   # just "Over"/"Under"; spread is in market name
                 except (TypeError, ValueError):
                     pass
-            logger.info("[Snai] DIAG_OU %s ia_key=%s sp=%s odds_uo=%s", name, ia_key, sp, odds_uo)
             if len(odds_uo) >= 2:
                 results.append(MatchOdds(
                     sport=sport_key, league=league_name,
