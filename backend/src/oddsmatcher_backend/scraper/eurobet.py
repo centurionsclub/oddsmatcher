@@ -709,12 +709,11 @@ class EurobetScraper:
                             # (betGroupList / oddGroupList / oddValue) so we don't
                             # capture prematch-menu-service metadata-only responses.
                             _iref = intercepted  # mutable ref — safe for closure
-                            async def _on_resp(resp, _cap=_iref, _ln=league_name):
+                            _logged_urls: set[str] = set()  # avoid log spam per-attempt
+
+                            async def _on_resp(resp, _cap=_iref, _ln=league_name,
+                                               _lurls=_logged_urls):
                                 url = resp.url
-                                if not any(kw in url for kw in (
-                                        '/_next/data/', '/detail-service/',
-                                        '/sport-schedule/')):
-                                    return
                                 try:
                                     ct = resp.headers.get('content-type', '')
                                     if 'json' not in ct:
@@ -723,15 +722,33 @@ class EurobetScraper:
                                     if not isinstance(body, (dict, list)):
                                         return
                                     body_str = _json.dumps(body, ensure_ascii=False)
-                                    # Require actual odds data — not just event metadata
-                                    if any(kw in body_str for kw in (
-                                            'betGroupList', 'oddGroupList', 'oddValue')):
-                                        evs = _extract_events(body)
-                                        if evs:
-                                            logger.info(
-                                                "[Eurobet] %s: 🌐 intercepted %d events from %s",
-                                                _ln, len(evs), url[:80])
-                                            _cap.extend(evs)
+
+                                    # Log ALL JSON endpoints from eurobet.it on first
+                                    # attempt (once per URL) to discover unknown APIs
+                                    if ('eurobet.it' in url and url not in _lurls
+                                            and attempt == 0):
+                                        _lurls.add(url)
+                                        has_data = any(kw in body_str for kw in (
+                                            'betGroupList', 'oddGroupList', 'oddValue',
+                                            'startDate', 'disciplin', 'descrizione'))
+                                        logger.info(
+                                            "[Eurobet] %s: 📡 JSON url=%s has_data=%s "
+                                            "preview=%.150s",
+                                            _ln, url[:100], has_data, body_str[:150])
+
+                                    # Capture responses with actual odds data
+                                    if any(kw in url for kw in (
+                                            '/_next/data/', '/detail-service/',
+                                            '/sport-schedule/')):
+                                        if any(kw in body_str for kw in (
+                                                'betGroupList', 'oddGroupList', 'oddValue')):
+                                            evs = _extract_events(body)
+                                            if evs:
+                                                logger.info(
+                                                    "[Eurobet] %s: 🌐 intercepted %d events"
+                                                    " from %s",
+                                                    _ln, len(evs), url[:80])
+                                                _cap.extend(evs)
                                 except Exception:
                                     pass
 
