@@ -44,8 +44,8 @@ TARGET_COMPETITION_KEYWORDS: list[str] = [
     "italian serie a", "italian serie b", "coppa italia",
     # England — "english" evita "Kuwaiti/Nigerian Premier League"
     "english premier league", "english championship", "sky bet championship", "fa cup",
-    # Germany — "german bundesliga" evita "Austrian Bundesliga"; "german playoff" = spareggi retrocessione
-    "german bundesliga", "german playoff",
+    # Germany — "german bundesliga" evita "Austrian Bundesliga"; playoff = spareggi; cup = DFB Pokal
+    "german bundesliga", "german playoff", "german cup",
     # Spain — "spanish la liga" evita "Peruvian/Uruguayan Primera Division"
     "spanish la liga", "la liga", "laliga",
     # France — "french ligue 1" evita "Algerian Ligue 1"
