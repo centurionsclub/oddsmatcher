@@ -31,15 +31,15 @@ BOOKMAKER = "lottomatica"
 # fmt: off
 # (id_tournament, league_name, sport_key, league_slug, country_slug, page_url)
 TOURNAMENTS: list[tuple[int, str, str, str, str, str]] = [
-    (93,      "Serie A",           "calcio", "serie-a",               "italia",       "/scommesse/sport/calcio/italia/serie-a/"),
-    (97,      "Serie B",           "calcio", "serie-b",               "italia",       "/scommesse/sport/calcio/italia/serie-b/"),
-    (26604,   "Premier League",    "calcio", "premier-league",        "inghilterra",  "/scommesse/sport/calcio/inghilterra/premier-league/"),
-    (95,      "La Liga",           "calcio", "la-liga",               "spagna",       "/scommesse/sport/calcio/spagna/la-liga/"),
-    (94,      "Bundesliga",        "calcio", "bundesliga",            "germania",     "/scommesse/sport/calcio/germania/bundesliga/"),
-    (96,      "Ligue 1",           "calcio", "ligue-1",               "francia",      "/scommesse/sport/calcio/francia/ligue-1/"),
-    (26534,   "Champions League",  "calcio", "champions-league-uefa", "europa",       "/scommesse/sport/calcio/europa/champions-league-uefa/"),
-    (247944,  "Europa League",     "calcio", "europa-league-uefa",    "europa",       "/scommesse/sport/calcio/europa/europa-league-uefa/"),
-    (5675488, "Conference League", "calcio", "conference-league-uefa","europa",       "/scommesse/sport/calcio/europa/conference-league-uefa/"),
+    (93,      "Serie A",           "calcio", "serie-a",            "italia",                  "/scommesse/sport/calcio/italia/serie-a/"),
+    (1626630, "Serie B",           "calcio", "serie-b",            "italia",                  "/scommesse/sport/calcio/italia/serie-b/"),
+    (26604,   "Premier League",    "calcio", "premier-league",     "inghilterra",             "/scommesse/sport/calcio/inghilterra/premier-league/"),
+    (95,      "La Liga",           "calcio", "liga",               "spagna",                  "/scommesse/sport/calcio/spagna/liga/"),
+    (84,      "Bundesliga",        "calcio", "bundesliga",         "germania",                "/scommesse/sport/calcio/germania/bundesliga/"),
+    (86,      "Ligue 1",           "calcio", "ligue-1",            "francia",                 "/scommesse/sport/calcio/francia/ligue-1/"),
+    (26534,   "Champions League",  "calcio", "champions-league",   "internazionali-di-club",  "/scommesse/sport/calcio/internazionali-di-club/champions-league/"),
+    (247944,  "Europa League",     "calcio", "europa-league",      "internazionali-di-club",  "/scommesse/sport/calcio/internazionali-di-club/europa-league/"),
+    (5675488, "Conference League", "calcio", "conference-league",  "internazionali-di-club",  "/scommesse/sport/calcio/internazionali-di-club/conference-league/"),
     # Basket
     (54529,   "NBA",               "basket", "nba",                   "usa",          "/scommesse/sport/basket/usa/nba?did=2&nid=8455&eid=54529"),
     (890160,  "Serie A Basket",    "basket", "serie-a",               "italia",       "/scommesse/sport/basket/italia/serie-a?did=2&nid=7606&eid=890160"),
@@ -220,7 +220,7 @@ class LottomaticaScraper:
                     keys = f"list[{len(body)}] → {list(body[0].keys())[:6]}"
             else:
                 keys = type(body).__name__
-            body_preview = _json.dumps(body, ensure_ascii=False)[:500]
+            body_preview = _json.dumps(body, ensure_ascii=False)[:1000]
             logger.info("[Lottomatica] CAPTURE url=%s keys=%s BODY=%s", item["url"], keys, body_preview)
 
         # Parse: find the response containing event/odds data
@@ -275,7 +275,7 @@ def _parse_lottomatica_response(
 
         return []
     except Exception as e:
-        logger.debug("[Lottomatica] parse error for %s: %s", url, e)
+        logger.info("[Lottomatica] parse error for %s: %s", url, e, exc_info=True)
         return []
 
 
@@ -335,8 +335,9 @@ def _parse_markets(
                 for sel in spread_data.get("asl", []):
                     ov = sel.get("ov")
                     sn = sel.get("sn", "")
-                    cls = sel.get("cls", 1)
-                    if ov and ov > 1.0 and cls == 1:
+                    # cls=1 means "active" for football; basket may use cls=0 or other
+                    # values.  Accept any cls when ov is a valid playable price.
+                    if ov and ov > 1.0:
                         odds_dict[sn] = float(ov)
             if odds_dict:
                 results.append(MatchOdds(
@@ -357,8 +358,7 @@ def _parse_markets(
                 for sel in spread_data.get("asl", []):
                     ov = sel.get("ov")
                     sn = sel.get("sn", "")
-                    cls = sel.get("cls", 1)
-                    if ov and ov > 1.0 and cls == 1:
+                    if ov and ov > 1.0:
                         odds_dict[sn] = float(ov)
                 if odds_dict:
                     results.append(MatchOdds(
