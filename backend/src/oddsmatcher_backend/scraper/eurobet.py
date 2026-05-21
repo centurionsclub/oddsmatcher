@@ -267,7 +267,8 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
 
                 # ── Over/Under ──
                 elif any(kw in og_name for kw in ("Over/Under", "O/U", "Totale Gol", "Over Under",
-                                                    "Gol: O/U", "GOL O/U", "TOTALE GOL")):
+                                                    "Gol: O/U", "GOL O/U", "TOTALE GOL",
+                                                    "U/O GOAL", "U/O GOL")):
                     sp_m = re.search(r"(\d+[.,]\d+)", og_name)
                     if not sp_m:
                         continue
@@ -279,7 +280,13 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
                         if not isinstance(odd, dict):
                             continue
                         lbl = _get_lbl(odd)
-                        side = "Over" if "over" in lbl.lower() else ("Under" if "under" in lbl.lower() else None)
+                        ll = lbl.lower()
+                        if "over" in ll or "oltre" in ll or ll in ("o",):
+                            side = "Over"
+                        elif "under" in ll or "meno" in ll or ll in ("u",):
+                            side = "Under"
+                        else:
+                            side = None
                         if not side:
                             continue
                         q = _get_q(odd)
@@ -296,7 +303,7 @@ def _parse_events(events: list, league_name: str, discipline: str) -> list[Match
 
                 # ── Goal / No Goal (BTTS) ──
                 elif any(kw in og_name for kw in ("Goal/No Goal", "Goal No Goal",
-                                                    "GOAL/NO GOAL", "GG/NG",
+                                                    "GOAL/NO GOAL", "GG/NG", "GG/NO GG",
                                                     "Entrambe le squadre segnano",
                                                     "ENTRAMBE LE SQUADRE")):
                     odds_dict = {}
