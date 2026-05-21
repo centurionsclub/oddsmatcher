@@ -606,7 +606,10 @@ class EurobetScraper:
                         intercepted: list[dict] = []
 
                         for attempt in range(3):
-                            intercepted.clear()
+                            # Do NOT clear intercepted here — we accumulate events
+                            # across all retry attempts. If attempt 1 captures events
+                            # but the explicit fetch returns 403, those events are
+                            # preserved for attempts 2 and 3.
                             if ctx:
                                 await ctx.close()
                             ctx = await browser.new_context(
@@ -622,6 +625,9 @@ class EurobetScraper:
                             # Intercept /_next/data/ (Next.js ISR hydration payload)
                             # and /detail-service/ JSON responses to capture the full
                             # event list that the page loads after initial render.
+                            # Filter strictly to responses that contain actual odds
+                            # (betGroupList / oddGroupList / oddValue) so we don't
+                            # capture prematch-menu-service metadata-only responses.
                             _iref = intercepted  # mutable ref — safe for closure
                             async def _on_resp(resp, _cap=_iref, _ln=league_name):
                                 url = resp.url
@@ -637,9 +643,9 @@ class EurobetScraper:
                                     if not isinstance(body, (dict, list)):
                                         return
                                     body_str = _json.dumps(body, ensure_ascii=False)
+                                    # Require actual odds data — not just event metadata
                                     if any(kw in body_str for kw in (
-                                            'betGroupList', 'oddGroupList',
-                                            'eventList', 'startDate')):
+                                            'betGroupList', 'oddGroupList', 'oddValue')):
                                         evs = _extract_events(body)
                                         if evs:
                                             logger.info(
