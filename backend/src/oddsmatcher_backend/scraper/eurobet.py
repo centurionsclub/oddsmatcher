@@ -805,96 +805,37 @@ class EurobetScraper:
                                 # Extra 4 s for the /_next/data/ fetch + React hydration
                                 await pg.wait_for_timeout(4000)
 
-                                # ── Dump page tab texts (diagnostic, first attempt only) ──
-                                if attempt == 0:
-                                    try:
-                                        _page_texts = await pg.evaluate("""
-                                            () => {
-                                                const els = document.querySelectorAll(
-                                                    'button, a, li, [role="tab"], [role="button"], ' +
-                                                    '[class*="tab"], [class*="Tab"], [class*="nav"], ' +
-                                                    '[class*="filter"], span'
-                                                );
-                                                const out = [];
-                                                for (const el of els) {
-                                                    const t = el.textContent.trim();
-                                                    if (t.length > 1 && t.length < 60) out.push(t);
-                                                }
-                                                // Deduplicate
-                                                return [...new Set(out)].slice(0, 50);
-                                            }
-                                        """)
-                                        logger.info("[Eurobet] %s: page element texts: %s",
-                                                    league_name, _page_texts[:40])
-                                    except Exception as _e_dump:
-                                        logger.info("[Eurobet] %s: dump error: %s",
-                                                    league_name, _e_dump)
-
-                                # ── Click "Giornata" tab to load ALL matches in the round ──
-                                # The default tab "Più Giocate" only shows featured matches
-                                # (e.g. 1 event for Serie A). Clicking "Giornata" triggers
-                                # a detail-service API call with the full round fixture,
-                                # which our _on_resp interceptor will capture.
-                                # IMPORTANT exclusions to avoid false positives:
-                                #   - "accetta tutti i cookie" → cookie banner
-                                #   - "pronostici 38ª giornata serie a" → promo link
+                                # ── Probe all sezioneScommessa values to find all round matches ──
+                                # The default page load calls meeting API with section 3
+                                # ("Più Giocate") which returns only 1 featured event for
+                                # leagues like Serie A. We probe sections 1-6 directly
+                                # from within the browser (same-origin CF cookies apply).
+                                # Whichever section returns more events is the "Giornata" tab.
                                 try:
-                                    clicked_tab_txt = await pg.evaluate("""
-                                        () => {
-                                            const keywords = [
-                                                'giornata', 'tutte le partite',
-                                                'tutti gli incontri', 'tutti i match',
-                                                'tutte le gare'
-                                            ];
-                                            // Exclude cookie banners and promo links
-                                            const excludes = [
-                                                'cookie', 'accetta', 'pronostic',
-                                                'bonus', 'promo', 'offerta', 'scommett'
-                                            ];
-                                            const matchesKw = (txt) => keywords.some(kw => txt.includes(kw));
-                                            const hasExclude = (txt) => excludes.some(ex => txt.includes(ex));
-
-                                            // Phase 1: prefer role="tab" elements (navigation tabs)
-                                            const tabEls = document.querySelectorAll(
-                                                '[role="tab"], [class*="tab-item"], [class*="tabItem"], ' +
-                                                '[class*="TabItem"], [class*="filter-item"], ' +
-                                                'ul[role="tablist"] li, ul[role="tablist"] button'
-                                            );
-                                            for (const el of tabEls) {
-                                                const txt = el.textContent.trim().toLowerCase();
-                                                if (hasExclude(txt)) continue;
-                                                if (matchesKw(txt) && txt.length < 50) {
-                                                    el.click();
-                                                    return txt;
-                                                }
-                                            }
-
-                                            // Phase 2: broader search with strict exclusions + short text
-                                            const all = document.querySelectorAll(
-                                                'button, a, li, span[role="button"], div[role="button"]'
-                                            );
-                                            for (const el of all) {
-                                                const txt = el.textContent.trim().toLowerCase();
-                                                if (hasExclude(txt)) continue;
-                                                if (matchesKw(txt) && txt.length < 35) {
-                                                    el.click();
-                                                    return txt;
-                                                }
-                                            }
-                                            return null;
-                                        }
-                                    """)
-                                    if clicked_tab_txt:
-                                        logger.info("[Eurobet] %s: clicked tab %r — waiting for events…",
-                                                    league_name, clicked_tab_txt[:40])
-                                        # Wait for the API response triggered by tab click
-                                        await pg.wait_for_timeout(3000)
-                                    else:
-                                        logger.info("[Eurobet] %s: no Giornata tab found on page",
-                                                    league_name)
-                                except Exception as _e_tab:
-                                    logger.info("[Eurobet] %s: tab click error: %s",
-                                                league_name, _e_tab)
+                                    for _sec_id in range(1, 7):
+                                        _sec_api = (
+                                            f"/detail-service/sport-schedule/services/meeting"
+                                            f"/{discipline}/{alias}"
+                                            f"?prematch=1&live=0&sezioneScommessa={_sec_id}"
+                                        )
+                                        _sec_res = await pg.evaluate(_FETCH_JS, _sec_api)
+                                        if (isinstance(_sec_res, dict)
+                                                and _sec_res.get("code") in (1, "1")):
+                                            _sec_evs = _extract_meeting_events(_sec_res)
+                                            logger.info(
+                                                "[Eurobet] %s: sezioneScommessa=%d → %d events",
+                                                league_name, _sec_id, len(_sec_evs))
+                                            if _sec_evs:
+                                                intercepted.extend(_sec_evs)
+                                        else:
+                                            _s = (_sec_res.get("_status") or _sec_res.get("code")
+                                                  if isinstance(_sec_res, dict) else "?")
+                                            logger.info(
+                                                "[Eurobet] %s: sezioneScommessa=%d → status=%s",
+                                                league_name, _sec_id, _s)
+                                except Exception as _e_sec:
+                                    logger.info("[Eurobet] %s: section probe error: %s",
+                                                league_name, _e_sec)
 
                                 meeting_result = await pg.evaluate(_FETCH_JS, meeting_api)
                             except Exception as e:
