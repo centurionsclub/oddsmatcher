@@ -208,6 +208,7 @@ def _parse_schedaAvvenimento(
         )
         if _is_1x2:
             odds_dict: dict[str, float] = {}
+            _unmatched_lbls: list[str] = []
             for e in esiti:
                 if not isinstance(e, dict):
                     continue
@@ -217,6 +218,7 @@ def _parse_schedaAvvenimento(
                 ).strip().upper()
                 canonical = OUTCOME_MAP.get(lbl)
                 if not canonical:
+                    _unmatched_lbls.append(lbl)
                     continue
                 q_raw = e.get("quota")
                 try:
@@ -225,6 +227,9 @@ def _parse_schedaAvvenimento(
                         odds_dict[canonical] = q
                 except (TypeError, ValueError):
                     pass
+            if _unmatched_lbls:
+                logger.info("[Snai] DIAG_1X2 %s ia_key=%s unmatched=%s got=%s",
+                            name, ia_key, _unmatched_lbls, list(odds_dict.keys()))
             if len(odds_dict) >= 2:
                 results.append(MatchOdds(
                     sport=sport_key, league=league_name,
