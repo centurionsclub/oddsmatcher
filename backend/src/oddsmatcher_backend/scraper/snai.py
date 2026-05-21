@@ -227,9 +227,10 @@ def _parse_schedaAvvenimento(
                         odds_dict[canonical] = q
                 except (TypeError, ValueError):
                     pass
-            if _unmatched_lbls:
+            _got_keys = list(odds_dict.keys())
+            if _unmatched_lbls or len(_got_keys) < 3:
                 logger.info("[Snai] DIAG_1X2 %s ia_key=%s unmatched=%s got=%s",
-                            name, ia_key, _unmatched_lbls, list(odds_dict.keys()))
+                            name, ia_key, _unmatched_lbls, _got_keys)
             if len(odds_dict) >= 2:
                 results.append(MatchOdds(
                     sport=sport_key, league=league_name,
