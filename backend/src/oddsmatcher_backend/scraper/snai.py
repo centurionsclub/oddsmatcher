@@ -222,7 +222,9 @@ def _parse_schedaAvvenimento(
                 ))
 
         # ── Double Chance ────────────────────────────────────────────
-        elif "DOPPIA CHANCE" in _mname_up or "DOUBLE CHANCE" in _mname_up:
+        # Exclude "DOPPIA CHANCE TEMPO X" (first-half DC) and similar variants
+        elif ("DOPPIA CHANCE" in _mname_up or "DOUBLE CHANCE" in _mname_up) \
+                and "TEMPO" not in _mname_up and "1°" not in _mname_up and "2°" not in _mname_up:
             DC_MAP = {"1X": "1X", "X2": "X2", "12": "12"}
             odds_dc: dict[str, float] = {}
             for e in esiti:
