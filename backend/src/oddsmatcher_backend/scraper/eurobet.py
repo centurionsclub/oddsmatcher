@@ -92,6 +92,44 @@ def _parse_date(s: str | None) -> str | None:
         return str(s)
 
 
+def _extract_meeting_events(data: Any) -> list[dict]:
+    """Extract ALL events from ALL groups in Eurobet meeting/groupList response.
+
+    Eurobet meeting API returns:
+      result.groupData.groupList[*].eventList  (one list per group/giornata)
+
+    The generic _extract_events() stops at the FIRST group found.
+    This function collects events across ALL groups so we get the full
+    round (e.g. all 10 Serie A matches, not just the PIÙ GIOCATE group).
+    Falls back to _extract_events() for non-meeting responses.
+    """
+    if not isinstance(data, dict):
+        return _extract_events(data)
+    result = data.get("result") or {}
+    if isinstance(result, dict):
+        group_data = result.get("groupData") or {}
+        group_list = group_data.get("groupList") or []
+        if group_list:
+            all_events: list[dict] = []
+            seen_codes: set = set()
+            for group in group_list:
+                if not isinstance(group, dict):
+                    continue
+                for ev in (group.get("eventList") or []):
+                    if not isinstance(ev, dict):
+                        continue
+                    # Deduplicate by eventCode to avoid counting the same
+                    # event that appears in multiple groups
+                    ei = ev.get("eventInfo") or {}
+                    ec = ei.get("eventCode") or id(ev)
+                    if ec not in seen_codes:
+                        seen_codes.add(ec)
+                        all_events.append(ev)
+            if all_events:
+                return all_events
+    return _extract_events(data)
+
+
 def _extract_events(data: Any) -> list[dict]:
     """Recursively search for a list of event-like dicts."""
     if isinstance(data, list) and data:
@@ -567,7 +605,7 @@ class EurobetScraper:
                     logger.info("[Eurobet] %s: code=%s desc=%s", league_name, code, desc)
                     if code not in (1, "1"):
                         return []
-                    events = _extract_events(result)
+                    events = _extract_meeting_events(result)
                     if not events:
                         logger.info("[Eurobet] %s: code=1 but no events | preview=%.500s",
                                     league_name, _json.dumps(result, ensure_ascii=False)[:500])
@@ -742,7 +780,12 @@ class EurobetScraper:
                                             '/sport-schedule/')):
                                         if any(kw in body_str for kw in (
                                                 'betGroupList', 'oddGroupList', 'oddValue')):
-                                            evs = _extract_events(body)
+                                            # Use meeting-aware extractor for detail-service
+                                            # responses — collects from ALL groupList groups
+                                            if '/detail-service/' in url or '/sport-schedule/' in url:
+                                                evs = _extract_meeting_events(body)
+                                            else:
+                                                evs = _extract_events(body)
                                             if evs:
                                                 logger.info(
                                                     "[Eurobet] %s: 🌐 intercepted %d events"
@@ -794,7 +837,7 @@ class EurobetScraper:
                         elif (isinstance(meeting_result, dict)
                                 and meeting_result.get("code") in (1, "1")):
 
-                            meeting_events = _extract_events(meeting_result)
+                            meeting_events = _extract_meeting_events(meeting_result)
                             logger.info("[Eurobet] %s: meeting returned %d events",
                                         league_name, len(meeting_events))
 
