@@ -525,8 +525,10 @@ class BwinScraper(BasePlaywrightScraper):
         self._captured_rows: list[MatchOdds] = []  # responses captured during navigation
 
     async def _start(self) -> None:
-        """Override: warmup page → capture access token → fetch fixtures directly."""
+        """Override: warmup → capture token → fetch all CDS data in parallel."""
+        import asyncio as _asyncio
         import os, re, urllib.parse
+        from collections import Counter
 
         self._playwright = await __import__(
             "playwright.async_api", fromlist=["async_playwright"]
@@ -572,30 +574,39 @@ class BwinScraper(BasePlaywrightScraper):
             except ImportError:
                 self._log.warning("[Bwin] playwright-stealth not installed")
 
-        # ── Step 1: warmup page to acquire session cookies + x-bwin-accessid ──
-        access_id: list[str] = []  # mutable for closure capture
+        # ── Step 1: warmup — stop as soon as the access token is captured ────────
+        # Using domcontentloaded (not networkidle) so we don't wait 45s for SPAs.
+        # An asyncio.Event signals the moment the token appears in any CDS request.
+        access_id: list[str] = []
+        _token_event = _asyncio.Event()
 
         async def _capture_token(req) -> None:
             if not access_id and "bettingoffer/fixtures" in req.url:
                 m = re.search(r"x-bwin-accessid=([^&]+)", req.url)
                 if m:
                     access_id.append(m.group(1))
-                    self._log.info("[Bwin] Token: %s...", m.group(1)[:12])
+                    self._log.info("[Bwin] Token captured: %s...", m.group(1)[:12])
+                    _token_event.set()
 
         self._page.on("request", _capture_token)
         try:
             await self._page.goto(
                 f"{BASE_URL}/it/sports/calcio-4/",
-                wait_until="networkidle", timeout=45_000,
+                wait_until="domcontentloaded", timeout=30_000,
             )
         except Exception as e:
-            self._log.info("[Bwin] Warmup: %s — continuing", type(e).__name__)
-        await self._page.wait_for_timeout(4000)
+            self._log.info("[Bwin] Warmup goto: %s", type(e).__name__)
+
+        # Wait up to 10s for the SPA to fire the first CDS request
+        try:
+            await _asyncio.wait_for(_token_event.wait(), timeout=10.0)
+        except _asyncio.TimeoutError:
+            self._log.warning("[Bwin] Token not seen after 10s")
+
         self._page.remove_listener("request", _capture_token)
 
         if not access_id:
             self._log.warning("[Bwin] access token not captured — falling back to nav")
-            # Fall back to navigation for all sports
             for sport_key, sport_path in [("basket", "/it/sports/basket-7/"),
                                            ("tennis", "/it/sports/tennis-5/")]:
                 rows = await self._navigate_and_capture(sport_key, sport_path)
@@ -605,7 +616,9 @@ class BwinScraper(BasePlaywrightScraper):
         token = access_id[0]
         cds = "https://www.bwin.it/cds-api"
 
-        # ── Helper to run a page.evaluate fetch and return parsed JSON ──────────
+        # ── Helper: page.evaluate fetch — multiple calls run concurrently ─────────
+        # page.evaluate dispatches CDP Runtime.callFunctionOn without waiting for
+        # earlier calls to finish, so asyncio.gather dispatches them truly in parallel.
         async def _cds_fetch(url: str) -> Any:
             js = f"""
                 async () => {{
@@ -618,7 +631,7 @@ class BwinScraper(BasePlaywrightScraper):
             """
             return await self._page.evaluate(js)
 
-        # ── Base CDS query params ────────────────────────────────────────────────
+        # ── Base CDS query params ──────────────────────────────────────────────────
         base_params = (
             f"x-bwin-accessid={token}&lang=it&country=IT&userCountry=IT"
             f"&fixtureTypes=Standard&state=Latest&offerMapping=Filtered"
@@ -626,47 +639,68 @@ class BwinScraper(BasePlaywrightScraper):
             f"&isPriceBoost=false&statisticsModes=None&sortBy=Tags"
         )
 
-        # ── Pass A & B: bulk fetch by sport (O/U for calcio, 1X2 for basket/tennis) ──
-        # Bulk calcio endpoint returns ONLY O/U (never 1X2) regardless of offerCategories.
-        # Per-competition calls are needed for calcio 1X2 — see Pass C below.
+        # ── Pass A + B: build all skip=0 requests and fire in parallel ────────────
+        # (gridable pass → O/U for calcio, 1X2 for basket/tennis)
+        # (uo pass      → all O/U lines for calcio)
+        # Bulk calcio never returns 1X2; that comes from fixture-view in Pass C.
+        _SPORT_IDS = [("calcio", 4), ("basket", 7), ("tennis", 5)]
         offer_passes = [
             ("gridable", "&offerCategories=Gridable"),
             ("uo",       ""),
         ]
-        calcio_uo_raw: list[Any] = []  # store raw uo/calcio results for comp_id discovery
 
+        # (pass_label, sport_key, offer_cat, skip, url)
+        BulkTask = tuple
+        bulk_tasks_p0: list[BulkTask] = []
         for pass_label, offer_cat in offer_passes:
             common = f"{base_params}{offer_cat}"
+            for sport_key, sport_id in _SPORT_IDS:
+                url = (f"{cds}/bettingoffer/fixtures?{common}"
+                       f"&sportIds={sport_id}&skip=0&take=500")
+                bulk_tasks_p0.append((pass_label, sport_key, offer_cat, sport_id, url))
 
-            for sport_key, sport_id in [("calcio", 4), ("basket", 7), ("tennis", 5)]:
-                for skip in (0, 500):
-                    url = (f"{cds}/bettingoffer/fixtures?{common}"
-                           f"&sportIds={sport_id}&skip={skip}&take=500")
-                    result = await _cds_fetch(url)
-                    if isinstance(result, dict) and "error" in result:
-                        self._log.warning("[Bwin] fetch %s/%s skip=%d: %s",
-                                          pass_label, sport_key, skip, result["error"])
-                        break
-                    rows = _parse_cds_fixtures(result, sport_key, sport_key)
-                    from collections import Counter
-                    lc = Counter(r.league for r in rows)
-                    mc = Counter(r.market for r in rows)
-                    self._log.info("[Bwin] %s/%s skip=%d: %d rows leagues=%s markets=%s",
-                                   pass_label, sport_key, skip, len(rows), dict(lc), dict(mc))
-                    self._captured_rows.extend(rows)
-                    # Keep raw uo/calcio data for Pass C comp_id discovery
-                    if pass_label == "uo" and sport_key == "calcio":
-                        calcio_uo_raw.append(result)
-                    fixtures_list = result if isinstance(result, list) else (
-                        result.get("fixtures", []) if isinstance(result, dict) else [])
-                    if len(fixtures_list) < 500:
-                        break
+        self._log.info("[Bwin] Pass A+B: firing %d bulk requests in parallel", len(bulk_tasks_p0))
+        results_p0 = await _asyncio.gather(*[_cds_fetch(t[4]) for t in bulk_tasks_p0])
 
-        # ── Pass C: fixture-view for calcio 1X2 / DC / BTTS ────────────────────
-        # The bettingoffer/fixtures endpoint NEVER returns 1X2 for calcio regardless
-        # of offerCategories or competitionIds.  The per-fixture fixture-view endpoint
-        # with offerMapping=All returns ALL markets (318 per fixture confirmed).
-        # We reuse the fixture IDs already in calcio_uo_raw — no extra navigation needed.
+        # For any sport that hit the 500-fixture cap, fetch the next page (rare)
+        bulk_tasks_p500: list[BulkTask] = []
+        for task, result in zip(bulk_tasks_p0, results_p0):
+            if isinstance(result, dict) and "error" in result:
+                continue
+            fl = result if isinstance(result, list) else (
+                result.get("fixtures", []) if isinstance(result, dict) else [])
+            if len(fl) >= 500:
+                pass_label, sport_key, offer_cat, sport_id, _ = task
+                common = f"{base_params}{offer_cat}"
+                url500 = (f"{cds}/bettingoffer/fixtures?{common}"
+                          f"&sportIds={sport_id}&skip=500&take=500")
+                bulk_tasks_p500.append((pass_label, sport_key, offer_cat, sport_id, url500))
+
+        results_p500: list[Any] = []
+        if bulk_tasks_p500:
+            self._log.info("[Bwin] %d sports hit 500-fixture cap — fetching page 2 in parallel",
+                           len(bulk_tasks_p500))
+            results_p500 = list(await _asyncio.gather(*[_cds_fetch(t[4]) for t in bulk_tasks_p500]))
+
+        # Process all bulk results
+        calcio_uo_raw: list[Any] = []
+        for (pass_label, sport_key, _, _, _), result in (
+            list(zip(bulk_tasks_p0, results_p0)) +
+            list(zip(bulk_tasks_p500, results_p500))
+        ):
+            if isinstance(result, dict) and "error" in result:
+                self._log.warning("[Bwin] bulk %s/%s: %s", pass_label, sport_key, result["error"])
+                continue
+            rows = _parse_cds_fixtures(result, sport_key, sport_key)
+            lc = Counter(r.league for r in rows)
+            mc = Counter(r.market for r in rows)
+            self._log.info("[Bwin] %s/%s: %d rows leagues=%s markets=%s",
+                           pass_label, sport_key, len(rows), dict(lc), dict(mc))
+            self._captured_rows.extend(rows)
+            if pass_label == "uo" and sport_key == "calcio":
+                calcio_uo_raw.append(result)
+
+        # ── Pass C: fixture-view for calcio 1X2 / DC / BTTS — all batches in parallel ─
         fv_base = (
             f"x-bwin-accessid={token}&lang=it&country=IT&userCountry=IT"
             f"&offerMapping=All&scoreboardMode=Full&state=Latest"
@@ -676,28 +710,32 @@ class BwinScraper(BasePlaywrightScraper):
         )
         fixture_ids_by_league = _collect_fixture_ids_by_league(calcio_uo_raw, "calcio")
         self._log.info(
-            "[Bwin] fixture-view Pass C: leagues=%s counts=%s",
-            [k[0] for k in fixture_ids_by_league],
+            "[Bwin] Pass C: %d leagues, counts=%s",
+            len(fixture_ids_by_league),
             {k[0]: len(v) for k, v in fixture_ids_by_league.items()},
         )
 
-        BATCH_FV = 20  # fixture-view supports multiple IDs per call
+        BATCH_FV = 20
+        # (league_name, sport_key, batch_start, url)
+        FvTask = tuple
+        fv_tasks: list[FvTask] = []
         for (league_name, sport_key), fix_ids in fixture_ids_by_league.items():
             for i in range(0, len(fix_ids), BATCH_FV):
                 batch = fix_ids[i : i + BATCH_FV]
-                ids_str = ",".join(batch)
                 url_fv = (f"{cds}/bettingoffer/fixture-view?{fv_base}"
-                          f"&fixtureIds={ids_str}")
-                result_fv = await _cds_fetch(url_fv)
+                          f"&fixtureIds={','.join(batch)}")
+                fv_tasks.append((league_name, sport_key, i, url_fv))
+
+        if fv_tasks:
+            self._log.info("[Bwin] Pass C: firing %d fixture-view batches in parallel", len(fv_tasks))
+            fv_results = await _asyncio.gather(*[_cds_fetch(t[3]) for t in fv_tasks])
+
+            for (league_name, sport_key, i, _), result_fv in zip(fv_tasks, fv_results):
                 if isinstance(result_fv, dict) and "error" in result_fv:
-                    self._log.warning(
-                        "[Bwin] fixture-view %s batch %d-%d: %s",
-                        league_name, i, i + len(batch), result_fv["error"],
-                    )
+                    self._log.warning("[Bwin] fixture-view %s batch %d: %s",
+                                      league_name, i, result_fv["error"])
                     continue
 
-                # fixture-view wraps data: single → {"fixture": {...}}
-                # multiple → {"fixture": {...}, "splitFixtures": [{...}, ...]}
                 fv_fixtures: list = []
                 if isinstance(result_fv, dict):
                     split = result_fv.get("splitFixtures") or []
@@ -712,19 +750,15 @@ class BwinScraper(BasePlaywrightScraper):
                             fv_fixtures.append(main_fix)
 
                 if not fv_fixtures:
-                    self._log.warning(
-                        "[Bwin] fixture-view %s batch %d: empty response keys=%s",
-                        league_name, i,
-                        list(result_fv.keys()) if isinstance(result_fv, dict) else type(result_fv),
-                    )
+                    self._log.warning("[Bwin] fixture-view %s batch %d: empty keys=%s",
+                                      league_name, i,
+                                      list(result_fv.keys()) if isinstance(result_fv, dict) else type(result_fv))
                     continue
 
                 rows_fv = _parse_cds_fixtures(fv_fixtures, league_name, sport_key)
                 mc_fv = Counter(r.market for r in rows_fv)
-                self._log.info(
-                    "[Bwin] fixture-view %s batch %d-%d: %d fixtures → %d rows markets=%s",
-                    league_name, i, i + len(batch), len(fv_fixtures), len(rows_fv), dict(mc_fv),
-                )
+                self._log.info("[Bwin] fixture-view %s batch %d: %d fixtures → %d rows markets=%s",
+                               league_name, i, len(fv_fixtures), len(rows_fv), dict(mc_fv))
                 self._captured_rows.extend(rows_fv)
 
     async def _navigate_and_capture(
