@@ -324,6 +324,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           THEODDSAPI_KEY: ${{ secrets.THEODDSAPI_KEY }}
+          THEODDSAPI_BKS: "codere_it,marathonbet"
         run: python -m oddsmatcher_backend.main scrape --bookmaker theoddsapi
 
   # ── Bet365 ────────────────────────────────────────────────────────────
