@@ -45,8 +45,8 @@ TOURNAMENTS: list[tuple[int, str, str, str, str, str]] = [
     (890160,  "Serie A Basket",    "basket", "serie-a",               "italia",       "/scommesse/sport/basket/italia/serie-a?did=2&nid=7606&eid=890160"),
     (26064,   "A2 Basket",         "basket", "a2",                    "italia",       "/scommesse/sport/basket/italia/a2?did=2&nid=7606&eid=26064"),
     (155272,  "WNBA",              "basket", "wnba",                  "usa",          "/scommesse/sport/basket/usa/wnba?did=2&nid=8455&eid=155272"),
-    # Tennis
-    (203115,  "ATP Amburgo",       "tennis", "atp-amburgo",           "atp",          "/scommesse/sport/tennis/atp/atp-amburgo?did=5&nid=19254&eid=203115"),
+    # Tennis — overview page loads all active tournaments dynamically (id=0 = catch-all)
+    (0,       "ATP",               "tennis", "tennis",                "internazionale", "/scommesse/sport/tennis/"),
 ]
 # fmt: on
 
@@ -302,10 +302,14 @@ def _parse_leo_list(
 
         home_slug = _slugify_team(home)
         away_slug = _slugify_team(away)
-        match_url = (
-            f"{BASE_URL}/scommesse/sport/{sport_key}/{country_slug}/{league_slug}"
-            f"/{home_slug}-{away_slug}?tid={id_tournament}&eid={ei}"
-        )
+        if id_tournament == 0:
+            # catch-all overview page (e.g. tennis) — use sport-level URL
+            match_url = f"{BASE_URL}/scommesse/sport/{sport_key}/"
+        else:
+            match_url = (
+                f"{BASE_URL}/scommesse/sport/{sport_key}/{country_slug}/{league_slug}"
+                f"/{home_slug}-{away_slug}?tid={id_tournament}&eid={ei}"
+            )
 
         market_rows = _parse_markets(event, event_name, home, away, event_time, league_name, sport_key, match_url)
         results.extend(market_rows)
