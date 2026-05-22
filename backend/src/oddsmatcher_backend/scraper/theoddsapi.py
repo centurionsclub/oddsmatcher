@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 API_KEY  = os.environ.get("THEODDSAPI_KEY") or "c0c9bae9b0ea1a2e877038b76610ae94"
 API_BASE = "https://api.the-odds-api.com/v4"
 
-_DEFAULT_BKS = "pinnacle,codere_it,marathonbet"
+_DEFAULT_BKS = "codere_it,marathonbet"
 _BOOKMAKERS  = [b.strip() for b in os.environ.get("THEODDSAPI_BKS", _DEFAULT_BKS).split(",") if b.strip()]
 
 # Human-readable names for the DB / logging

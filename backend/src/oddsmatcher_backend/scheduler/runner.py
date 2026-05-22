@@ -97,7 +97,7 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
     # 1 HTTP request per sport (EU region), ~12 req per full scrape.
     # Free plan: 500 req/month → safe at max 2 cycles/day.
     theodds_rows = 0
-    if bookmaker in (None, "pinnacle", "codere", "marathonbet", "theoddsapi"):
+    if bookmaker in (None, "codere", "marathonbet", "theoddsapi"):
         try:
             theodds_scraper = TheOddsAPIScraper()
             theodds_results = await (theodds_scraper.scrape_sport(sport) if sport else theodds_scraper.scrape_all())
