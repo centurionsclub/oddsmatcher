@@ -138,6 +138,10 @@ def _parse_tms(tms: list) -> list[MatchOdds]:
     """Parse 'tms' array from getWidgetCentrali into MatchOdds list."""
     results: list[MatchOdds] = []
 
+    from collections import Counter as _Counter
+    ds_counts = _Counter(item.get("ds", "?") for item in tms if isinstance(item, dict))
+    logger.info("[WilliamHill] tms ds distribution: %s", dict(ds_counts))
+
     for item in tms:
         if not isinstance(item, dict):
             continue
