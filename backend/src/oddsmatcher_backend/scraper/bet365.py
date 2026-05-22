@@ -108,18 +108,18 @@ def _extract_odds(odds_fixture: dict, sport: _Sport) -> list[MatchOdds] | None:
             continue
 
         outcomes_data = mdata.get("outcomes", {})
-        bookmaker_odds: list[dict] = []
+        odds_dict: dict[str, float] = {}
 
         for oid, label in outcome_map.items():
             o = outcomes_data.get(str(oid), {})
             player = o.get("players", {}).get("0", {})
             price = player.get("price")
             if price and price > 1.0 and player.get("active"):
-                bookmaker_odds.append({"name": label, "price": round(float(price), 3)})
+                odds_dict[label] = round(float(price), 3)
 
         # Need at least 2 outcomes (or 3 for 1X2) to be a valid market
         min_outcomes = 2 if sport.market_label == "Moneyline" else 3
-        if len(bookmaker_odds) < min_outcomes:
+        if len(odds_dict) < min_outcomes:
             continue
 
         results.append(
@@ -132,7 +132,7 @@ def _extract_odds(odds_fixture: dict, sport: _Sport) -> list[MatchOdds] | None:
                 event_time=odds_fixture.get("startTime"),
                 match_url=b365.get("fixturePath", "https://www.bet365.it"),
                 market=sport.market_label,
-                bookmaker_odds=bookmaker_odds,
+                bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
             )
         )
 
