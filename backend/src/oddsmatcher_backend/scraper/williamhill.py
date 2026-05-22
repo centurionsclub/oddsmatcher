@@ -141,6 +141,16 @@ def _parse_tms(tms: list) -> list[MatchOdds]:
     from collections import Counter as _Counter
     ds_counts = _Counter(item.get("ds", "?") for item in tms if isinstance(item, dict))
     logger.info("[WilliamHill] tms ds distribution: %s", dict(ds_counts))
+    # Debug: log sc.d values for non-calcio items
+    for _item in tms:
+        if not isinstance(_item, dict):
+            continue
+        if _item.get("ds", "") in ("Tennis", "Pallacanestro", "TENNIS", "BASKET"):
+            _sc = _item.get("sc") or {}
+            _scs = _item.get("scs") or []
+            logger.info("[WilliamHill] %s dt=%r sc.d=%r scs_d=%s",
+                        _item.get("ds"), _item.get("dt"), _sc.get("d") if isinstance(_sc, dict) else None,
+                        [s.get("d") for s in _scs[:5] if isinstance(s, dict)])
 
     for item in tms:
         if not isinstance(item, dict):
