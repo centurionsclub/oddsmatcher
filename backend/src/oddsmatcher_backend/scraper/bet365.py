@@ -1,160 +1,486 @@
-"""Bet365 pre-match odds scraper — OddspAPI.io (smart tournament filter).
+"""Bet365 odds scraper via centroquote.it comparison site.
 
-Uses the OddspAPI.io REST API (v4) to fetch Bet365 odds for soccer, basketball
-and tennis.  Only the top leagues are fetched, keeping the total number of API
-calls to ~4–6 per full scrape (vs 100+ with the naive all-tournaments approach).
+Navigates centroquote.it league/match pages with Playwright, extracts
+Bet365 odds for 1X2, Double Chance, BTTS, and Over/Under markets.
 
 Configuration
 -------------
-ODDSPAPI_KEY   – API key (default: bundled key)
-ODDSPAPI_DAYS  – look-ahead window in days (default: 7, max: 9)
+CENTROQUOTE_CONCURRENCY – parallel match-detail pages (default: 4)
 """
 
 import asyncio
 import logging
-import os
-from dataclasses import dataclass
+import re
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
-import httpx
+from playwright.async_api import BrowserContext, Page, async_playwright
 
 from oddsmatcher_backend.scraper.models import MatchOdds
 
 logger = logging.getLogger(__name__)
 
-# ── configuration ─────────────────────────────────────────────────────────────
-
+ROME_TZ   = ZoneInfo("Europe/Rome")
+BASE_URL  = "https://www.centroquote.it"
 BOOKMAKER = "Bet365"
-API_KEY   = os.environ.get("ODDSPAPI_KEY", "49a74e6e-893d-40e6-8b19-5bb593c5143a")
-API_BASE  = "https://api.oddspapi.io/v4"
 
-_LOOKAHEAD_DAYS = min(int(os.environ.get("ODDSPAPI_DAYS", "7")), 9)
+CONCURRENCY    = 4
+PAGE_WAIT_MS   = 3500
+GOTO_TIMEOUT   = 30_000
+CACHE_MINUTES  = 20        # expires_at window for DB rows
 
-# ── market definitions ─────────────────────────────────────────────────────────
+# ── leagues ────────────────────────────────────────────────────────────────────
 
-_SOCCER_1X2 = {101: {101: "1", 102: "X", 103: "2"}}
-_BASKET_ML  = {111: {111: "1", 112: "2"}}
-_TENNIS_ML  = {121: {121: "1", 122: "2"}}
+_LEAGUES: list[dict] = [
+    {"url": "/football/italy/serie-a/",           "name": "Serie A",          "sport": "calcio"},
+    {"url": "/football/italy/serie-b/",           "name": "Serie B",          "sport": "calcio"},
+    {"url": "/football/italy/coppa-italia/",       "name": "Coppa Italia",     "sport": "calcio"},
+    {"url": "/football/europe/champions-league/", "name": "Champions League", "sport": "calcio"},
+    {"url": "/football/europe/europa-league/",    "name": "Europa League",    "sport": "calcio"},
+    {"url": "/football/europe/conference-league/","name": "Conference League","sport": "calcio"},
+    {"url": "/football/england/premier-league/",  "name": "Premier League",   "sport": "calcio"},
+    {"url": "/football/spain/laliga/",            "name": "LaLiga",           "sport": "calcio"},
+    {"url": "/football/germany/bundesliga/",      "name": "Bundesliga",       "sport": "calcio"},
+    {"url": "/football/france/ligue-1/",          "name": "Ligue 1",          "sport": "calcio"},
+    {"url": "/basketball/usa/nba/",               "name": "NBA",              "sport": "basket"},
+    {"url": "/tennis/", "name": "ATP", "sport": "tennis", "discover": "uomini"},
+    {"url": "/tennis/", "name": "WTA", "sport": "tennis", "discover": "donne"},
+]
 
-# ── tournament name filter ─────────────────────────────────────────────────────
-# Only fetch odds for tournaments whose name contains at least one of these
-# keywords (case-insensitive substring match).
-# Empty list = accept ALL tournaments for that sport (used for tennis).
+_SPORT_LEAGUES: dict[str, list[dict]] = defaultdict(list)
+for _lg in _LEAGUES:
+    _SPORT_LEAGUES[_lg["sport"]].append(_lg)
 
-_WANTED_NAMES: dict[str, list[str]] = {
-    "calcio": [
-        "serie a", "serie b",
-        "premier league",
-        "la liga", "primera division",
-        "bundesliga",
-        "ligue 1",
-        "champions league",
-        "europa league",
-        "conference league",
-        "fa cup", "coppa italia",
-    ],
-    "basket": [
-        "nba", "euroleague", "eurolega", "serie a",
-    ],
-    "tennis": [],   # ← empty: accept all ATP/WTA/Challenger tournaments
+# ── bookmaker alias → canonical name ──────────────────────────────────────────
+
+_BM_ALIASES: dict[str, str] = {
+    "bet365.it": "Bet365",
+    "bet365":    "Bet365",
 }
 
-# ── sport descriptors ──────────────────────────────────────────────────────────
+def _normalise_bm(raw: str) -> str | None:
+    key = raw.strip().lower()
+    for alias, name in _BM_ALIASES.items():
+        if alias in key:
+            return name
+    return None
 
-@dataclass
-class _Sport:
-    key: str
-    sport_id: int
-    markets: dict
-    market_label: str
+# ── row text parser ────────────────────────────────────────────────────────────
 
-_SPORTS = [
-    _Sport("calcio", 10, _SOCCER_1X2, "1X2"),
-    _Sport("basket", 11, _BASKET_ML,  "Moneyline"),
-    _Sport("tennis", 12, _TENNIS_ML,  "Moneyline"),
-]
-_SPORT_BY_KEY = {s.key: s for s in _SPORTS}
+_ODDS_RE   = re.compile(r"^\d{1,3}[.,]\d{2}$")
+_PAYOUT_RE = re.compile(r"^\d{1,3}[.,]\d+%$")
+_SKIP_TOKENS = {"richiedi bonus", "richiedi", "bonus"}
 
-# ── helpers ────────────────────────────────────────────────────────────────────
+def _parse_row_text(text: str) -> tuple[str, list[float]]:
+    tokens = [t.strip() for t in text.split("\n") if t.strip()]
+    bm_name = ""
+    odds: list[float] = []
+    for tok in tokens:
+        low = tok.lower()
+        if low in _SKIP_TOKENS or _PAYOUT_RE.match(tok):
+            continue
+        if _ODDS_RE.match(tok):
+            odds.append(float(tok.replace(",", ".")))
+        elif not bm_name:
+            bm_name = tok
+    return bm_name, odds
 
-async def _get_json(client: httpx.AsyncClient, url: str, params: dict) -> Any:
-    """GET + parse JSON, with automatic retry on 429."""
-    for attempt in range(3):
-        resp = await client.get(url, params=params)
-        if resp.status_code == 429:
-            retry_sec = 2.0
+# ── time parsing ───────────────────────────────────────────────────────────────
+
+def _parse_time(raw: str) -> str:
+    raw = raw.strip()
+    now_utc  = datetime.now(timezone.utc)
+    fallback = (now_utc + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0).isoformat()
+    if not raw:
+        return fallback
+    for fmt in ("%d/%m/%Y %H:%M", "%d.%m.%Y %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(raw, fmt).replace(tzinfo=ROME_TZ).astimezone(timezone.utc).isoformat()
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(raw).astimezone(timezone.utc).isoformat()
+    except (ValueError, TypeError):
+        pass
+    m = re.match(r"(\d{1,2})[/.](\d{1,2})\s+(\d{1,2}):(\d{2})$", raw)
+    if m:
+        try:
+            c = datetime(now_utc.year, int(m.group(2)), int(m.group(1)),
+                         int(m.group(3)), int(m.group(4)), tzinfo=ROME_TZ).astimezone(timezone.utc)
+            if c < now_utc - timedelta(days=1):
+                c = c.replace(year=now_utc.year + 1)
+            return c.isoformat()
+        except ValueError:
+            pass
+    m = re.match(r"(\d{1,2}):(\d{2})$", raw)
+    if m:
+        try:
+            now_rome = datetime.now(ROME_TZ)
+            c = now_rome.replace(hour=int(m.group(1)), minute=int(m.group(2)), second=0, microsecond=0)
+            if c < now_rome - timedelta(minutes=30):
+                c += timedelta(days=1)
+            return c.astimezone(timezone.utc).isoformat()
+        except ValueError:
+            pass
+    return fallback
+
+# ── JS snippets ────────────────────────────────────────────────────────────────
+
+_LEAGUE_JS = """
+() => {
+    const results = [];
+    const rows = document.querySelectorAll('.eventRow');
+    const itMo = {gen:'01',feb:'02',mar:'03',apr:'04',mag:'05',giu:'06',lug:'07',ago:'08',set:'09',ott:'10',nov:'11',dic:'12'};
+    const thisYear = new Date().getFullYear();
+    function extractDate(txt) {
+        const m1 = txt.match(/(\\d{1,2})\\s+([A-Za-z]{3,})\\s+(\\d{4})/);
+        if (m1) { const mo = itMo[m1[2].toLowerCase().slice(0,3)]; if (mo) return `${m1[3]}-${mo}-${m1[1].padStart(2,'0')}`; }
+        const m2 = txt.match(/(?:Oggi|Domani|Lun|Mar|Mer|Gio|Ven|Sab|Dom)[a-zì]*[,.]?\\s+(\\d{1,2})\\s+([A-Za-z]{3,})/i);
+        if (m2) { const mo = itMo[m2[2].toLowerCase().slice(0,3)]; if (mo) return `${thisYear}-${mo}-${m2[1].padStart(2,'0')}`; }
+        return null;
+    }
+    function extractTime(txt) { const m = txt.match(/\\b(\\d{1,2}):(\\d{2})\\b/); return m ? `${m[1].padStart(2,'0')}:${m[2]}` : null; }
+    const liveRe = /\\bLIVE\\b|\\bIn Corso\\b|\\bIN CORSO\\b/;
+    rows.forEach(row => {
+        const rowText = row.innerText || '';
+        if (liveRe.test(rowText)) return;
+        const h2hLink = Array.from(row.querySelectorAll('a[href]')).find(a => {
+            const h = a.getAttribute('href') || '';
+            return (h.includes('/h2h/') || h.includes('-v-')) && !h.includes('inplay') && !h.includes('live');
+        });
+        if (!h2hLink) return;
+        const href = h2hLink.getAttribute('href');
+        const gameRow = row.querySelector('[data-testid="game-row"]');
+        if (!gameRow) return;
+        const teams = Array.from(gameRow.querySelectorAll('.truncate')).map(e => e.innerText.trim()).filter(t => t.length > 1 && t.length < 50);
+        if (teams.length < 2) return;
+        const flat = rowText.replace(/\\n/g,' ');
+        let datePart = extractDate(flat);
+        if (!datePart) {
+            let el = row.previousElementSibling;
+            for (let i = 0; i < 40 && el && !datePart; i++) { datePart = extractDate((el.innerText||'').replace(/\\n/g,' ')); el = el.previousElementSibling; }
+        }
+        const timePart = extractTime(flat);
+        const timeText = (datePart && timePart) ? `${datePart}T${timePart}:00` : (timePart || '');
+        results.push({ href, home: teams[0], away: teams[1], timeText });
+    });
+    return results;
+}
+"""
+
+_MATCH_TIME_JS = """
+() => {
+    const itM = {gen:1,feb:2,mar:3,apr:4,mag:5,giu:6,lug:7,ago:8,set:9,ott:10,nov:11,dic:12};
+    for (const sel of ['time[datetime]','[class*="kickoff"]','[class*="match-time"]','[class*="event-date"]','time']) {
+        for (const el of document.querySelectorAll(sel)) {
+            const dt = el.getAttribute('datetime');
+            if (dt && dt.length > 6) return dt;
+            const txt = (el.innerText||'').trim();
+            if (!txt || txt.length > 60) continue;
+            const m = txt.match(/(\\d{1,2})\\s+([A-Za-z]{3})\\s+(\\d{4})[,\\s]+(\\d{1,2}):(\\d{2})/);
+            if (m) { const mo = itM[m[2].toLowerCase()]; if (mo) return `${m[3]}-${String(mo).padStart(2,'0')}-${m[1].padStart(2,'0')}T${m[4].padStart(2,'0')}:${m[5]}:00`; }
+        }
+    }
+    return '';
+}
+"""
+
+# ── page helpers ───────────────────────────────────────────────────────────────
+
+async def _extract_bm_rows(page: Page) -> list[tuple[str, list[float]]]:
+    try:
+        raw = await page.evaluate("""
+            () => {
+                return Array.from(document.querySelectorAll('div.flex.h-9')).map(row => {
+                    const hasStruck = Array.from(row.querySelectorAll('*')).some(el => {
+                        try {
+                            if ((el.className||'').includes('line-through')) return true;
+                            if (window.getComputedStyle(el).textDecorationLine.includes('line-through')) return true;
+                        } catch(e) {}
+                        return false;
+                    });
+                    return { text: row.innerText || '', hasStruck };
+                });
+            }
+        """)
+        result = []
+        for r in (raw or []):
+            if r.get("hasStruck"):
+                continue
+            bm, odds = _parse_row_text(r.get("text", ""))
+            if bm and odds:
+                result.append((bm, odds))
+        return result
+    except Exception:
+        return []
+
+async def _click_tab(page: Page, tab_text: str) -> bool:
+    try:
+        clicked = await page.evaluate("""
+            (t) => {
+                for (const div of document.querySelectorAll('a div, button div, li div')) {
+                    if ((div.innerText||'').trim() === t) {
+                        (div.closest('a') || div.closest('button') || div.closest('li') || div).click();
+                        return true;
+                    }
+                }
+                return false;
+            }
+        """, tab_text)
+        if clicked:
+            return True
+        for loc in [page.locator(f"a:has-text('{tab_text}')").first,
+                    page.locator(f"button:has-text('{tab_text}')").first]:
             try:
-                data = resp.json()
-                retry_sec = float(data.get("error", {}).get("retryMs", 2000)) / 1000 + 0.1
+                await loc.click(timeout=2000)
+                return True
             except Exception:
                 pass
-            logger.debug("Rate-limited, waiting %.1fs (attempt %d)", retry_sec, attempt + 1)
-            await asyncio.sleep(retry_sec)
+        return False
+    except Exception:
+        return False
+
+# ── match detail scraper ───────────────────────────────────────────────────────
+
+async def _scrape_match(
+    context: BrowserContext,
+    match_url: str,
+    event_name: str,
+    event_time: str,
+    sport: str,
+    league_name: str,
+) -> list[dict]:
+    """Scrape one match detail page; return flat rows for Bet365 only."""
+    page = await context.new_page()
+    rows: list[dict] = []
+    cq_url = BASE_URL + match_url
+
+    try:
+        await page.goto(cq_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10_000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(PAGE_WAIT_MS)
+        for _ in range(8):
+            if await page.locator("div.flex.h-9").count() >= 5:
+                break
+            await page.wait_for_timeout(1000)
+
+        # refine event_time from detail page
+        try:
+            raw_t = await page.evaluate(_MATCH_TIME_JS)
+            if raw_t:
+                parsed = _parse_time(raw_t)
+                now = datetime.now(timezone.utc)
+                try:
+                    cand = datetime.fromisoformat(parsed)
+                    if now - timedelta(days=30) < cand < now + timedelta(days=30):
+                        event_time = parsed
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # skip live/finished
+        try:
+            et = datetime.fromisoformat(event_time)
+            if et < datetime.now(timezone.utc) - timedelta(minutes=30):
+                return []
+        except Exception:
+            pass
+
+        def _add(market: str, outcome: str, odds_val: float):
+            rows.append({"market": market, "outcome": outcome, "odds": odds_val,
+                         "event_name": event_name, "event_time": event_time,
+                         "sport": sport, "league": league_name, "match_url": cq_url})
+
+        # 1X2
+        outcomes_1x2 = ["1", "X", "2"] if sport == "calcio" else ["1", "2"]
+        for bm_raw, odds in await _extract_bm_rows(page):
+            if _normalise_bm(bm_raw) == BOOKMAKER and len(odds) >= len(outcomes_1x2):
+                for i, out in enumerate(outcomes_1x2):
+                    _add("1X2", out, odds[i])
+                break  # found Bet365
+
+        if sport != "calcio":
+            return rows
+
+        # Double Chance
+        if await _click_tab(page, "Double Chance"):
+            await page.wait_for_timeout(2000)
+            for bm_raw, odds in await _extract_bm_rows(page):
+                if _normalise_bm(bm_raw) == BOOKMAKER and len(odds) >= 3:
+                    for i, out in enumerate(["1X", "X2", "12"]):
+                        _add("DC", out, odds[i])
+                    break
+
+        # BTTS
+        if await _click_tab(page, "Both Teams to Score"):
+            await page.wait_for_timeout(2000)
+            for bm_raw, odds in await _extract_bm_rows(page):
+                if _normalise_bm(bm_raw) == BOOKMAKER and len(odds) >= 2:
+                    _add("BTTS", "Goal",    odds[0])
+                    _add("BTTS", "No Goal", odds[1])
+                    break
+
+        # Over/Under
+        if await _click_tab(page, "Over/Under"):
+            await page.wait_for_timeout(1500)
+            for threshold in ["1.5", "2.5", "3.5", "4.5"]:
+                expanded = await page.evaluate("""
+                    (thr) => {
+                        for (const row of document.querySelectorAll('div.flex.h-9')) {
+                            const t = (row.innerText||'').replace(/\\n/g,' ').trim();
+                            if (t.startsWith('Over/Under +'+thr) || t.startsWith('Over/Under '+thr)) {
+                                row.click(); return true;
+                            }
+                        }
+                        return false;
+                    }
+                """, threshold)
+                if not expanded:
+                    continue
+                await page.wait_for_timeout(1200)
+                for bm_raw, odds in await _extract_bm_rows(page):
+                    if bm_raw.lower().startswith("over/under"):
+                        continue
+                    if _normalise_bm(bm_raw) == BOOKMAKER and len(odds) >= 2:
+                        _add("Over/Under", f"Over {threshold}",  odds[0])
+                        _add("Over/Under", f"Under {threshold}", odds[1])
+                        break
+
+    except Exception as exc:
+        logger.warning("[Bet365/CQ] Match %s error: %s", match_url, exc)
+    finally:
+        await page.close()
+
+    return rows
+
+# ── league page ────────────────────────────────────────────────────────────────
+
+async def _discover_tennis(context: BrowserContext, gender_kw: str) -> list[str]:
+    page = await context.new_page()
+    try:
+        await page.goto(BASE_URL + "/tennis/", wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
+        await page.wait_for_timeout(PAGE_WAIT_MS)
+        urls = await page.evaluate(f"""
+            () => Array.from(document.querySelectorAll('a[href]'))
+                .map(a => a.getAttribute('href'))
+                .filter(h => h && h.startsWith('/tennis/') && h !== '/tennis/' && h.includes('{gender_kw}') && !h.includes('doppio'))
+                .filter((v,i,a) => a.indexOf(v) === i)
+        """)
+        return urls or []
+    except Exception:
+        return []
+    finally:
+        await page.close()
+
+async def _get_matches(context: BrowserContext, league: dict) -> list[dict]:
+    if league.get("discover"):
+        urls = await _discover_tennis(context, league["discover"])
+        events: list[dict] = []
+        for t_url in urls:
+            page = await context.new_page()
+            try:
+                await page.goto(BASE_URL + t_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
+                await page.wait_for_timeout(2500)
+                raw = await page.evaluate(_LEAGUE_JS)
+                events.extend(_parse_matches(raw))
+            except Exception:
+                pass
+            finally:
+                await page.close()
+            await asyncio.sleep(0.3)
+        return events
+
+    page = await context.new_page()
+    try:
+        for attempt in range(3):
+            await page.goto(BASE_URL + league["url"], wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10_000)
+            except Exception:
+                pass
+            await page.wait_for_timeout(PAGE_WAIT_MS)
+            for _ in range(8):
+                if await page.locator(".eventRow").count() > 0:
+                    break
+                await page.wait_for_timeout(1000)
+            raw = await page.evaluate(_LEAGUE_JS)
+            events = _parse_matches(raw)
+            if events or attempt == 2:
+                return events
+            await page.wait_for_timeout(3000)
+        return []
+    except Exception:
+        return []
+    finally:
+        await page.close()
+
+def _parse_matches(raw: list) -> list[dict]:
+    seen: set = set()
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=90)
+    events = []
+    for m in (raw or []):
+        home, away = m.get("home", "").strip(), m.get("away", "").strip()
+        if not home or not away:
             continue
-        resp.raise_for_status()
-        return resp.json()
-    raise RuntimeError(f"Failed after retries: GET {url}")
-
-
-def _date_range():
-    today = datetime.now(timezone.utc).date()
-    end   = today + timedelta(days=_LOOKAHEAD_DAYS)
-    return today.isoformat(), end.isoformat()
-
-
-def _extract_odds(odds_fixture: dict, sport: _Sport) -> list[MatchOdds] | None:
-    b365 = odds_fixture.get("bookmakerOdds", {}).get("bet365")
-    if not b365 or not b365.get("bookmakerIsActive"):
-        return None
-    if b365.get("suspended"):
-        return None
-
-    markets_data = b365.get("markets", {})
-    results: list[MatchOdds] = []
-
-    for market_id, outcome_map in sport.markets.items():
-        mdata = markets_data.get(str(market_id))
-        if not mdata or not mdata.get("marketActive"):
+        pair = frozenset({home.lower(), away.lower()})
+        if pair in seen:
             continue
+        seen.add(pair)
+        event_time = _parse_time(m.get("timeText", ""))
+        try:
+            if datetime.fromisoformat(event_time) < cutoff:
+                continue
+        except Exception:
+            pass
+        events.append({"url": m["href"], "event_name": f"{home} - {away}", "event_time": event_time})
+    return events
 
-        outcomes_data = mdata.get("outcomes", {})
-        odds_dict: dict[str, float] = {}
+# ── flat rows → MatchOdds ──────────────────────────────────────────────────────
 
-        for oid, label in outcome_map.items():
-            o = outcomes_data.get(str(oid), {})
-            player = o.get("players", {}).get("0", {})
-            price = player.get("price")
-            if price and price > 1.0 and player.get("active"):
-                odds_dict[label] = round(float(price), 3)
+def _rows_to_match_odds(flat_rows: list[dict]) -> list[MatchOdds]:
+    """Group flat per-outcome rows into MatchOdds objects."""
+    # key: (event_name, sport, league, market, match_url, event_time)
+    grouped: dict[tuple, dict[str, float]] = defaultdict(dict)
+    meta: dict[tuple, dict] = {}
 
-        min_outcomes = 2 if sport.market_label == "Moneyline" else 3
-        if len(odds_dict) < min_outcomes:
+    for r in flat_rows:
+        key = (r["event_name"], r["sport"], r["league"], r["market"], r["match_url"], r["event_time"])
+        grouped[key][r["outcome"]] = r["odds"]
+        if key not in meta:
+            meta[key] = r
+
+    results = []
+    for key, odds_dict in grouped.items():
+        if not odds_dict:
             continue
-
+        event_name, sport, league, market, match_url, event_time = key
+        parts = event_name.split(" - ", 1)
+        home = parts[0] if len(parts) == 2 else event_name
+        away = parts[1] if len(parts) == 2 else ""
         results.append(MatchOdds(
-            sport=sport.key,
-            league="",
-            home_team="",
-            away_team="",
-            event_name="",
-            event_time=odds_fixture.get("startTime"),
-            match_url=b365.get("fixturePath", "https://www.bet365.it"),
-            market=sport.market_label,
+            sport=sport,
+            league=league,
+            home_team=home,
+            away_team=away,
+            event_name=event_name,
+            event_time=event_time,
+            match_url=match_url,
+            market=market,
             bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
         ))
-
-    return results if results else None
-
+    return results
 
 # ── scraper class ──────────────────────────────────────────────────────────────
 
 class Bet365Scraper:
-    """OddspAPI-based Bet365 scraper with smart tournament name filtering.
-
-    Fetches only the top leagues (Serie A, Premier League, NBA, etc.) instead
-    of all tournaments, reducing API calls from 100+ to ~4–6 per full scrape.
-    """
+    """Scrapes Bet365 odds from centroquote.it comparison site."""
 
     bookmaker_name = BOOKMAKER
 
@@ -162,124 +488,66 @@ class Bet365Scraper:
         self._log = logging.getLogger(f"{__name__}.Bet365Scraper")
 
     async def scrape_all(self) -> list[MatchOdds]:
-        rows: list[MatchOdds] = []
-        async with httpx.AsyncClient(timeout=30) as client:
-            for sport in _SPORTS:
-                try:
-                    sport_rows = await self._scrape_sport_obj(client, sport)
-                    rows.extend(sport_rows)
-                    self._log.info("[Bet365] %-8s %d rows", sport.key, len(sport_rows))
-                except Exception:
-                    self._log.exception("[Bet365] Error scraping %s", sport.key)
-        self._log.info("[Bet365] Total: %d rows", len(rows))
-        return rows
+        return await self._run(sport_filter=None)
 
     async def scrape_sport(self, sport_key: str) -> list[MatchOdds]:
-        sport = _SPORT_BY_KEY.get(sport_key)
-        if not sport:
-            self._log.warning("[Bet365] Unknown sport key: %s", sport_key)
-            return []
-        async with httpx.AsyncClient(timeout=30) as client:
-            return await self._scrape_sport_obj(client, sport)
+        return await self._run(sport_filter=sport_key)
 
-    async def _scrape_sport_obj(self, client: httpx.AsyncClient, sport: _Sport) -> list[MatchOdds]:
-        date_from, date_to = _date_range()
-
-        # ── Step 1: fetch fixtures (1 API call) ───────────────────────────────
-        self._log.info("[Bet365] %s: fetching fixtures %s → %s", sport.key, date_from, date_to)
-        try:
-            fixtures_raw = await _get_json(client, f"{API_BASE}/fixtures", {
-                "sportId": sport.sport_id,
-                "from":    date_from,
-                "to":      date_to,
-                "apiKey":  API_KEY,
-            })
-        except Exception:
-            self._log.exception("[Bet365] %s: fixtures fetch failed", sport.key)
+    async def _run(self, sport_filter: str | None) -> list[MatchOdds]:
+        leagues = [lg for lg in _LEAGUES if sport_filter is None or lg["sport"] == sport_filter]
+        if not leagues:
             return []
 
-        if not isinstance(fixtures_raw, list):
-            self._log.warning("[Bet365] %s: unexpected fixtures response: %s", sport.key, fixtures_raw)
-            return []
+        self._log.info("[Bet365/CQ] Scraping %d leagues (sport=%s)", len(leagues), sport_filter or "all")
+        flat_rows: list[dict] = []
 
-        self._log.info("[Bet365] %s: %d total fixtures", sport.key, len(fixtures_raw))
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+                      "--disable-blink-features=AutomationControlled"],
+            )
+            context = await browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                locale="it-IT",
+                user_agent=(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+            )
+            await context.route(
+                "**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,ttf,otf}",
+                lambda route, _: route.abort(),
+            )
 
-        # ── Step 2: build tournament ID → name map, apply name filter ─────────
-        fixture_map: dict[str, dict] = {f["fixtureId"]: f for f in fixtures_raw}
-
-        tid_to_name: dict[int, str] = {}
-        for f in fixtures_raw:
-            tid   = f.get("tournamentId")
-            tname = (f.get("tournamentName") or "").strip()
-            if tid is not None and tid not in tid_to_name:
-                tid_to_name[int(tid)] = tname
-
-        wanted_kws = _WANTED_NAMES.get(sport.key, [])
-        if wanted_kws:
-            tournament_ids = [
-                tid for tid, tname in tid_to_name.items()
-                if any(kw in tname.lower() for kw in wanted_kws)
-            ]
-        else:
-            # No filter (e.g. tennis) — sort by fixture count, hard-cap at 50 tournaments
-            from collections import Counter
-            tid_counts = Counter(int(f["tournamentId"]) for f in fixtures_raw)
-            tournament_ids = [tid for tid, _ in tid_counts.most_common(50)]
-
-        self._log.info(
-            "[Bet365] %s: %d/%d tournaments selected (filter=%s)",
-            sport.key, len(tournament_ids), len(tid_to_name),
-            bool(wanted_kws),
-        )
-
-        if not tournament_ids:
-            self._log.warning("[Bet365] %s: no matching tournaments — check _WANTED_NAMES", sport.key)
-            return []
-
-        # ── Step 3: fetch odds in batches of 5 (few calls with name filter) ───
-        rows: list[MatchOdds] = []
-
-        for i in range(0, len(tournament_ids), 5):
-            batch = tournament_ids[i : i + 5]
-            if i > 0:
-                await asyncio.sleep(1.1)   # respect 1000ms rate-limit
-
-            try:
-                odds_raw = await _get_json(client, f"{API_BASE}/odds-by-tournaments", {
-                    "bookmaker":     "bet365",
-                    "tournamentIds": ",".join(str(x) for x in batch),
-                    "apiKey":        API_KEY,
-                })
-            except Exception:
-                self._log.debug("[Bet365] %s: batch %d failed, skipping", sport.key, i // 5)
-                continue
-
-            if not isinstance(odds_raw, list):
-                continue
-
-            for odds_fixture in odds_raw:
-                partial = _extract_odds(odds_fixture, sport)
-                if not partial:
+            for league in leagues:
+                self._log.info("[Bet365/CQ] League: %s", league["name"])
+                matches = await _get_matches(context, league)
+                if not matches:
+                    self._log.info("[Bet365/CQ]   0 matches")
                     continue
+                self._log.info("[Bet365/CQ]   %d matches → scraping detail pages", len(matches))
 
-                fixture_id = odds_fixture.get("fixtureId", "")
-                fdata = fixture_map.get(fixture_id, {})
-                p1_id = odds_fixture.get("participant1Id")
-                p2_id = odds_fixture.get("participant2Id")
+                for batch_start in range(0, len(matches), CONCURRENCY):
+                    batch = matches[batch_start : batch_start + CONCURRENCY]
+                    tasks = [
+                        _scrape_match(context, m["url"], m["event_name"], m["event_time"],
+                                      league["sport"], league["name"])
+                        for m in batch
+                    ]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for res in results:
+                        if isinstance(res, list):
+                            flat_rows.extend(res)
+                        elif isinstance(res, Exception):
+                            self._log.warning("[Bet365/CQ] Batch error: %s", res)
 
-                home = (fdata.get("participant1Name") or fdata.get("participant1ShortName")
-                        or f"Team {p1_id}")
-                away = (fdata.get("participant2Name") or fdata.get("participant2ShortName")
-                        or f"Team {p2_id}")
-                league = fdata.get("tournamentName", "")
+                self._log.info("[Bet365/CQ]   %s: %d rows so far", league["name"], len(flat_rows))
 
-                for mo in partial:
-                    mo.home_team  = home
-                    mo.away_team  = away
-                    mo.event_name = f"{home} - {away}"
-                    mo.league     = league
+            await browser.close()
 
-                rows.extend(partial)
-
-        self._log.info("[Bet365] %s: %d rows extracted", sport.key, len(rows))
-        return rows
+        match_odds = _rows_to_match_odds(flat_rows)
+        n_events = len({mo.event_name for mo in match_odds})
+        self._log.info("[Bet365/CQ] Total: %d events, %d market rows", n_events, len(match_odds))
+        return match_odds
