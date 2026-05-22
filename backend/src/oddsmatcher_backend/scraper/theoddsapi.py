@@ -42,16 +42,27 @@ _BOOKMAKERS  = [b.strip() for b in os.environ.get("THEODDSAPI_BKS", _DEFAULT_BKS
 
 # Human-readable names for the DB / logging
 _BK_DISPLAY: dict[str, str] = {
-    "pinnacle":    "Pinnacle",
-    "codere_it":   "Codere",
-    "marathonbet": "MarathonBet",
-    "betsson":     "Betsson",
-    "williamhill": "William Hill",
-    "nordicbet":   "NordicBet",
-    "matchbook":   "Matchbook",
+    "pinnacle":      "Pinnacle",
+    "codere_it":     "Codere",
+    "marathonbet":   "MarathonBet",
+    "betsson":       "Betsson",
+    "williamhill":   "William Hill",
+    "nordicbet":     "NordicBet",
+    "matchbook":     "Matchbook",
     "betfair_ex_eu": "Betfair Exchange",
-    "onexbet":     "1xBet",
-    "pinnacle_eu": "Pinnacle",
+    "onexbet":       "1xBet",
+    "pinnacle_eu":   "Pinnacle",
+}
+
+# Homepage URLs per bookmaker key
+_BK_URL: dict[str, str] = {
+    "codere_it":     "https://www.codere.it/",
+    "marathonbet":   "https://www.marathonbet.com/en/",
+    "pinnacle":      "https://www.pinnacle.com/",
+    "betsson":       "https://www.betsson.com/",
+    "williamhill":   "https://www.williamhill.it/",
+    "betfair_ex_eu": "https://www.betfair.it/",
+    "onexbet":       "https://www.1xbet.com/",
 }
 
 # ── sport / league map ─────────────────────────────────────────────────────────
@@ -169,16 +180,16 @@ def _parse_event(event: dict, sport_key: str, league_name: str) -> list[MatchOdd
     market_to_bks: dict[str, list[dict[str, Any]]] = {}
     for bk_key, markets in bk_markets.items():
         display = _BK_DISPLAY.get(bk_key, bk_key.title())
+        url     = _BK_URL.get(bk_key, f"https://www.{bk_key.replace('_it','').replace('_eu','')}.com/")
         for mname, odds in markets.items():
             market_to_bks.setdefault(mname, []).append({
                 "bookmaker": display,
                 "odds": odds,
+                "url": url,
             })
 
     results: list[MatchOdds] = []
     for mname, bk_odds_list in market_to_bks.items():
-        # Use the first bookmaker's URL pattern as match_url placeholder
-        bk_key = next(iter(bk_markets))
         results.append(MatchOdds(
             sport=sport_key,
             league=league_name,
@@ -186,7 +197,7 @@ def _parse_event(event: dict, sport_key: str, league_name: str) -> list[MatchOdd
             away_team=away_team,
             event_name=event_name,
             event_time=event_time,
-            match_url=f"https://www.{bk_key.replace('_it','').replace('_eu','')}.com/",
+            match_url="",   # overridden per-bookmaker in the DB writer
             market=mname,
             bookmaker_odds=bk_odds_list,
         ))

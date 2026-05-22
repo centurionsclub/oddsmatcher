@@ -305,6 +305,7 @@ class SupabaseWriter:
                 # Use the per-entry bookmaker name (e.g. Pinnacle, Codere, MarathonBet)
                 # falling back to the scraper-level bookmaker_name for single-bk scrapers.
                 bk_name = bm.get("bookmaker") or bookmaker_name
+                bk_url  = bm.get("url") or match.match_url
                 for outcome_raw, odds_val in bm["odds"].items():
                     market_norm, outcome_norm = _normalize_market_outcome(match.market, outcome_raw)
                     row: dict[str, Any] = {
@@ -316,7 +317,7 @@ class SupabaseWriter:
                         "outcome": outcome_norm,
                         "odds": float(odds_val),
                         "expires_at": expires_at,
-                        "match_url": match.match_url,
+                        "match_url": bk_url,
                     }
                     if match.event_time:
                         row["event_time"] = match.event_time
