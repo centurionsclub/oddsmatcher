@@ -157,6 +157,21 @@ class SisalScraper:
         except Exception as e:
             logger.warning("[Sisal] Homepage warm-up failed: %s", e)
 
+        # Navigate to a non-football page to prime the SPA router.
+        # The Sisal homepage defaults to Serie A, so navigating directly to Serie A
+        # yields no new API call (SSR cache hit). Visiting a different section first
+        # forces a cache miss when we later navigate to football leagues.
+        logger.info("[Sisal] SPA router warm-up (basket overview)...")
+        try:
+            await self._page.goto(
+                f"{BASE_URL}/scommesse-matchpoint/sport/basket",
+                wait_until="domcontentloaded",
+                timeout=15_000,
+            )
+            await self._page.wait_for_timeout(2000)
+        except Exception as e:
+            logger.debug("[Sisal] Router warm-up failed: %s", e)
+
     async def _stop(self) -> None:
         if self._browser:
             await self._browser.close()
