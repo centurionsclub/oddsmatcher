@@ -8,8 +8,8 @@ Strategy:
   3. Three passes via page.evaluate() fetch with session cookies:
      Pass A (gridable): bulk sportIds — returns O/U for calcio, 1X2 for basket/tennis
      Pass B (uo):       bulk sportIds — returns all O/U lines for calcio
-     Pass C (1X2):      per-competition competitionIds — returns 1X2/DC/BTTS for calcio
-     The bulk calcio endpoint never returns 1X2; competitionIds-scoped calls do.
+     Pass C (fv):       per-fixture fixture-view?offerMapping=All — returns 1X2/DC/BTTS
+     The bulk calcio endpoint never returns 1X2; fixture-view with offerMapping=All does.
 
 CDS fixtures endpoint:
   /cds-api/bettingoffer/fixtures?x-bwin-accessid={id}&lang=it&country=IT
@@ -97,20 +97,25 @@ SIMPLE_MARKET_MAP: dict[str, str] = {
     "1X2": "1X2", "Risultato 1 X 2": "1X2", "Match Result": "1X2",
     "Esito Finale": "1X2", "Result": "1X2", "Moneyline": "1X2",
     "Scommessa 1 2 - Chi vincerà?": "1X2",
+    "Risultato della partita": "1X2",   # fixture-view Italian name
+    "Risultato partita": "1X2",
     # Basket/tennis head-to-head (no draw, 2 outcomes)
     "Testa a testa (vincitore)": "1X2", "Vincitore partita": "1X2",
     "Head to Head": "1X2", "Testa a Testa": "1X2",
     "Double Chance": "DC", "Doppia Chance": "DC",
+    "Doppia chance": "DC",              # fixture-view Italian capitalisation
     "Both Teams to Score": "BTTS", "Goal/No Goal": "BTTS",
+    "Gol/Gol": "BTTS",                  # fixture-view Italian name
+    "Goal/No Goal": "BTTS",
 }
 UO_SPREADS_WANTED: set[str] = {"1.5", "2.5", "3.5"}
 OUTCOME_MAP: dict[str, str] = {
-    "1": "1", "Home": "1", "Team 1": "1",
+    "1": "1", "Home": "1", "Team 1": "1", "Casa": "1",
     "X": "X", "Draw": "X", "Tie": "X", "Pareggio": "X",
-    "2": "2", "Away": "2", "Team 2": "2",
+    "2": "2", "Away": "2", "Team 2": "2", "Ospite": "2",
     "1X": "1X", "X2": "X2", "12": "12",
-    "Yes": "Goal", "Goal": "Goal",
-    "No": "No Goal", "No Goal": "No Goal",
+    "Yes": "Goal", "Goal": "Goal", "Sì": "Goal", "Si": "Goal", "GG": "Goal",
+    "No": "No Goal", "No Goal": "No Goal", "NG": "No Goal",
 }
 
 
@@ -445,6 +450,61 @@ def _collect_comp_ids(raw_results: list[Any], sport_key: str) -> dict[int, tuple
     return found
 
 
+def _collect_fixture_ids_by_league(
+    raw_results: list[Any], sport_key: str
+) -> dict[tuple[str, str], list[str]]:
+    """Collect fixture IDs (format '2:XXXXXXX') grouped by (league_name, sport_key).
+
+    Reads the raw CDS fixtures responses saved during Pass A/B and maps each
+    fixture to its canonical league so we can batch-fetch them via fixture-view.
+    """
+    result: dict[tuple[str, str], list[str]] = {}
+    seen_ids: set[str] = set()
+    for data in raw_results:
+        if not data or (isinstance(data, dict) and "error" in data):
+            continue
+        fixtures = data if isinstance(data, list) else (data.get("fixtures") or [])
+        for fix in (fixtures or []):
+            if not isinstance(fix, dict):
+                continue
+            fix_id = fix.get("id")
+            if fix_id is None:
+                continue
+            fid_str = f"2:{fix_id}"
+            if fid_str in seen_ids:
+                continue
+            # Determine league from competition field
+            comp_obj = (fix.get("competition") or
+                        fix.get("fixture", {}).get("competition") or {})
+            if not isinstance(comp_obj, dict):
+                continue
+            comp_id = comp_obj.get("id")
+            league_name: str | None = None
+            fix_sport: str = sport_key
+            if comp_id is not None:
+                try:
+                    cid = int(comp_id)
+                    mapping = _COMP_ID_TO_LEAGUE.get(cid)
+                    if mapping:
+                        league_name, fix_sport = mapping
+                    else:
+                        comp_name_lc = _get_name_str(comp_obj.get("name", "")).lower().strip()
+                        name_map = _COMP_NAME_TO_LEAGUE.get(comp_name_lc, {})
+                        m2 = name_map.get(sport_key)
+                        if m2:
+                            league_name, fix_sport = m2
+                except (TypeError, ValueError):
+                    pass
+            if not league_name:
+                continue
+            seen_ids.add(fid_str)
+            key = (league_name, fix_sport)
+            if key not in result:
+                result[key] = []
+            result[key].append(fid_str)
+    return result
+
+
 class BwinScraper(BasePlaywrightScraper):
     bookmaker_name = BOOKMAKER
     base_url = BASE_URL
@@ -588,50 +648,70 @@ class BwinScraper(BasePlaywrightScraper):
                     if len(fixtures_list) < 500:
                         break
 
-        # ── Pass C: per-competition 1X2 for calcio ──────────────────────────────
-        # The bulk params (state=Latest&offerMapping=Filtered) return ONLY O/U for
-        # calcio. The browser's native CDS params use state=Active&offer=Main which
-        # includes 1X2/DC/BTTS. We try both; navigation fallback is used if neither works.
-        calcio_comp_ids = _collect_comp_ids(calcio_uo_raw, "calcio")
-        self._log.info("[Bwin] Discovered calcio comp_ids: %s",
-                       {v[0]: k for k, v in calcio_comp_ids.items()})
-
-        # Browser-native params: state=Active&offer=Main (what Bwin.it uses for league pages)
-        base_c = (
-            f"x-bwin-accessid={token}&lang=it&country=IT&usercountry=IT"
-            f"&fixtureTypes=Standard&state=Active&offer=Main"
-            f"&isPriceBoost=false&statisticsModes=None&sortBy=Tags"
+        # ── Pass C: fixture-view for calcio 1X2 / DC / BTTS ────────────────────
+        # The bettingoffer/fixtures endpoint NEVER returns 1X2 for calcio regardless
+        # of offerCategories or competitionIds.  The per-fixture fixture-view endpoint
+        # with offerMapping=All returns ALL markets (318 per fixture confirmed).
+        # We reuse the fixture IDs already in calcio_uo_raw — no extra navigation needed.
+        fv_base = (
+            f"x-bwin-accessid={token}&lang=it&country=IT&userCountry=IT"
+            f"&offerMapping=All&scoreboardMode=Full&state=Latest"
+            f"&includePrecreatedBetBuilder=false&supportVirtual=false"
+            f"&isBettingInsightsEnabled=false&useRegionalisedConfiguration=true"
+            f"&includeRelatedFixtures=false&statisticsModes=None&firstMarketGroupOnly=false"
         )
-        got_12 = False
-        for cid, (league_name, sport_key) in calcio_comp_ids.items():
-            url_12 = (f"{cds}/bettingoffer/fixtures?{base_c}"
-                      f"&sportIds=4&competitionIds={cid}&skip=0&take=500")
-            result_12 = await _cds_fetch(url_12)
-            if isinstance(result_12, dict) and "error" in result_12:
-                self._log.warning("[Bwin] 1X2 offer=Main comp=%d %s: %s",
-                                  cid, league_name, result_12["error"])
-                continue
-            rows_12 = _parse_cds_fixtures(result_12, league_name, sport_key)
-            mc_12 = Counter(r.market for r in rows_12)
-            self._log.info("[Bwin] offer=Main comp=%d %s: %d rows markets=%s",
-                           cid, league_name, len(rows_12), dict(mc_12))
-            if any(r.market == "1X2" for r in rows_12):
-                got_12 = True
-            self._captured_rows.extend(rows_12)
+        fixture_ids_by_league = _collect_fixture_ids_by_league(calcio_uo_raw, "calcio")
+        self._log.info(
+            "[Bwin] fixture-view Pass C: leagues=%s counts=%s",
+            [k[0] for k in fixture_ids_by_league],
+            {k[0]: len(v) for k, v in fixture_ids_by_league.items()},
+        )
 
-        # Fallback: navigate to ONE calcio league page to discover all CDS endpoint URLs.
-        # This logs ALL cds-api URLs intercepted, revealing which endpoint carries 1X2.
-        if not got_12:
-            self._log.info("[Bwin] offer=Main returned no 1X2 — falling back to page navigation for URL discovery")
-            # Navigate to Serie A as a probe (first calcio league in LEAGUES)
-            for league_name, sport_key, league_path in LEAGUES:
-                if sport_key == "calcio":
-                    rows_nav = await self._navigate_and_capture("calcio", league_path)
-                    mc_nav = Counter(r.market for r in rows_nav)
-                    self._log.info("[Bwin] Nav probe %s: %d rows markets=%s",
-                                   league_name, len(rows_nav), dict(mc_nav))
-                    self._captured_rows.extend(rows_nav)
-                    break  # only probe one page for URL discovery
+        BATCH_FV = 20  # fixture-view supports multiple IDs per call
+        for (league_name, sport_key), fix_ids in fixture_ids_by_league.items():
+            for i in range(0, len(fix_ids), BATCH_FV):
+                batch = fix_ids[i : i + BATCH_FV]
+                ids_str = ",".join(batch)
+                url_fv = (f"{cds}/bettingoffer/fixture-view?{fv_base}"
+                          f"&fixtureIds={ids_str}")
+                result_fv = await _cds_fetch(url_fv)
+                if isinstance(result_fv, dict) and "error" in result_fv:
+                    self._log.warning(
+                        "[Bwin] fixture-view %s batch %d-%d: %s",
+                        league_name, i, i + len(batch), result_fv["error"],
+                    )
+                    continue
+
+                # fixture-view wraps data: single → {"fixture": {...}}
+                # multiple → {"fixture": {...}, "splitFixtures": [{...}, ...]}
+                fv_fixtures: list = []
+                if isinstance(result_fv, dict):
+                    split = result_fv.get("splitFixtures") or []
+                    if split:
+                        for sf in split:
+                            if isinstance(sf, dict):
+                                inner = sf.get("fixture")
+                                fv_fixtures.append(inner if isinstance(inner, dict) else sf)
+                    if not fv_fixtures:
+                        main_fix = result_fv.get("fixture")
+                        if isinstance(main_fix, dict):
+                            fv_fixtures.append(main_fix)
+
+                if not fv_fixtures:
+                    self._log.warning(
+                        "[Bwin] fixture-view %s batch %d: empty response keys=%s",
+                        league_name, i,
+                        list(result_fv.keys()) if isinstance(result_fv, dict) else type(result_fv),
+                    )
+                    continue
+
+                rows_fv = _parse_cds_fixtures(fv_fixtures, league_name, sport_key)
+                mc_fv = Counter(r.market for r in rows_fv)
+                self._log.info(
+                    "[Bwin] fixture-view %s batch %d-%d: %d fixtures → %d rows markets=%s",
+                    league_name, i, i + len(batch), len(fv_fixtures), len(rows_fv), dict(mc_fv),
+                )
+                self._captured_rows.extend(rows_fv)
 
     async def _navigate_and_capture(
         self, sport_key: str, sport_path: str
