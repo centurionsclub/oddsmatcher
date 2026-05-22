@@ -222,23 +222,24 @@ class SisalScraper:
             page_url = f"{BASE_URL}/scommesse-matchpoint/quote/{sisal_slug}"
         logger.info("[Sisal] Loading %s", page_url)
 
-        # Navigate to about:blank first to destroy the SPA runtime and force a fresh
-        # load — without this, the SPA uses its client-side cache and never re-issues
-        # schedaManifestazione requests for previously-visited leagues.
-        try:
-            await self._page.goto("about:blank", wait_until="load", timeout=8_000)
-        except Exception:
-            pass
-
         self._page.on("request", on_request)
 
-        # Navigate and wait for the SPA to issue its API calls.
-        wait_ms = 8_000 if url_type == "sport" else 4_000
+        # Navigate via client-side SPA routing (no about:blank — that would destroy the
+        # SPA runtime and force a full page reload which uses SSR data only).
+        # Use expect_request to stop waiting as soon as the FIRST schedaManifestazione
+        # request is seen (up to 15s). After that, wait a short burst to catch any
+        # additional requests (e.g., per-tournament sub-requests for tennis/sport pages).
         try:
-            await self._page.goto(page_url, wait_until="domcontentloaded", timeout=20_000)
+            async with self._page.expect_request(
+                lambda r: "schedaManifestazione" in r.url and "sisal.it" in r.url,
+                timeout=15_000,
+            ):
+                await self._page.goto(page_url, wait_until="domcontentloaded", timeout=20_000)
+            # First request seen — wait briefly for additional requests (sport pages fire many)
+            extra_wait = 5_000 if url_type == "sport" else 1_000
+            await self._page.wait_for_timeout(extra_wait)
         except Exception as e:
-            logger.info("[Sisal] %s: goto error: %s", league_name, type(e).__name__)
-        await self._page.wait_for_timeout(wait_ms)
+            logger.info("[Sisal] %s: nessuna request schedaManifestazione in 15s (%s)", league_name, type(e).__name__)
 
         self._page.remove_listener("request", on_request)
 
