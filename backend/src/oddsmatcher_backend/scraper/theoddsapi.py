@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # ── configuration ──────────────────────────────────────────────────────────────
 
-API_KEY  = os.environ.get("THEODDSAPI_KEY", "c0c9bae9b0ea1a2e877038b76610ae94")
+API_KEY  = os.environ.get("THEODDSAPI_KEY") or "c0c9bae9b0ea1a2e877038b76610ae94"
 API_BASE = "https://api.the-odds-api.com/v4"
 
 _DEFAULT_BKS = "pinnacle,codere_it,marathonbet"
