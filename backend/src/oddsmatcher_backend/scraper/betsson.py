@@ -97,11 +97,6 @@ def _parse_tms(tms: list) -> list[MatchOdds]:
     """Parse 'tms' array from getWidgetCentrali into MatchOdds list."""
     results: list[MatchOdds] = []
 
-    # Debug: count ds values in raw response
-    from collections import Counter as _Counter
-    ds_counts = _Counter(item.get("ds", "?") for item in tms if isinstance(item, dict))
-    logger.info("[Betsson] tms ds distribution: %s", dict(ds_counts))
-
     for item in tms:
         if not isinstance(item, dict):
             continue
@@ -145,15 +140,23 @@ def _parse_tms(tms: list) -> list[MatchOdds]:
         home = parts[0].strip() if len(parts) == 2 else event_name
         away = parts[1].strip() if len(parts) == 2 else ""
 
-        # ── 1X2 from sc ──────────────────────────────────────────────
+        # ── 1X2 / Head-to-head from sc ───────────────────────────────
+        # Calcio:  sc.d = "1X2"                → ce:1=home, ce:2=draw, ce:3=away
+        # Tennis:  sc.d = "T/T (ESCL. RITIRO)" → ce:1=home, ce:2=away (no draw)
+        # Basket:  sc.d = "T/T"                → ce:1=home, ce:2=away (no draw)
         sc = item.get("sc")
-        if isinstance(sc, dict) and sc.get("d") == "1X2":
+        _TT_MARKETS = {"1X2", "T/T", "T/T (ESCL. RITIRO)", "TESTA A TESTA"}
+        if isinstance(sc, dict) and sc.get("d") in _TT_MARKETS:
             eqs = sc.get("eqs", [])
+            is_hh = sc.get("d") != "1X2"
             odds_dict: dict[str, float] = {}
             for eq in eqs:
                 ce = eq.get("ce")
                 q = eq.get("q")
-                outcome = CE_TO_OUTCOME.get(ce)
+                if is_hh:
+                    outcome = "1" if ce == 1 else ("2" if ce in (2, 3) else None)
+                else:
+                    outcome = CE_TO_OUTCOME.get(ce)
                 val = _q_to_decimal(q)
                 if outcome and val:
                     odds_dict[outcome] = val

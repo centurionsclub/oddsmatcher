@@ -138,20 +138,6 @@ def _parse_tms(tms: list) -> list[MatchOdds]:
     """Parse 'tms' array from getWidgetCentrali into MatchOdds list."""
     results: list[MatchOdds] = []
 
-    from collections import Counter as _Counter
-    ds_counts = _Counter(item.get("ds", "?") for item in tms if isinstance(item, dict))
-    logger.info("[WilliamHill] tms ds distribution: %s", dict(ds_counts))
-    # Debug: log sc.d values for non-calcio items
-    for _item in tms:
-        if not isinstance(_item, dict):
-            continue
-        if _item.get("ds", "") in ("Tennis", "Pallacanestro", "TENNIS", "BASKET"):
-            _sc = _item.get("sc") or {}
-            _scs = _item.get("scs") or []
-            logger.info("[WilliamHill] %s dt=%r sc.d=%r scs_d=%s",
-                        _item.get("ds"), _item.get("dt"), _sc.get("d") if isinstance(_sc, dict) else None,
-                        [s.get("d") for s in _scs[:5] if isinstance(s, dict)])
-
     for item in tms:
         if not isinstance(item, dict):
             continue
@@ -195,15 +181,24 @@ def _parse_tms(tms: list) -> list[MatchOdds]:
         home = parts[0].strip() if len(parts) == 2 else event_name
         away = parts[1].strip() if len(parts) == 2 else ""
 
-        # ── 1X2 from sc ──────────────────────────────────────────────
+        # ── 1X2 / Head-to-head from sc ───────────────────────────────
+        # Calcio:  sc.d = "1X2"          → ce:1=home, ce:2=draw, ce:3=away
+        # Tennis:  sc.d = "T/T (ESCL. RITIRO)"  → ce:1=home, ce:2=away
+        # Basket:  sc.d = "T/T"          → ce:1=home, ce:2=away
         sc = item.get("sc")
-        if isinstance(sc, dict) and sc.get("d") == "1X2":
+        _TT_MARKETS = {"1X2", "T/T", "T/T (ESCL. RITIRO)", "TESTA A TESTA"}
+        if isinstance(sc, dict) and sc.get("d") in _TT_MARKETS:
             eqs = sc.get("eqs", [])
+            is_hh = sc.get("d") != "1X2"  # head-to-head: no draw
             odds_dict: dict[str, float] = {}
             for eq in eqs:
                 ce = eq.get("ce")
                 q = eq.get("q")
-                outcome = CE_TO_OUTCOME.get(ce)
+                if is_hh:
+                    # ce:1=home→"1", ce:2=away→"2" (no draw in tennis/basket)
+                    outcome = "1" if ce == 1 else ("2" if ce in (2, 3) else None)
+                else:
+                    outcome = CE_TO_OUTCOME.get(ce)
                 val = _q_to_decimal(q)
                 if outcome and val:
                     odds_dict[outcome] = val
