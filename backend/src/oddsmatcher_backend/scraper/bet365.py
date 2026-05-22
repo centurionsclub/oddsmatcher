@@ -29,9 +29,9 @@ BASE_URL  = "https://www.centroquote.it"
 # Bookmakers to extract from centroquote pages
 _TARGET_BOOKMAKERS = {"Bet365", "BetFlag Bookmaker", "888sport"}
 
-CONCURRENCY    = 4
-PAGE_WAIT_MS   = 3500
-GOTO_TIMEOUT   = 30_000
+CONCURRENCY    = 8
+PAGE_WAIT_MS   = 2000
+GOTO_TIMEOUT   = 25_000
 CACHE_MINUTES  = 20        # expires_at window for DB rows
 
 # ── leagues ────────────────────────────────────────────────────────────────────
@@ -48,8 +48,6 @@ _LEAGUES: list[dict] = [
     {"url": "/football/germany/bundesliga/",      "name": "Bundesliga",       "sport": "calcio"},
     {"url": "/football/france/ligue-1/",          "name": "Ligue 1",          "sport": "calcio"},
     {"url": "/basketball/usa/nba/",               "name": "NBA",              "sport": "basket"},
-    {"url": "/tennis/", "name": "ATP", "sport": "tennis", "discover": "uomini"},
-    {"url": "/tennis/", "name": "WTA", "sport": "tennis", "discover": "donne"},
 ]
 
 _SPORT_LEAGUES: dict[str, list[dict]] = defaultdict(list)
@@ -266,15 +264,11 @@ async def _scrape_match(
 
     try:
         await page.goto(cq_url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
-        try:
-            await page.wait_for_load_state("networkidle", timeout=10_000)
-        except Exception:
-            pass
         await page.wait_for_timeout(PAGE_WAIT_MS)
-        for _ in range(8):
+        for _ in range(5):
             if await page.locator("div.flex.h-9").count() >= 5:
                 break
-            await page.wait_for_timeout(1000)
+            await page.wait_for_timeout(800)
 
         # refine event_time from detail page
         try:
@@ -409,15 +403,11 @@ async def _get_matches(context: BrowserContext, league: dict) -> list[dict]:
     try:
         for attempt in range(3):
             await page.goto(BASE_URL + league["url"], wait_until="domcontentloaded", timeout=GOTO_TIMEOUT)
-            try:
-                await page.wait_for_load_state("networkidle", timeout=10_000)
-            except Exception:
-                pass
             await page.wait_for_timeout(PAGE_WAIT_MS)
-            for _ in range(8):
+            for _ in range(6):
                 if await page.locator(".eventRow").count() > 0:
                     break
-                await page.wait_for_timeout(1000)
+                await page.wait_for_timeout(800)
             raw = await page.evaluate(_LEAGUE_JS)
             events = _parse_matches(raw)
             if events or attempt == 2:
