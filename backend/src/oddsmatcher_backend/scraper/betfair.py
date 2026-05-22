@@ -384,7 +384,7 @@ class BetfairScraper:
             if other_type_ids:
                 try:
                     page = await _fetch_catalogue(
-                        client, token, self._app_key, other_type_ids, hours_ahead=72,
+                        client, token, self._app_key, other_type_ids, hours_ahead=336,
                     )
                     for m in page:
                         mid = m.get("marketId")
