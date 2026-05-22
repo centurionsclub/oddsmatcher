@@ -57,7 +57,7 @@ _BK_DISPLAY: dict[str, str] = {
 # Homepage URLs per bookmaker key
 _BK_URL: dict[str, str] = {
     "codere_it":     "https://www.codere.it/",
-    "marathonbet":   "https://www.marathonbet.com/en/",
+    "marathonbet":   "https://www.marathonbet.it/",
     "pinnacle":      "https://www.pinnacle.com/",
     "betsson":       "https://www.betsson.com/",
     "williamhill":   "https://www.williamhill.it/",
