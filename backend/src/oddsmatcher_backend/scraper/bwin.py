@@ -91,6 +91,7 @@ _COMP_NAME_TO_LEAGUE: dict[str, dict[str, tuple[str, str]]] = {
     "legabasket a2":         {"basket": ("A2 Basket",        "basket")},
     "lba serie a2":          {"basket": ("A2 Basket",        "basket")},
     "serie a2 basket":       {"basket": ("A2 Basket",        "basket")},
+    "serie a2":              {"basket": ("A2 Basket",        "basket")},
 }
 
 # For tennis we accept ALL competition IDs.

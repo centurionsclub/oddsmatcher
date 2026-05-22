@@ -19,7 +19,7 @@ import re
 import unicodedata
 from typing import Any
 
-from playwright.async_api import Browser, BrowserContext, Page, Playwright, Response, async_playwright
+from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
 from oddsmatcher_backend.scraper.models import MatchOdds
 
@@ -203,27 +203,20 @@ class SisalScraper:
     ) -> list[MatchOdds]:
         assert self._page is not None
 
-        captured: list[dict[str, Any]] = []
+        # Capture schedaManifestazione REQUEST URLs (just to discover the API endpoints).
+        # We do NOT try to parse the intercepted responses — Akamai often returns an HTML
+        # challenge page to Playwright's response listener even though the browser gets real
+        # JSON. After navigation we re-fetch each URL from inside the browser via
+        # page.evaluate(fetch(...)) which uses the real browser session/cookies.
+        captured_api_urls: list[str] = []
 
-        async def on_response(response: Response) -> None:
-            url = response.url
-            if "sisal.it" not in url:
-                return
-            try:
-                body = await response.json()
-                if isinstance(body, dict) and "avvenimentoFeList" in body:
-                    captured.append({"url": url, "body": body})
-                    logger.info("[Sisal] %s: catturata schedaManifestazione (%d eventi)",
-                                league_name, len(body.get("avvenimentoFeList", [])))
-                elif "schedaManifestazione" in url:
-                    logger.warning("[Sisal] %s: schedaManifestazione senza avvenimentoFeList: keys=%s",
-                                   league_name, list(body.keys())[:8])
-            except Exception:
-                if "schedaManifestazione" in url:
-                    logger.warning("[Sisal] %s: schedaManifestazione non-JSON status=%d url=%s",
-                                   league_name, response.status, url[:120])
+        def on_request(request) -> None:
+            url = request.url
+            if "schedaManifestazione" in url and "sisal.it" in url and url not in captured_api_urls:
+                captured_api_urls.append(url)
+                logger.debug("[Sisal] %s: API URL rilevata: %s", league_name, url[:120])
 
-        self._page.on("response", on_response)
+        self._page.on("request", on_request)
 
         if url_type == "sport":
             page_url = f"{BASE_URL}/scommesse-matchpoint/sport/{sisal_slug}"
@@ -231,50 +224,82 @@ class SisalScraper:
             page_url = f"{BASE_URL}/scommesse-matchpoint/quote/{sisal_slug}"
         logger.info("[Sisal] Loading %s", page_url)
 
-        if url_type == "quote":
-            # Pagina singola lega: aspetta la PRIMA risposta schedaManifestazione,
-            # poi smetti — non serve aspettare networkidle (65s inutili).
-            try:
-                async with self._page.expect_response(
-                    lambda r: "schedaManifestazione" in r.url and "sisal.it" in r.url,
-                    timeout=15_000,
-                ) as _resp_info:
-                    await self._page.goto(page_url, wait_until="domcontentloaded", timeout=15_000)
-                # risposta già catturata da on_response; aspetta brevemente eventuali extra
-                await self._page.wait_for_timeout(400)
-            except Exception as e:
-                logger.info("[Sisal] %s: nessuna schedaManifestazione in 15s (%s)", league_name, type(e).__name__)
-                await self._page.wait_for_timeout(200)
-        else:
-            # Pagina sport (tennis): genera PIÙ risposte, una per torneo —
-            # aspetta domcontentloaded + pausa fissa per raccoglierle tutte.
-            try:
-                await self._page.goto(page_url, wait_until="domcontentloaded", timeout=15_000)
-            except Exception as e:
-                logger.info("[Sisal] %s: goto error: %s", league_name, type(e).__name__)
-            await self._page.wait_for_timeout(8_000)
+        # Navigate and wait for the SPA to issue its API calls.
+        wait_ms = 8_000 if url_type == "sport" else 4_000
+        try:
+            await self._page.goto(page_url, wait_until="domcontentloaded", timeout=20_000)
+        except Exception as e:
+            logger.info("[Sisal] %s: goto error: %s", league_name, type(e).__name__)
+        await self._page.wait_for_timeout(wait_ms)
 
-        self._page.remove_listener("response", on_response)
+        self._page.remove_listener("request", on_request)
+
+        if not captured_api_urls:
+            logger.warning("[Sisal] %s: nessuna schedaManifestazione URL rilevata", league_name)
+            return []
+
+        logger.info("[Sisal] %s: %d URL rilevate, fetch via browser", league_name, len(captured_api_urls))
+
+        # Re-fetch each URL from within the browser (bypasses Akamai response inspection).
+        captured: list[dict[str, Any]] = []
+        seen_urls: set[str] = set()
+        for api_url in captured_api_urls:
+            if api_url in seen_urls:
+                continue
+            seen_urls.add(api_url)
+            try:
+                # Escape single quotes in URL just in case
+                safe_url = api_url.replace("'", "%27")
+                result = await self._page.evaluate(f"""
+                    async () => {{
+                        try {{
+                            const resp = await fetch('{safe_url}', {{
+                                credentials: 'include',
+                                headers: {{
+                                    'Accept': 'application/json, text/plain, */*',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                }}
+                            }});
+                            if (!resp.ok) return {{error: resp.status}};
+                            return await resp.json();
+                        }} catch(e) {{
+                            return {{error: String(e)}};
+                        }}
+                    }}
+                """)
+                if isinstance(result, dict) and "error" in result:
+                    logger.warning("[Sisal] %s: fetch errore: %s url=%s", league_name, result["error"], api_url[:80])
+                    continue
+                if isinstance(result, dict) and "avvenimentoFeList" in result:
+                    n = len(result.get("avvenimentoFeList", []))
+                    logger.info("[Sisal] %s: catturata schedaManifestazione (%d eventi) via evaluate", league_name, n)
+                    captured.append({"url": api_url, "body": result})
+                elif isinstance(result, dict):
+                    logger.warning("[Sisal] %s: risposta senza avvenimentoFeList: keys=%s url=%s",
+                                   league_name, list(result.keys())[:8], api_url[:80])
+                else:
+                    logger.warning("[Sisal] %s: risultato inatteso tipo=%s url=%s",
+                                   league_name, type(result).__name__, api_url[:80])
+            except Exception as exc:
+                logger.warning("[Sisal] %s: page.evaluate fallita: %s url=%s", league_name, exc, api_url[:80])
 
         if not captured:
-            logger.warning("[Sisal] %s: nessuna schedaManifestazione catturata", league_name)
+            logger.warning("[Sisal] %s: nessuna schedaManifestazione parseable", league_name)
             return []
 
         if url_type == "sport":
-            # Pagine sport-level: combina TUTTE le risposte (una per torneo/competizione)
             all_rows: list[MatchOdds] = []
             seen_events: set[str] = set()
             for item in captured:
                 rows = _parse_scheda(item["body"], league_name, sport_key, sisal_slug)
                 for row in rows:
-                    key = f"{row.event_name}|{row.market}|{row.bookmaker_odds[0]['bookmaker'] if row.bookmaker_odds else ''}"
+                    key = f"{row.event_name}|{row.market}"
                     if key not in seen_events:
                         seen_events.add(key)
                         all_rows.append(row)
             logger.info("[Sisal] %s: %d righe da %d risposte", league_name, len(all_rows), len(captured))
             return all_rows
         else:
-            # Pagina singola lega: prima risposta con risultati
             for item in sorted(captured, key=lambda x: len(x["body"].get("avvenimentoFeList", [])), reverse=True):
                 rows = _parse_scheda(item["body"], league_name, sport_key, sisal_slug)
                 if rows:
