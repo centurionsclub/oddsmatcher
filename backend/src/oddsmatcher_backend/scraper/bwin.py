@@ -333,7 +333,7 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                                 continue
                             f = _get_odds_float(r)
                             if f:
-                                odds_uo[f"{side} {sp}"] = f
+                                odds_uo[side] = f  # "Over" / "Under" — spread already in market name
                         if odds_uo:
                             results.append(MatchOdds(
                                 sport=fix_sport, league=fix_league,
@@ -487,46 +487,54 @@ class BwinScraper(BasePlaywrightScraper):
 
         token = access_id[0]
         cds = "https://www.bwin.it/cds-api"
-        common = (f"x-bwin-accessid={token}&lang=it&country=IT&userCountry=IT"
-                  f"&fixtureTypes=Standard&state=Latest"
-                  f"&offerMapping=Filtered"
-                  f"&fixtureCategories=Gridable,NonGridable,Other"
-                  f"&isPriceBoost=false&statisticsModes=None&sortBy=Tags")
 
-        # ── Step 2: fetch all fixtures for each sport with large take ──────────
-        # take=500 returns all available fixtures globally. Name-based detection
-        # in _parse_cds_fixtures picks up Serie A, PL, Bundesliga, Ligue 1, etc.
-        # and skips Copa Libertadores / other unrecognised leagues.
-        for sport_key, sport_id in [("calcio", 4), ("basket", 7), ("tennis", 5)]:
-            for skip in (0, 500):  # paginate in case of many fixtures
-                url = (f"{cds}/bettingoffer/fixtures?{common}"
-                       f"&sportIds={sport_id}&skip={skip}&take=500")
-                # Use page.evaluate so same-origin cookies are included
-                js = f"""
-                    async () => {{
-                        try {{
-                            const r = await fetch("{url}", {{credentials: "include"}});
-                            if (!r.ok) return {{error: r.status}};
-                            return await r.json();
-                        }} catch(e) {{ return {{error: String(e)}}; }}
-                    }}
-                """
-                result = await self._page.evaluate(js)
-                if isinstance(result, dict) and "error" in result:
-                    self._log.warning("[Bwin] fetch %s skip=%d: %s",
-                                      sport_key, skip, result["error"])
-                    break
-                rows = _parse_cds_fixtures(result, sport_key, sport_key)
-                from collections import Counter
-                lc = Counter(r.league for r in rows)
-                self._log.info("[Bwin] %s skip=%d: %d rows %s",
-                               sport_key, skip, len(rows), dict(lc))
-                self._captured_rows.extend(rows)
-                # If fewer than 500 fixtures returned, no need to paginate
-                fixtures_list = result if isinstance(result, list) else (
-                    result.get("fixtures", []) if isinstance(result, dict) else [])
-                if len(fixtures_list) < 500:
-                    break
+        # Two offer-category passes per sport:
+        #   Pass A — offerCategories=Gridable  → returns 1X2, DC, BTTS for each league
+        #   Pass B — no offerCategories filter  → returns Over/Under lines for each league
+        # Bwin's CDS API returns different market sets depending on the category filter:
+        # with Gridable, Serie A gets only 1X2; without it, Series A gets only O/U.
+        # Both passes are needed to cover all standard markets.
+        offer_passes = [
+            ("gridable", f"&offerCategories=Gridable"),
+            ("uo",       ""),
+        ]
+
+        for pass_label, offer_cat in offer_passes:
+            common = (f"x-bwin-accessid={token}&lang=it&country=IT&userCountry=IT"
+                      f"&fixtureTypes=Standard&state=Latest"
+                      f"&offerMapping=Filtered"
+                      f"&fixtureCategories=Gridable,NonGridable,Other"
+                      f"&isPriceBoost=false&statisticsModes=None&sortBy=Tags"
+                      f"{offer_cat}")
+
+            for sport_key, sport_id in [("calcio", 4), ("basket", 7), ("tennis", 5)]:
+                for skip in (0, 500):  # paginate in case of many fixtures
+                    url = (f"{cds}/bettingoffer/fixtures?{common}"
+                           f"&sportIds={sport_id}&skip={skip}&take=500")
+                    js = f"""
+                        async () => {{
+                            try {{
+                                const r = await fetch("{url}", {{credentials: "include"}});
+                                if (!r.ok) return {{error: r.status}};
+                                return await r.json();
+                            }} catch(e) {{ return {{error: String(e)}}; }}
+                        }}
+                    """
+                    result = await self._page.evaluate(js)
+                    if isinstance(result, dict) and "error" in result:
+                        self._log.warning("[Bwin] fetch %s/%s skip=%d: %s",
+                                          pass_label, sport_key, skip, result["error"])
+                        break
+                    rows = _parse_cds_fixtures(result, sport_key, sport_key)
+                    from collections import Counter
+                    lc = Counter(r.league for r in rows)
+                    self._log.info("[Bwin] %s/%s skip=%d: %d rows %s",
+                                   pass_label, sport_key, skip, len(rows), dict(lc))
+                    self._captured_rows.extend(rows)
+                    fixtures_list = result if isinstance(result, list) else (
+                        result.get("fixtures", []) if isinstance(result, dict) else [])
+                    if len(fixtures_list) < 500:
+                        break
 
     async def _navigate_and_capture(
         self, sport_key: str, sport_path: str
