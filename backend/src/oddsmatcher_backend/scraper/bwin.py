@@ -619,18 +619,19 @@ class BwinScraper(BasePlaywrightScraper):
                 got_12 = True
             self._captured_rows.extend(rows_12)
 
-        # Fallback: navigate to each calcio league page and intercept CDS responses.
-        # Navigation triggers browser-native requests that always include 1X2.
+        # Fallback: navigate to ONE calcio league page to discover all CDS endpoint URLs.
+        # This logs ALL cds-api URLs intercepted, revealing which endpoint carries 1X2.
         if not got_12:
-            self._log.info("[Bwin] offer=Main returned no 1X2 — falling back to page navigation")
+            self._log.info("[Bwin] offer=Main returned no 1X2 — falling back to page navigation for URL discovery")
+            # Navigate to Serie A as a probe (first calcio league in LEAGUES)
             for league_name, sport_key, league_path in LEAGUES:
-                if sport_key != "calcio":
-                    continue
-                rows_nav = await self._navigate_and_capture("calcio", league_path)
-                mc_nav = Counter(r.market for r in rows_nav)
-                self._log.info("[Bwin] Nav %s: %d rows markets=%s",
-                               league_name, len(rows_nav), dict(mc_nav))
-                self._captured_rows.extend(rows_nav)
+                if sport_key == "calcio":
+                    rows_nav = await self._navigate_and_capture("calcio", league_path)
+                    mc_nav = Counter(r.market for r in rows_nav)
+                    self._log.info("[Bwin] Nav probe %s: %d rows markets=%s",
+                                   league_name, len(rows_nav), dict(mc_nav))
+                    self._captured_rows.extend(rows_nav)
+                    break  # only probe one page for URL discovery
 
     async def _navigate_and_capture(
         self, sport_key: str, sport_path: str
@@ -645,7 +646,11 @@ class BwinScraper(BasePlaywrightScraper):
         captured: list[MatchOdds] = []
 
         async def _on_response(resp: _Response) -> None:
-            if "cds-api/bettingoffer/fixtures" not in resp.url:
+            if "cds-api/" not in resp.url:
+                return
+            # Log ALL cds-api URLs to help identify the right endpoint
+            logger.info("[Bwin] CDS resp: %s", resp.url[:160])
+            if "bettingoffer/fixtures" not in resp.url:
                 return
             try:
                 body = await resp.json()
