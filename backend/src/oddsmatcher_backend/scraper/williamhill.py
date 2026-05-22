@@ -250,9 +250,9 @@ def _parse_tms(tms: list) -> list[MatchOdds]:
                     val = _q_to_decimal(eq.get("q"))
                     if val:
                         if ce == 1:
-                            uo_markets[sp][f"Over {sp}"] = val
+                            uo_markets[sp]["Over"] = val   # spread already in market name
                         elif ce == 2:
-                            uo_markets[sp][f"Under {sp}"] = val
+                            uo_markets[sp]["Under"] = val  # spread already in market name
 
             for sp, odds_uo in uo_markets.items():
                 if odds_uo:

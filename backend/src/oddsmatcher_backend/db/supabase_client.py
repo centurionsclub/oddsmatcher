@@ -324,25 +324,39 @@ class SupabaseWriter:
 
         event_names = list({r["event_name"] for r in rows})
 
+        # Diagnostic: log breakdown by market before writing
+        from collections import Counter
+        market_counts = Counter(r["market"] for r in rows)
+        logger.info("%s live_odds pre-write: %d rows, markets=%s, events=%d",
+                    bookmaker_name, len(rows), dict(market_counts), len(event_names))
+
         try:
-            (
+            del_result = (
                 self.client.table("live_odds")
                 .delete()
                 .eq("bookmaker", bookmaker_name)
                 .in_("event_name", event_names)
                 .execute()
             )
+            logger.info("%s live_odds: deleted %d stale rows",
+                        bookmaker_name, len(del_result.data) if del_result.data else 0)
         except Exception as e:
             logger.error("Failed to delete stale %s live_odds: %s", bookmaker_name, e)
 
         BATCH = 500
         inserted = 0
         for i in range(0, len(rows), BATCH):
+            batch = rows[i : i + BATCH]
+            batch_markets = Counter(r["market"] for r in batch)
             try:
-                result = self.client.table("live_odds").insert(rows[i : i + BATCH]).execute()
-                inserted += len(result.data) if result.data else 0
+                result = self.client.table("live_odds").insert(batch).execute()
+                n = len(result.data) if result.data else 0
+                inserted += n
+                logger.info("%s live_odds batch %d: inserted %d/%d rows markets=%s",
+                            bookmaker_name, i // BATCH, n, len(batch), dict(batch_markets))
             except Exception as e:
-                logger.error("Failed to insert %s live_odds batch %d: %s", bookmaker_name, i // BATCH, e)
+                logger.error("Failed to insert %s live_odds batch %d (markets=%s): %s",
+                             bookmaker_name, i // BATCH, dict(batch_markets), e)
 
         logger.info("%s live_odds: %d rows for %d events", bookmaker_name, inserted, len(event_names))
         return inserted

@@ -528,8 +528,18 @@ class BwinScraper(BasePlaywrightScraper):
                     rows = _parse_cds_fixtures(result, sport_key, sport_key)
                     from collections import Counter
                     lc = Counter(r.league for r in rows)
-                    self._log.info("[Bwin] %s/%s skip=%d: %d rows %s",
-                                   pass_label, sport_key, skip, len(rows), dict(lc))
+                    mc = Counter(r.market for r in rows)
+                    self._log.info("[Bwin] %s/%s skip=%d: %d rows leagues=%s markets=%s",
+                                   pass_label, sport_key, skip, len(rows), dict(lc), dict(mc))
+                    # Log sample 1X2 row for debugging
+                    for r in rows:
+                        if r.market == "1X2" and r.league == "Serie A":
+                            self._log.info(
+                                "[Bwin] Sample 1X2: event=%r time=%r odds=%s",
+                                r.event_name, r.event_time,
+                                {k: v for bm in r.bookmaker_odds for k, v in bm["odds"].items()},
+                            )
+                            break
                     self._captured_rows.extend(rows)
                     fixtures_list = result if isinstance(result, list) else (
                         result.get("fixtures", []) if isinstance(result, dict) else [])
@@ -626,5 +636,10 @@ class BwinScraper(BasePlaywrightScraper):
         if n_before != n_after:
             logger.info("[Bwin] Deduplicated %d → %d rows", n_before, n_after)
 
+        from collections import Counter
+        mc_final = Counter(r.market for r in filtered)
+        lc_final = Counter(r.league for r in filtered if r.sport == "calcio")
+        self._log.info("[Bwin] Final rows by market: %s", dict(mc_final))
+        self._log.info("[Bwin] Final calcio rows by league: %s", dict(lc_final))
         self._log.info("[Bwin] Total match+market rows: %d", len(filtered))
         return filtered
