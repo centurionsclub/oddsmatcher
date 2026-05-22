@@ -649,24 +649,17 @@ class BwinScraper(BasePlaywrightScraper):
             if "cds-api/" not in resp.url:
                 return
             if "fixture-view" in resp.url:
-                # Log full URL for fixture-view (the important endpoint)
-                logger.info("[Bwin] fixture-view URL: %s", resp.url)
                 try:
                     body = await resp.json()
-                    logger.info("[Bwin] fixture-view body keys: %s",
-                                list(body.keys()) if isinstance(body, dict)
-                                else f"list[{len(body)}]" if isinstance(body, list)
-                                else type(body).__name__)
-                    # Log first item if list
-                    if isinstance(body, list) and body:
-                        item = body[0]
-                        logger.info("[Bwin] fixture-view[0] keys: %s",
-                                    list(item.keys()) if isinstance(item, dict) else str(item)[:200])
-                    elif isinstance(body, dict):
-                        for k, v in body.items():
-                            if isinstance(v, list) and v:
-                                logger.info("[Bwin] fixture-view.%s[0] keys: %s", k,
-                                            list(v[0].keys()) if isinstance(v[0], dict) else str(v[0])[:200])
+                    if isinstance(body, dict):
+                        fix = body.get("fixture", {})
+                        if isinstance(fix, dict):
+                            # Log fixture name and available market names
+                            fname = _get_name_str(fix.get("name", ""))
+                            mkts = fix.get("optionMarkets") or fix.get("games") or []
+                            mnames = [_get_name_str(m.get("name", "")) for m in mkts[:20] if isinstance(m, dict)]
+                            logger.info("[Bwin] fixture-view %r: %d markets: %s",
+                                        fname, len(mkts), mnames[:10])
                 except Exception as exc:
                     logger.info("[Bwin] fixture-view parse error: %s", exc)
             if "bettingoffer/fixtures" not in resp.url:
