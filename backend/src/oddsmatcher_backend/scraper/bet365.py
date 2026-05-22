@@ -511,19 +511,29 @@ class Bet365Scraper:
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-                      "--disable-blink-features=AutomationControlled"],
+                headless=False,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                ],
             )
             context = await browser.new_context(
                 viewport={"width": 1920, "height": 1080},
                 locale="it-IT",
                 user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
             )
+            # Stealth: nascondi navigator.webdriver e altri segnali bot su tutte le pagine
+            await context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                Object.defineProperty(navigator, 'plugins', {get: () => {const ps=[1,2,3,4,5]; ps.__proto__=PluginArray.prototype; return ps;}});
+                Object.defineProperty(navigator, 'languages', {get: () => ['it-IT','it','en-US','en']});
+                if (!window.chrome) window.chrome = {runtime: {}};
+            """)
             await context.route(
                 "**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,ttf,otf}",
                 lambda route, _: route.abort(),
