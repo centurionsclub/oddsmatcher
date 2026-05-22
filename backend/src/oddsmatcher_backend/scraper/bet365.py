@@ -1,387 +1,269 @@
-"""Bet365 Italy pregame odds scraper — Playwright + DOM extraction.
+"""Bet365 pre-match odds scraper — powered by OddspAPI.io.
 
-Bet365 delivers odds via binary WebSocket (obfuscated protocol), so network
-interception captures nothing useful. Strategy:
-  1. Navigate to the PRE-MATCH all-competitions page (/#/AC/B<N>/).
-     NOTE: /#/IP/ is In-Play (live), /#/AC/ is pre-match.
-  2. Wait up to 45s for the betting coupon to render in the DOM.
-  3. Extract innerText of the page, parse with regex.
+Uses the OddspAPI.io REST API (v4) to fetch Bet365 odds for soccer, basketball
+and tennis.  No browser automation required.
 
-The rendered innerText of a Bet365 pre-match page looks like:
-  "Serie A\n21 Mag  21:00\nInter Milan  Juventus  1.75  3.40  4.25\n..."
-
-We parse that text to extract events + 1X2 odds.
+Configuration
+-------------
+ODDSPAPI_KEY   – API key (default: bundled key)
+ODDSPAPI_DAYS  – number of look-ahead days for fixtures (default: 7, max: 9)
 """
 
+import asyncio
 import logging
-import re
+import os
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from oddsmatcher_backend.scraper._base_playwright import BasePlaywrightScraper
+import httpx
+
 from oddsmatcher_backend.scraper.models import MatchOdds
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://www.bet365.it"
+# ── configuration ────────────────────────────────────────────────────────────
+
 BOOKMAKER = "Bet365"
+API_KEY   = os.environ.get("ODDSPAPI_KEY", "9decc47d-a843-485d-9706-0ab370da052d")
+API_BASE  = "https://api.oddspapi.io/v4"
 
-# fmt: off
-# PRE-MATCH sport pages (/#/AC/ = All Competitions, pre-match)
-# /#/IP/ is In-Play (live betting) — wrong for pre-match odds!
-LEAGUES: list[tuple[str, str, str]] = [
-    ("Calcio",  "calcio", "/#/AC/B1/"),
-    ("Basket",  "basket", "/#/AC/B18/"),
-    ("Tennis",  "tennis", "/#/AC/B13/"),
+# Days ahead to look for fixtures (API max window: 9 days)
+_LOOKAHEAD_DAYS = min(int(os.environ.get("ODDSPAPI_DAYS", "7")), 9)
+
+# ── market definitions ────────────────────────────────────────────────────────
+# market_id -> {outcome_id -> label}
+
+_SOCCER_1X2  = {101: {101: "1", 102: "X", 103: "2"}}   # Full Time Result
+_BASKET_ML   = {111: {111: "1", 112: "2"}}               # Winner incl. OT
+_TENNIS_ML   = {121: {121: "1", 122: "2"}}               # Winner
+
+# ── sport descriptors ────────────────────────────────────────────────────────
+
+@dataclass
+class _Sport:
+    key: str          # sport_key used in MatchOdds
+    sport_id: int     # OddspAPI sportId
+    markets: dict     # {market_id: {outcome_id: label}}
+    market_label: str # "1X2" or "Moneyline"
+    # How many tournament batches to process (5 per batch, 1s rate-limit gap)
+    max_batches: int = 40
+
+
+_SPORTS = [
+    _Sport("calcio", 10, _SOCCER_1X2, "1X2",      max_batches=60),
+    _Sport("basket", 11, _BASKET_ML,  "Moneyline", max_batches=30),
+    _Sport("tennis", 12, _TENNIS_ML,  "Moneyline", max_batches=30),
 ]
-# fmt: on
 
-OUTCOME_MAP: dict[str, str] = {
-    "1": "1", "Home": "1", "Casa": "1",
-    "X": "X", "Draw": "X", "Pareggio": "X",
-    "2": "2", "Away": "2", "Ospite": "2",
-}
+_SPORT_BY_KEY = {s.key: s for s in _SPORTS}
 
-_ODDS_RE = re.compile(r"^([1-9]\d?(?:\.\d{1,3})?)$")
-_TIME_RE = re.compile(r"^\d{1,2}\s+\w{3}\s+\d{1,2}:\d{2}$|^\d{2}/\d{2}\s+\d{2}:\d{2}$|^\d{2}:\d{2}$")
+# ── helpers ───────────────────────────────────────────────────────────────────
 
-
-def _parse_date(s: str) -> str | None:
-    if not s:
-        return None
-    FMTS = ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
-            "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M"]
-    for fmt in FMTS:
-        try:
-            dt = datetime.strptime(s.strip(), fmt)
-            off = 2 if 3 <= dt.month <= 10 else 1
-            return dt.replace(tzinfo=timezone(timedelta(hours=off))).astimezone(timezone.utc).isoformat()
-        except ValueError:
-            continue
-    try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc).isoformat()
-    except Exception:
-        return s
-
-
-def _is_odds(text: str) -> bool:
-    if not _ODDS_RE.match(text):
-        return False
-    try:
-        v = float(text)
-        return 1.01 <= v <= 100.0
-    except ValueError:
-        return False
-
-
-def _parse_innertext(text: str, league_name: str, sport_key: str) -> list[MatchOdds]:
-    """Parse Bet365 page innerText into MatchOdds.
-
-    Bet365 pre-match pages render roughly as:
-      Competition Name
-      DD MMM HH:MM
-      Team A  Team B  1.75  3.40  4.25
-      ...
-    Lines may vary but odds always follow team names as decimal numbers.
-    """
-    results: list[MatchOdds] = []
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        tokens = re.split(r"\s{2,}|\t", line)
-        tokens = [t.strip() for t in tokens if t.strip()]
-
-        # Collect all odds-like tokens from this line
-        odds_vals: list[float] = []
-        name_tokens: list[str] = []
-        for t in tokens:
-            if _is_odds(t):
-                odds_vals.append(float(t))
-            elif len(t) > 1 and not re.match(r"^\d+$", t):
-                name_tokens.append(t)
-
-        # Need exactly 2 or 3 odds (1X2 or head-to-head) and ≥1 name fragment
-        if len(odds_vals) in (2, 3) and name_tokens:
-            # Build the event name from non-odds tokens on the same line
-            # Bet365 sometimes puts "Team A  Team B  1.75  3.40  4.25" on one line
-            # or "Team A" on one line and "Team B" on the next
-            raw_name = " ".join(name_tokens)
-            # Try splitting on " - " or " v " or middle of name list
-            if " - " in raw_name:
-                parts = raw_name.split(" - ", 1)
-                home, away = parts[0].strip(), parts[1].strip()
-            elif " v " in raw_name:
-                parts = raw_name.split(" v ", 1)
-                home, away = parts[0].strip(), parts[1].strip()
-            elif len(name_tokens) >= 2:
-                # Split name_tokens in half
-                mid = len(name_tokens) // 2
-                home = " ".join(name_tokens[:mid]).strip()
-                away = " ".join(name_tokens[mid:]).strip()
-            else:
-                home = raw_name
-                away = ""
-
-            # Skip if names look like competition headings (all uppercase, no spaces)
-            if home and (away or sport_key == "tennis"):
-                if len(odds_vals) == 3:
-                    odds_dict = {"1": odds_vals[0], "X": odds_vals[1], "2": odds_vals[2]}
-                else:
-                    odds_dict = {"1": odds_vals[0], "2": odds_vals[1]}
-
-                event_name = f"{home} - {away}" if away else home
-                results.append(MatchOdds(
-                    sport=sport_key,
-                    league=league_name,
-                    home_team=home,
-                    away_team=away,
-                    event_name=event_name,
-                    event_time=None,
-                    match_url=f"{BASE_URL}/#/AC/",
-                    market="1X2",
-                    bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
-                ))
-
-        i += 1
-
-    return results
-
-
-def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchOdds]:
-    """Fallback JSON parser (rarely fires on Bet365 — they use WebSocket)."""
-    results: list[MatchOdds] = []
-    for ev in events:
-        if not isinstance(ev, dict):
-            continue
-        name_raw = ev.get("name") or ev.get("nam") or ev.get("N") or ev.get("eventName") or ""
-        name = re.sub(r"\s+v\s+", " - ", str(name_raw)).strip()
-        if not name:
-            continue
-        parts = name.split(" - ", 1)
-        home = parts[0].strip() if len(parts) == 2 else name
-        away = parts[1].strip() if len(parts) == 2 else ""
-        results.append(MatchOdds(
-            sport=sport_key, league=league_name, home_team=home, away_team=away,
-            event_name=name, event_time=None, match_url=f"{BASE_URL}/#/AC/",
-            market="1X2", bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": {}}],
-        ))
-    return results
-
-
-class Bet365Scraper(BasePlaywrightScraper):
-    bookmaker_name = BOOKMAKER
-    base_url = BASE_URL
-    warmup_path = "/#/HO/"
-    leagues = LEAGUES
-
-    def parse_response(self, url: str, body: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
-        """Try JSON interception (rarely fires on Bet365 — they use WebSocket)."""
-        try:
-            if isinstance(body, dict):
-                for key in ("events", "data", "fixtures", "matches", "eventList", "cl"):
-                    val = body.get(key)
-                    if isinstance(val, list) and val:
-                        rows = _parse_events(val, league_name, sport_key)
-                        if rows:
-                            logger.info("[Bet365] JSON hit: %s → %d rows", key, len(rows))
-                            return rows
-            if isinstance(body, list) and body and isinstance(body[0], dict):
-                return _parse_events(body, league_name, sport_key)
-        except Exception as e:
-            logger.debug("[Bet365] JSON parse error for %s: %s", url, e)
-        return []
-
-    async def _start(self) -> None:
-        """Override: warm up, accept cookie consent."""
-        await super()._start()
-        assert self._page is not None
-
-        # Dismiss cookie/GDPR consent if shown
-        for sel in [
-            "button:has-text('Accetta')", "button:has-text('Accept')",
-            "#onetrust-accept-btn-handler", ".ccm-OverlayAccept",
-        ]:
+async def _get_json(client: httpx.AsyncClient, url: str, params: dict) -> Any:
+    """GET + parse JSON, with one automatic retry on 429."""
+    for attempt in range(3):
+        resp = await client.get(url, params=params)
+        if resp.status_code == 429:
+            retry_sec = 2.0
             try:
-                await self._page.click(sel, timeout=3_000)
-                logger.info("[Bet365] Cookie consent clicked: %s", sel)
-                await self._page.wait_for_timeout(1_500)
-                break
+                data = resp.json()
+                retry_sec = float(
+                    data.get("error", {}).get("retryMs", 2000)
+                ) / 1000 + 0.1
             except Exception:
                 pass
-
-    async def _scrape_league(
-        self,
-        league_name: str,
-        sport_key: str,
-        page_path: str,
-    ) -> list[MatchOdds]:
-        """Navigate to pre-match page, wait for odds, extract from innerText.
-
-        Bet365 uses binary WebSocket for odds delivery. JSON interception
-        never fires. We wait up to 45s for the betting coupon to render in
-        the DOM, then parse the page's innerText with regex.
-        """
-        # Step 1: try JSON interception (base class does the navigation + capture)
-        results = await super()._scrape_league(league_name, sport_key, page_path)
-        if results:
-            return results
-
-        assert self._page is not None
-        logger.info("[Bet365] %s: waiting up to 45s for coupon to render…", league_name)
-
-        # Step 2: wait until multiple odds values appear in the page text
-        try:
-            await self._page.wait_for_function(
-                r"""() => {
-                    const t = document.body.innerText || '';
-                    // Count decimal odds-looking numbers (1.10 – 50.00)
-                    const m = t.match(/\b[1-9]\d?(?:\.\d{2})\b/g) || [];
-                    // Need at least 6 distinct odd values to be sure it's a coupon
-                    return m.length >= 6;
-                }""",
-                timeout=45_000,
-            )
-            logger.info("[Bet365] %s: coupon rendered — extracting", league_name)
-        except Exception:
-            logger.info("[Bet365] %s: 45s timeout — attempting extraction anyway", league_name)
-
-        await self._page.wait_for_timeout(1_000)
-
-        # Step 3: grab innerText and parse
-        try:
-            page_data = await self._page.evaluate(r"""
-                () => {
-                    const text = document.body.innerText || '';
-
-                    // Collect odds elements for structural approach
-                    const oddsRe = /^[1-9]\d?(?:\.\d{1,3})?$/;
-                    const leafEls = Array.from(document.querySelectorAll('div,span,button'))
-                        .filter(el =>
-                            el.children.length === 0 &&
-                            oddsRe.test((el.textContent || '').trim()) &&
-                            parseFloat((el.textContent || '').trim()) > 1.0
-                        );
-
-                    // Crawl up to find fixture row containers
-                    const seen = new Set();
-                    const rows = [];
-                    for (const el of leafEls) {
-                        let node = el;
-                        for (let d = 0; d < 8; d++) {
-                            if (!node.parentElement || node === document.body) break;
-                            node = node.parentElement;
-                        }
-                        if (!seen.has(node) && node !== document.body) {
-                            seen.add(node);
-                            rows.push(node);
-                        }
-                    }
-
-                    const events = rows.slice(0, 50).map(row => {
-                        const texts = Array.from(row.querySelectorAll('*'))
-                            .filter(e => e.children.length === 0)
-                            .map(e => (e.textContent || '').trim())
-                            .filter(t => t.length > 0);
-                        const odds = texts.filter(t =>
-                            oddsRe.test(t) && parseFloat(t) > 1.0);
-                        const names = texts.filter(t =>
-                            !oddsRe.test(t) && t.length >= 2 && t.length <= 80 &&
-                            !/^\d+$/.test(t) && !/^[\d/:]+$/.test(t));
-                        return { names, odds };
-                    }).filter(e => e.odds.length >= 2 && e.names.length >= 1);
-
-                    return {
-                        innerText: text.substring(0, 8000),
-                        domEvents: events,
-                        oddsElCount: leafEls.length,
-                    };
-                }
-            """)
-
-            inner = page_data.get("innerText", "") if isinstance(page_data, dict) else ""
-            dom_events = page_data.get("domEvents", []) if isinstance(page_data, dict) else []
-            odds_count = page_data.get("oddsElCount", 0) if isinstance(page_data, dict) else 0
-
-            logger.info("[Bet365] %s: oddsEls=%d domEvents=%d innerText_len=%d",
-                        league_name, odds_count, len(dom_events), len(inner))
-            logger.info("[Bet365] %s innerText[:3000]: %s", league_name, inner[:3000])
-            logger.info("[Bet365] %s domEvents (first 5): %s", league_name, dom_events[:5])
-
-            # Try DOM structural approach first (more reliable)
-            dom_results = _parse_dom_structured(dom_events, league_name, sport_key)
-            if dom_results:
-                logger.info("[Bet365] %s: %d rows from DOM structural", league_name, len(dom_results))
-                return dom_results
-
-            # Fall back to innerText parsing
-            if inner:
-                text_results = _parse_innertext(inner, league_name, sport_key)
-                if text_results:
-                    logger.info("[Bet365] %s: %d rows from innerText", league_name, len(text_results))
-                    return text_results
-
-            logger.warning("[Bet365] %s: no events extracted", league_name)
-
-        except Exception as exc:
-            logger.warning("[Bet365] %s extraction failed: %s", league_name, exc)
-
-        return []
+            logger.debug("Rate-limited, waiting %.1fs (attempt %d)", retry_sec, attempt + 1)
+            await asyncio.sleep(retry_sec)
+            continue
+        resp.raise_for_status()
+        return resp.json()
+    raise RuntimeError(f"Failed after retries: GET {url}")
 
 
-def _parse_dom_structured(dom_events: list, league_name: str, sport_key: str) -> list[MatchOdds]:
-    """Parse events from DOM structural extraction."""
+def _date_range():
+    """Return (from_str, to_str) for the look-ahead window."""
+    today = datetime.now(timezone.utc).date()
+    end   = today + timedelta(days=_LOOKAHEAD_DAYS)
+    return today.isoformat(), end.isoformat()
+
+
+def _extract_odds(odds_fixture: dict, sport: _Sport) -> list[MatchOdds] | None:
+    """Extract MatchOdds from a single fixture entry in odds-by-tournaments response.
+
+    Returns None if Bet365 has no active 1X2/Moneyline odds for this fixture.
+    """
+    b365 = odds_fixture.get("bookmakerOdds", {}).get("bet365")
+    if not b365 or not b365.get("bookmakerIsActive"):
+        return None
+    if b365.get("suspended"):
+        return None
+
+    markets_data = b365.get("markets", {})
     results: list[MatchOdds] = []
-    for ev in dom_events:
-        if not isinstance(ev, dict):
-            continue
-        names = ev.get("names", [])
-        odds_raw = ev.get("odds", [])
 
-        odds_vals: list[float] = []
-        for o in odds_raw:
+    for market_id, outcome_map in sport.markets.items():
+        mdata = markets_data.get(str(market_id))
+        if not mdata or not mdata.get("marketActive"):
+            continue
+
+        outcomes_data = mdata.get("outcomes", {})
+        bookmaker_odds: list[dict] = []
+
+        for oid, label in outcome_map.items():
+            o = outcomes_data.get(str(oid), {})
+            player = o.get("players", {}).get("0", {})
+            price = player.get("price")
+            if price and price > 1.0 and player.get("active"):
+                bookmaker_odds.append({"name": label, "price": round(float(price), 3)})
+
+        # Need at least 2 outcomes (or 3 for 1X2) to be a valid market
+        min_outcomes = 2 if sport.market_label == "Moneyline" else 3
+        if len(bookmaker_odds) < min_outcomes:
+            continue
+
+        results.append(
+            MatchOdds(
+                sport=sport.key,
+                league="",        # filled in after fixture lookup
+                home_team="",
+                away_team="",
+                event_name="",
+                event_time=odds_fixture.get("startTime"),
+                match_url=b365.get("fixturePath", "https://www.bet365.it"),
+                market=sport.market_label,
+                bookmaker_odds=bookmaker_odds,
+            )
+        )
+
+    return results if results else None
+
+
+# ── scraper class ────────────────────────────────────────────────────────────
+
+class Bet365Scraper:
+    """Pure-HTTP Bet365 scraper via OddspAPI.io."""
+
+    bookmaker_name = BOOKMAKER
+
+    def __init__(self):
+        self._log = logging.getLogger(f"{__name__}.Bet365Scraper")
+
+    # ── public interface (matches BasePlaywrightScraper protocol) ────────────
+
+    async def scrape_all(self) -> list[MatchOdds]:
+        """Scrape all supported sports."""
+        rows: list[MatchOdds] = []
+        async with httpx.AsyncClient(timeout=30) as client:
+            for sport in _SPORTS:
+                try:
+                    sport_rows = await self._scrape_sport_obj(client, sport)
+                    rows.extend(sport_rows)
+                    self._log.info("[Bet365] %-8s %d rows", sport.key, len(sport_rows))
+                except Exception:
+                    self._log.exception("[Bet365] Error scraping %s", sport.key)
+        self._log.info("[Bet365] Total: %d rows", len(rows))
+        return rows
+
+    async def scrape_sport(self, sport_key: str) -> list[MatchOdds]:
+        """Scrape a single sport (e.g. 'calcio', 'basket', 'tennis')."""
+        sport = _SPORT_BY_KEY.get(sport_key)
+        if not sport:
+            self._log.warning("[Bet365] Unknown sport key: %s", sport_key)
+            return []
+        async with httpx.AsyncClient(timeout=30) as client:
+            return await self._scrape_sport_obj(client, sport)
+
+    # ── internal ──────────────────────────────────────────────────────────────
+
+    async def _scrape_sport_obj(
+        self, client: httpx.AsyncClient, sport: _Sport
+    ) -> list[MatchOdds]:
+        date_from, date_to = _date_range()
+
+        # ── step 1: fetch all upcoming fixtures (includes team names) ──────
+        self._log.info("[Bet365] %s: fetching fixtures %s → %s", sport.key, date_from, date_to)
+        try:
+            fixtures_raw = await _get_json(client, f"{API_BASE}/fixtures", {
+                "sportId": sport.sport_id,
+                "from":    date_from,
+                "to":      date_to,
+                "apiKey":  API_KEY,
+            })
+        except Exception:
+            self._log.exception("[Bet365] %s: fixtures fetch failed", sport.key)
+            return []
+
+        if not isinstance(fixtures_raw, list):
+            self._log.warning("[Bet365] %s: unexpected fixtures response: %s", sport.key, fixtures_raw)
+            return []
+
+        self._log.info("[Bet365] %s: %d fixtures found", sport.key, len(fixtures_raw))
+
+        # Build lookup: fixtureId → fixture dict
+        fixture_map: dict[str, dict] = {f["fixtureId"]: f for f in fixtures_raw}
+
+        # Extract unique tournament IDs (sorted by most upcoming fixtures first)
+        from collections import Counter
+        tid_counts = Counter(f["tournamentId"] for f in fixtures_raw)
+        tournament_ids = [tid for tid, _ in tid_counts.most_common()]
+
+        self._log.info("[Bet365] %s: %d unique tournaments", sport.key, len(tournament_ids))
+
+        # ── step 2: batch-fetch Bet365 odds by tournament ──────────────────
+        rows: list[MatchOdds] = []
+        max_tids = sport.max_batches * 5
+        batch_tournament_ids = tournament_ids[:max_tids]
+
+        for i in range(0, len(batch_tournament_ids), 5):
+            batch = batch_tournament_ids[i : i + 5]
+            if i > 0:
+                await asyncio.sleep(1.1)   # respect 1000ms rate-limit cooldown
+
             try:
-                f = float(o)
-                if 1.01 <= f <= 100.0:
-                    odds_vals.append(f)
-            except (ValueError, TypeError):
-                pass
+                odds_raw = await _get_json(client, f"{API_BASE}/odds-by-tournaments", {
+                    "bookmaker":     "bet365",
+                    "tournamentIds": ",".join(str(x) for x in batch),
+                    "apiKey":        API_KEY,
+                })
+            except Exception:
+                self._log.debug("[Bet365] %s: batch %d failed, skipping", sport.key, i // 5)
+                continue
 
-        if len(odds_vals) < 2:
-            continue
+            if not isinstance(odds_raw, list):
+                continue
 
-        # Build team names from name tokens
-        # Filter out competition names (all caps, short) and times
-        filtered = [n for n in names if len(n) >= 2 and not n.isupper() or len(n) > 6]
-        if not filtered:
-            filtered = names
+            for odds_fixture in odds_raw:
+                partial = _extract_odds(odds_fixture, sport)
+                if not partial:
+                    continue
 
-        if len(filtered) >= 2:
-            home = filtered[0]
-            away = filtered[-1] if filtered[-1] != filtered[0] else filtered[1] if len(filtered) > 1 else ""
-        elif filtered:
-            home = filtered[0]
-            away = ""
-        else:
-            continue
+                # Enrich with team / league names from fixture_map
+                fixture_id = odds_fixture.get("fixtureId", "")
+                fdata = fixture_map.get(fixture_id, {})
 
-        if not home:
-            continue
+                p1_id = odds_fixture.get("participant1Id")
+                p2_id = odds_fixture.get("participant2Id")
 
-        event_name = f"{home} - {away}" if away else home
+                home = (
+                    fdata.get("participant1Name")
+                    or fdata.get("participant1ShortName")
+                    or f"Team {p1_id}"
+                )
+                away = (
+                    fdata.get("participant2Name")
+                    or fdata.get("participant2ShortName")
+                    or f"Team {p2_id}"
+                )
+                league = fdata.get("tournamentName", "")
 
-        if len(odds_vals) == 3:
-            odds_dict = {"1": odds_vals[0], "X": odds_vals[1], "2": odds_vals[2]}
-        else:
-            odds_dict = {"1": odds_vals[0], "2": odds_vals[1]}
+                for mo in partial:
+                    mo.home_team  = home
+                    mo.away_team  = away
+                    mo.event_name = f"{home} - {away}"
+                    mo.league     = league
 
-        results.append(MatchOdds(
-            sport=sport_key, league=league_name,
-            home_team=home, away_team=away,
-            event_name=event_name, event_time=None,
-            match_url=f"{BASE_URL}/#/AC/",
-            market="1X2",
-            bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
-        ))
-    return results
+                rows.extend(partial)
+
+        self._log.info("[Bet365] %s: %d rows extracted", sport.key, len(rows))
+        return rows
