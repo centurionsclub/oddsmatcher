@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/30 * * * *"   # ogni 30 minuti (20 min/run × 96/day esauriva i 2000 min/mese GitHub)
   workflow_dispatch:
+    inputs:
+      bookmaker:
+        description: 'Bookmaker da girare (vuoto = tutti)'
+        required: false
+        default: ''
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -11,6 +16,7 @@ env:
 jobs:
   # ── Sisal ────────────────────────────────────────────────────────────
   scrape-sisal:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'sisal' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -47,6 +53,7 @@ jobs:
 
   # ── Lottomatica ──────────────────────────────────────────────────────
   scrape-lottomatica:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'lottomatica' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -83,6 +90,7 @@ jobs:
 
   # ── Eurobet ───────────────────────────────────────────────────────────
   scrape-eurobet:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'eurobet' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -119,6 +127,7 @@ jobs:
 
   # ── Snai ─────────────────────────────────────────────────────────────
   scrape-snai:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'snai' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -155,6 +164,7 @@ jobs:
 
   # ── Bwin ─────────────────────────────────────────────────────────────
   scrape-bwin:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'bwin' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -191,6 +201,7 @@ jobs:
 
   # ── Betsson ───────────────────────────────────────────────────────────
   scrape-betsson:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'betsson' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -227,6 +238,7 @@ jobs:
 
   # ── William Hill ──────────────────────────────────────────────────────
   scrape-williamhill:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'williamhill' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -263,6 +275,7 @@ jobs:
 
   # ── Betfair Exchange ──────────────────────────────────────────────────
   scrape-betfair:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'betfair' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -290,6 +303,7 @@ jobs:
 
   # ── The Odds API (Pinnacle / Codere IT / MarathonBet) ────────────────
   scrape-theoddsapi:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'theoddsapi' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -314,6 +328,7 @@ jobs:
 
   # ── Bet365 ────────────────────────────────────────────────────────────
   scrape-bet365:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'bet365' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
