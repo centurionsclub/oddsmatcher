@@ -11,8 +11,8 @@ import { getBetfairUrl } from "@/lib/utils";
 
 const BOOKMAKERS = [
   "888sport", "Bet365", "BetFlag Bookmaker", "Betsson", "Bwin",
-  "Eurobet", "GoldBet", "Lottomatica", "NetWin",
-  "Planetwin365", "Sisal", "Snai", "William Hill",
+  "Codere", "Eurobet", "GoldBet", "Lottomatica", "MarathonBet", "NetWin",
+  "Pinnacle", "Planetwin365", "Sisal", "Snai", "William Hill",
 ];
 
 const EXCHANGES = [
