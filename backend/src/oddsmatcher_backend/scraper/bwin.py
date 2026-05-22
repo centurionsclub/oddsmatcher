@@ -5,13 +5,16 @@ The Entain CDS API requires a runtime-injected x-bwin-accessid token.
 Strategy:
   1. Warmup page loads, browser receives x-bwin-accessid in API URLs.
   2. We capture that token from intercepted CDS API calls.
-  3. For each league we call the CDS fixtures endpoint via page.evaluate()
-     so requests carry the browser's session cookies automatically.
+  3. Three passes via page.evaluate() fetch with session cookies:
+     Pass A (gridable): bulk sportIds — returns O/U for calcio, 1X2 for basket/tennis
+     Pass B (uo):       bulk sportIds — returns all O/U lines for calcio
+     Pass C (1X2):      per-competition competitionIds — returns 1X2/DC/BTTS for calcio
+     The bulk calcio endpoint never returns 1X2; competitionIds-scoped calls do.
 
 CDS fixtures endpoint:
   /cds-api/bettingoffer/fixtures?x-bwin-accessid={id}&lang=it&country=IT
-  &usercountry=IT&fixtureTypes=Standard&state=Active&offer=Main
-  &sportIds={sportId}&competitionIds={compId}
+  &fixtureTypes=Standard&state=Latest&offerMapping=Filtered
+  &sportIds={sportId}[&competitionIds={compId}]
 
 League URL structure: /it/sports/{sport}-{sportId}/{country}/{name}-{compId}
 """
@@ -71,6 +74,7 @@ _COMP_NAME_TO_LEAGUE: dict[str, dict[str, tuple[str, str]]] = {
     "premier league":        {"calcio": ("Premier League",   "calcio")},
     "primera division":      {"calcio": ("La Liga",          "calcio")},
     "la liga":               {"calcio": ("La Liga",          "calcio")},
+    "laliga":                {"calcio": ("La Liga",          "calcio")},
     "bundesliga":            {"calcio": ("Bundesliga",       "calcio")},
     "ligue 1":               {"calcio": ("Ligue 1",          "calcio")},
     "europa league":         {"calcio": ("Europa League",    "calcio")},
@@ -402,6 +406,45 @@ def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchO
     return results
 
 
+def _collect_comp_ids(raw_results: list[Any], sport_key: str) -> dict[int, tuple[str, str]]:
+    """Extract CDS competition_id → (league_name, sport_key) from raw CDS fixture responses.
+
+    Used to discover the per-competition IDs needed for calcio 1X2 requests.
+    """
+    found: dict[int, tuple[str, str]] = {}
+    for data in raw_results:
+        if not data or isinstance(data, dict) and "error" in data:
+            continue
+        fixtures = data if isinstance(data, list) else (data.get("fixtures") or [])
+        for fix in (fixtures or []):
+            if not isinstance(fix, dict):
+                continue
+            comp_obj = (fix.get("competition") or
+                        fix.get("fixture", {}).get("competition") or {})
+            if not isinstance(comp_obj, dict):
+                continue
+            comp_id = comp_obj.get("id")
+            if comp_id is None:
+                continue
+            try:
+                cid = int(comp_id)
+            except (TypeError, ValueError):
+                continue
+            if cid in found:
+                continue
+            # Try ID map first
+            if cid in _COMP_ID_TO_LEAGUE:
+                found[cid] = _COMP_ID_TO_LEAGUE[cid]
+                continue
+            # Try name map
+            comp_name_lc = _get_name_str(comp_obj.get("name", "")).lower().strip()
+            name_map = _COMP_NAME_TO_LEAGUE.get(comp_name_lc, {})
+            mapping = name_map.get(sport_key)
+            if mapping:
+                found[cid] = mapping
+    return found
+
+
 class BwinScraper(BasePlaywrightScraper):
     bookmaker_name = BOOKMAKER
     base_url = BASE_URL
@@ -488,39 +531,44 @@ class BwinScraper(BasePlaywrightScraper):
         token = access_id[0]
         cds = "https://www.bwin.it/cds-api"
 
-        # Two offer-category passes per sport:
-        #   Pass A — offerCategories=Gridable  → returns 1X2, DC, BTTS for each league
-        #   Pass B — no offerCategories filter  → returns Over/Under lines for each league
-        # Bwin's CDS API returns different market sets depending on the category filter:
-        # with Gridable, Serie A gets only 1X2; without it, Series A gets only O/U.
-        # Both passes are needed to cover all standard markets.
+        # ── Helper to run a page.evaluate fetch and return parsed JSON ──────────
+        async def _cds_fetch(url: str) -> Any:
+            js = f"""
+                async () => {{
+                    try {{
+                        const r = await fetch("{url}", {{credentials: "include"}});
+                        if (!r.ok) return {{error: r.status}};
+                        return await r.json();
+                    }} catch(e) {{ return {{error: String(e)}}; }}
+                }}
+            """
+            return await self._page.evaluate(js)
+
+        # ── Base CDS query params ────────────────────────────────────────────────
+        base_params = (
+            f"x-bwin-accessid={token}&lang=it&country=IT&userCountry=IT"
+            f"&fixtureTypes=Standard&state=Latest&offerMapping=Filtered"
+            f"&fixtureCategories=Gridable,NonGridable,Other"
+            f"&isPriceBoost=false&statisticsModes=None&sortBy=Tags"
+        )
+
+        # ── Pass A & B: bulk fetch by sport (O/U for calcio, 1X2 for basket/tennis) ──
+        # Bulk calcio endpoint returns ONLY O/U (never 1X2) regardless of offerCategories.
+        # Per-competition calls are needed for calcio 1X2 — see Pass C below.
         offer_passes = [
-            ("gridable", f"&offerCategories=Gridable"),
+            ("gridable", "&offerCategories=Gridable"),
             ("uo",       ""),
         ]
+        calcio_uo_raw: list[Any] = []  # store raw uo/calcio results for comp_id discovery
 
         for pass_label, offer_cat in offer_passes:
-            common = (f"x-bwin-accessid={token}&lang=it&country=IT&userCountry=IT"
-                      f"&fixtureTypes=Standard&state=Latest"
-                      f"&offerMapping=Filtered"
-                      f"&fixtureCategories=Gridable,NonGridable,Other"
-                      f"&isPriceBoost=false&statisticsModes=None&sortBy=Tags"
-                      f"{offer_cat}")
+            common = f"{base_params}{offer_cat}"
 
             for sport_key, sport_id in [("calcio", 4), ("basket", 7), ("tennis", 5)]:
-                for skip in (0, 500):  # paginate in case of many fixtures
+                for skip in (0, 500):
                     url = (f"{cds}/bettingoffer/fixtures?{common}"
                            f"&sportIds={sport_id}&skip={skip}&take=500")
-                    js = f"""
-                        async () => {{
-                            try {{
-                                const r = await fetch("{url}", {{credentials: "include"}});
-                                if (!r.ok) return {{error: r.status}};
-                                return await r.json();
-                            }} catch(e) {{ return {{error: String(e)}}; }}
-                        }}
-                    """
-                    result = await self._page.evaluate(js)
+                    result = await _cds_fetch(url)
                     if isinstance(result, dict) and "error" in result:
                         self._log.warning("[Bwin] fetch %s/%s skip=%d: %s",
                                           pass_label, sport_key, skip, result["error"])
@@ -531,20 +579,35 @@ class BwinScraper(BasePlaywrightScraper):
                     mc = Counter(r.market for r in rows)
                     self._log.info("[Bwin] %s/%s skip=%d: %d rows leagues=%s markets=%s",
                                    pass_label, sport_key, skip, len(rows), dict(lc), dict(mc))
-                    # Log sample 1X2 row for debugging
-                    for r in rows:
-                        if r.market == "1X2" and r.league == "Serie A":
-                            self._log.info(
-                                "[Bwin] Sample 1X2: event=%r time=%r odds=%s",
-                                r.event_name, r.event_time,
-                                {k: v for bm in r.bookmaker_odds for k, v in bm["odds"].items()},
-                            )
-                            break
                     self._captured_rows.extend(rows)
+                    # Keep raw uo/calcio data for Pass C comp_id discovery
+                    if pass_label == "uo" and sport_key == "calcio":
+                        calcio_uo_raw.append(result)
                     fixtures_list = result if isinstance(result, list) else (
                         result.get("fixtures", []) if isinstance(result, dict) else [])
                     if len(fixtures_list) < 500:
                         break
+
+        # ── Pass C: per-competition 1X2 for calcio ──────────────────────────────
+        # The bulk sportIds=4 endpoint never returns 1X2 for football.
+        # Per-competition requests (competitionIds=X) DO return 1X2.
+        # We discover comp_ids from the uo/calcio raw responses collected in Pass B.
+        calcio_comp_ids = _collect_comp_ids(calcio_uo_raw, "calcio")
+        self._log.info("[Bwin] Discovered calcio comp_ids: %s",
+                       {v[0]: k for k, v in calcio_comp_ids.items()})
+
+        for cid, (league_name, sport_key) in calcio_comp_ids.items():
+            url_12 = (f"{cds}/bettingoffer/fixtures?{base_params}"
+                      f"&sportIds=4&competitionIds={cid}&skip=0&take=500")
+            result_12 = await _cds_fetch(url_12)
+            if isinstance(result_12, dict) and "error" in result_12:
+                self._log.warning("[Bwin] 1X2 comp=%d %s: %s", cid, league_name, result_12["error"])
+                continue
+            rows_12 = _parse_cds_fixtures(result_12, league_name, sport_key)
+            mc_12 = Counter(r.market for r in rows_12)
+            self._log.info("[Bwin] comp=%d %s: %d rows markets=%s",
+                           cid, league_name, len(rows_12), dict(mc_12))
+            self._captured_rows.extend(rows_12)
 
     async def _navigate_and_capture(
         self, sport_key: str, sport_path: str
