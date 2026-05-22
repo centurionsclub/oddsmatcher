@@ -261,33 +261,6 @@ jobs:
           PROXY_URL: ${{ secrets.PROXY_URL }}
         run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape --bookmaker williamhill
 
-  # ── Betfair Exchange ──────────────────────────────────────────────────
-  scrape-betfair:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install dependencies
-        working-directory: backend
-        run: pip install -e .
-
-      - name: Scrape Betfair Exchange
-        working-directory: backend
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          PROXY_URL: ${{ secrets.PROXY_URL }}
-          BETFAIR_APP_KEY: ${{ secrets.BETFAIR_APP_KEY }}
-          BETFAIR_USERNAME: ${{ secrets.BETFAIR_USERNAME }}
-          BETFAIR_PASSWORD: ${{ secrets.BETFAIR_PASSWORD }}
-        run: python -m oddsmatcher_backend.main scrape --bookmaker betfair
-
   # ── Bet365 ────────────────────────────────────────────────────────────
   scrape-bet365:
     runs-on: ubuntu-latest
