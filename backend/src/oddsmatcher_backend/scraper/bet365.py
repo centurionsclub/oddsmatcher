@@ -1,7 +1,8 @@
-"""Bet365 odds scraper via centroquote.it comparison site.
+"""Bet365 / BetFlag / 888sport scraper via centroquote.it comparison site.
 
 Navigates centroquote.it league/match pages with Playwright, extracts
-Bet365 odds for 1X2, Double Chance, BTTS, and Over/Under markets.
+odds for Bet365, BetFlag Bookmaker and 888sport for 1X2, Double Chance,
+BTTS, and Over/Under markets.
 
 Configuration
 -------------
@@ -24,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 ROME_TZ   = ZoneInfo("Europe/Rome")
 BASE_URL  = "https://www.centroquote.it"
-BOOKMAKER = "Bet365"
+
+# Bookmakers to extract from centroquote pages
+_TARGET_BOOKMAKERS = {"Bet365", "BetFlag Bookmaker", "888sport"}
 
 CONCURRENCY    = 4
 PAGE_WAIT_MS   = 3500
@@ -56,8 +59,12 @@ for _lg in _LEAGUES:
 # ── bookmaker alias → canonical name ──────────────────────────────────────────
 
 _BM_ALIASES: dict[str, str] = {
-    "bet365.it": "Bet365",
-    "bet365":    "Bet365",
+    "bet365.it":   "Bet365",
+    "bet365":      "Bet365",
+    "betflagit":   "BetFlag Bookmaker",
+    "betflag":     "BetFlag Bookmaker",
+    "888sport":    "888sport",
+    "888":         "888sport",
 }
 
 def _normalise_bm(raw: str) -> str | None:
@@ -292,18 +299,26 @@ async def _scrape_match(
         except Exception:
             pass
 
-        def _add(market: str, outcome: str, odds_val: float):
-            rows.append({"market": market, "outcome": outcome, "odds": odds_val,
-                         "event_name": event_name, "event_time": event_time,
+        def _add(bookmaker: str, market: str, outcome: str, odds_val: float):
+            rows.append({"bookmaker": bookmaker, "market": market, "outcome": outcome,
+                         "odds": odds_val, "event_name": event_name, "event_time": event_time,
                          "sport": sport, "league": league_name, "match_url": cq_url})
+
+        def _extract_targets(bm_rows, outcomes: list[str], market: str):
+            """Collect rows for all target bookmakers from a list of (bm_raw, odds) pairs."""
+            found: set[str] = set()
+            for bm_raw, odds in bm_rows:
+                bm = _normalise_bm(bm_raw)
+                if bm and bm in _TARGET_BOOKMAKERS and bm not in found and len(odds) >= len(outcomes):
+                    for i, out in enumerate(outcomes):
+                        _add(bm, market, out, odds[i])
+                    found.add(bm)
+                if found == _TARGET_BOOKMAKERS:
+                    break
 
         # 1X2
         outcomes_1x2 = ["1", "X", "2"] if sport == "calcio" else ["1", "2"]
-        for bm_raw, odds in await _extract_bm_rows(page):
-            if _normalise_bm(bm_raw) == BOOKMAKER and len(odds) >= len(outcomes_1x2):
-                for i, out in enumerate(outcomes_1x2):
-                    _add("1X2", out, odds[i])
-                break  # found Bet365
+        _extract_targets(await _extract_bm_rows(page), outcomes_1x2, "1X2")
 
         if sport != "calcio":
             return rows
@@ -311,20 +326,12 @@ async def _scrape_match(
         # Double Chance
         if await _click_tab(page, "Double Chance"):
             await page.wait_for_timeout(2000)
-            for bm_raw, odds in await _extract_bm_rows(page):
-                if _normalise_bm(bm_raw) == BOOKMAKER and len(odds) >= 3:
-                    for i, out in enumerate(["1X", "X2", "12"]):
-                        _add("DC", out, odds[i])
-                    break
+            _extract_targets(await _extract_bm_rows(page), ["1X", "X2", "12"], "DC")
 
         # BTTS
         if await _click_tab(page, "Both Teams to Score"):
             await page.wait_for_timeout(2000)
-            for bm_raw, odds in await _extract_bm_rows(page):
-                if _normalise_bm(bm_raw) == BOOKMAKER and len(odds) >= 2:
-                    _add("BTTS", "Goal",    odds[0])
-                    _add("BTTS", "No Goal", odds[1])
-                    break
+            _extract_targets(await _extract_bm_rows(page), ["Goal", "No Goal"], "BTTS")
 
         # Over/Under
         if await _click_tab(page, "Over/Under"):
@@ -344,13 +351,15 @@ async def _scrape_match(
                 if not expanded:
                     continue
                 await page.wait_for_timeout(1200)
-                for bm_raw, odds in await _extract_bm_rows(page):
-                    if bm_raw.lower().startswith("over/under"):
-                        continue
-                    if _normalise_bm(bm_raw) == BOOKMAKER and len(odds) >= 2:
-                        _add("Over/Under", f"Over {threshold}",  odds[0])
-                        _add("Over/Under", f"Under {threshold}", odds[1])
-                        break
+                ou_rows = [(bm_raw, odds) for bm_raw, odds in await _extract_bm_rows(page)
+                           if not bm_raw.lower().startswith("over/under")]
+                found: set[str] = set()
+                for bm_raw, odds in ou_rows:
+                    bm = _normalise_bm(bm_raw)
+                    if bm and bm in _TARGET_BOOKMAKERS and bm not in found and len(odds) >= 2:
+                        _add(bm, "Over/Under", f"Over {threshold}",  odds[0])
+                        _add(bm, "Over/Under", f"Under {threshold}", odds[1])
+                        found.add(bm)
 
     except Exception as exc:
         logger.warning("[Bet365/CQ] Match %s error: %s", match_url, exc)
@@ -445,25 +454,24 @@ def _parse_matches(raw: list) -> list[dict]:
 # ── flat rows → MatchOdds ──────────────────────────────────────────────────────
 
 def _rows_to_match_odds(flat_rows: list[dict]) -> list[MatchOdds]:
-    """Group flat per-outcome rows into MatchOdds objects."""
+    """Group flat per-outcome rows into MatchOdds objects (one per event+market)."""
     # key: (event_name, sport, league, market, match_url, event_time)
-    grouped: dict[tuple, dict[str, float]] = defaultdict(dict)
-    meta: dict[tuple, dict] = {}
+    # value: {bookmaker: {outcome: odds}}
+    grouped: dict[tuple, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
 
     for r in flat_rows:
         key = (r["event_name"], r["sport"], r["league"], r["market"], r["match_url"], r["event_time"])
-        grouped[key][r["outcome"]] = r["odds"]
-        if key not in meta:
-            meta[key] = r
+        grouped[key][r["bookmaker"]][r["outcome"]] = r["odds"]
 
     results = []
-    for key, odds_dict in grouped.items():
-        if not odds_dict:
-            continue
+    for key, bk_odds in grouped.items():
         event_name, sport, league, market, match_url, event_time = key
         parts = event_name.split(" - ", 1)
         home = parts[0] if len(parts) == 2 else event_name
         away = parts[1] if len(parts) == 2 else ""
+        bookmaker_odds = [{"bookmaker": bk, "odds": odds} for bk, odds in bk_odds.items() if odds]
+        if not bookmaker_odds:
+            continue
         results.append(MatchOdds(
             sport=sport,
             league=league,
@@ -473,7 +481,7 @@ def _rows_to_match_odds(flat_rows: list[dict]) -> list[MatchOdds]:
             event_time=event_time,
             match_url=match_url,
             market=market,
-            bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
+            bookmaker_odds=bookmaker_odds,
         ))
     return results
 
@@ -482,7 +490,7 @@ def _rows_to_match_odds(flat_rows: list[dict]) -> list[MatchOdds]:
 class Bet365Scraper:
     """Scrapes Bet365 odds from centroquote.it comparison site."""
 
-    bookmaker_name = BOOKMAKER
+    bookmaker_name = "Centroquote"  # internal label; rows carry individual bookmaker names
 
     def __init__(self):
         self._log = logging.getLogger(f"{__name__}.Bet365Scraper")
