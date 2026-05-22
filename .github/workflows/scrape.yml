@@ -288,6 +288,30 @@ jobs:
           BETFAIR_PASSWORD: ${{ secrets.BETFAIR_PASSWORD }}
         run: python -m oddsmatcher_backend.main scrape --bookmaker betfair
 
+  # ── The Odds API (Pinnacle / Codere IT / MarathonBet) ────────────────
+  scrape-theoddsapi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -e .
+
+      - name: Scrape TheOddsAPI
+        working-directory: backend
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          THEODDSAPI_KEY: ${{ secrets.THEODDSAPI_KEY }}
+        run: python -m oddsmatcher_backend.main scrape --bookmaker theoddsapi
+
   # ── Bet365 ────────────────────────────────────────────────────────────
   scrape-bet365:
     runs-on: ubuntu-latest
