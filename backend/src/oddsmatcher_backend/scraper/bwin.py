@@ -589,25 +589,48 @@ class BwinScraper(BasePlaywrightScraper):
                         break
 
         # ── Pass C: per-competition 1X2 for calcio ──────────────────────────────
-        # The bulk sportIds=4 endpoint never returns 1X2 for football.
-        # Per-competition requests (competitionIds=X) DO return 1X2.
-        # We discover comp_ids from the uo/calcio raw responses collected in Pass B.
+        # The bulk params (state=Latest&offerMapping=Filtered) return ONLY O/U for
+        # calcio. The browser's native CDS params use state=Active&offer=Main which
+        # includes 1X2/DC/BTTS. We try both; navigation fallback is used if neither works.
         calcio_comp_ids = _collect_comp_ids(calcio_uo_raw, "calcio")
         self._log.info("[Bwin] Discovered calcio comp_ids: %s",
                        {v[0]: k for k, v in calcio_comp_ids.items()})
 
+        # Browser-native params: state=Active&offer=Main (what Bwin.it uses for league pages)
+        base_c = (
+            f"x-bwin-accessid={token}&lang=it&country=IT&usercountry=IT"
+            f"&fixtureTypes=Standard&state=Active&offer=Main"
+            f"&isPriceBoost=false&statisticsModes=None&sortBy=Tags"
+        )
+        got_12 = False
         for cid, (league_name, sport_key) in calcio_comp_ids.items():
-            url_12 = (f"{cds}/bettingoffer/fixtures?{base_params}"
+            url_12 = (f"{cds}/bettingoffer/fixtures?{base_c}"
                       f"&sportIds=4&competitionIds={cid}&skip=0&take=500")
             result_12 = await _cds_fetch(url_12)
             if isinstance(result_12, dict) and "error" in result_12:
-                self._log.warning("[Bwin] 1X2 comp=%d %s: %s", cid, league_name, result_12["error"])
+                self._log.warning("[Bwin] 1X2 offer=Main comp=%d %s: %s",
+                                  cid, league_name, result_12["error"])
                 continue
             rows_12 = _parse_cds_fixtures(result_12, league_name, sport_key)
             mc_12 = Counter(r.market for r in rows_12)
-            self._log.info("[Bwin] comp=%d %s: %d rows markets=%s",
+            self._log.info("[Bwin] offer=Main comp=%d %s: %d rows markets=%s",
                            cid, league_name, len(rows_12), dict(mc_12))
+            if any(r.market == "1X2" for r in rows_12):
+                got_12 = True
             self._captured_rows.extend(rows_12)
+
+        # Fallback: navigate to each calcio league page and intercept CDS responses.
+        # Navigation triggers browser-native requests that always include 1X2.
+        if not got_12:
+            self._log.info("[Bwin] offer=Main returned no 1X2 — falling back to page navigation")
+            for league_name, sport_key, league_path in LEAGUES:
+                if sport_key != "calcio":
+                    continue
+                rows_nav = await self._navigate_and_capture("calcio", league_path)
+                mc_nav = Counter(r.market for r in rows_nav)
+                self._log.info("[Bwin] Nav %s: %d rows markets=%s",
+                               league_name, len(rows_nav), dict(mc_nav))
+                self._captured_rows.extend(rows_nav)
 
     async def _navigate_and_capture(
         self, sport_key: str, sport_path: str
