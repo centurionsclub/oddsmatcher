@@ -488,8 +488,8 @@ class BwinScraper(BasePlaywrightScraper):
         token = access_id[0]
         cds = "https://www.bwin.it/cds-api"
         common = (f"x-bwin-accessid={token}&lang=it&country=IT&userCountry=IT"
-                  f"&fixtureTypes=Standard&state=Latest"
-                  f"&offerMapping=Filtered&offerCategories=Gridable"
+                  f"&fixtureTypes=Standard&state=Active"
+                  f"&offerMapping=All"
                   f"&fixtureCategories=Gridable,NonGridable,Other"
                   f"&isPriceBoost=false&statisticsModes=None&sortBy=Tags")
 
