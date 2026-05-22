@@ -216,13 +216,21 @@ class SisalScraper:
                 captured_api_urls.append(url)
                 logger.debug("[Sisal] %s: API URL rilevata: %s", league_name, url[:120])
 
-        self._page.on("request", on_request)
-
         if url_type == "sport":
             page_url = f"{BASE_URL}/scommesse-matchpoint/sport/{sisal_slug}"
         else:
             page_url = f"{BASE_URL}/scommesse-matchpoint/quote/{sisal_slug}"
         logger.info("[Sisal] Loading %s", page_url)
+
+        # Navigate to about:blank first to destroy the SPA runtime and force a fresh
+        # load — without this, the SPA uses its client-side cache and never re-issues
+        # schedaManifestazione requests for previously-visited leagues.
+        try:
+            await self._page.goto("about:blank", wait_until="load", timeout=8_000)
+        except Exception:
+            pass
+
+        self._page.on("request", on_request)
 
         # Navigate and wait for the SPA to issue its API calls.
         wait_ms = 8_000 if url_type == "sport" else 4_000
