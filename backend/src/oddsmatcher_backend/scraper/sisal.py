@@ -45,6 +45,7 @@ LEAGUES: list[tuple[str, str, str, str, str]] = [
     ("Conference League", "calcio",  "calcio/conference-league",          "europa",         "quote"),
     ("Tennis",            "tennis",  "tennis",                                        "internazionale", "sport"),
     ("NBA",               "basket",  "basket/stati-uniti-d-america/nba",              "stati-uniti",    "quote"),
+    ("WNBA",              "basket",  "basket/stati-uniti-d-america/wnba",             "stati-uniti",    "quote"),
     ("Eurolega",          "basket",  "basket/eurolega",                               "europa",         "quote"),
     ("Serie A Basket",    "basket",  "basket/serie-a",                                "italia",         "quote"),
     ("Serie A2 Basket",   "basket",  "basket/serie-a2",                               "italia",         "quote"),

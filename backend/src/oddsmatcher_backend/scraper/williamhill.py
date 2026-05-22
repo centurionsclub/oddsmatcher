@@ -8,6 +8,8 @@ Odds format: q/100 → decimal (e.g. q=183 → 1.83)
 1X2 market: sc.d='1X2', sc.eqs[{ce:1→home, ce:2→draw, ce:3→away}]
 DC markets:  in scs[], d∈{'1X','X2','12'}, take eqs[ce:1].q for each
 Over/Under:  in scs[], d='U/O', h=spread*100 (250→2.5), ce:1=Under/ce:2=Over
+Tennis:      catch-all — every tournament kept, dt used as league name
+Basket:      keyword filter: NBA, Eurolega, WNBA, A2, Legabasket
 """
 
 import logging
@@ -58,17 +60,15 @@ WANTED_KEYWORDS: dict[str, list[str]] = {
         "Bundesliga", "Ligue 1", "Champions League", "Europa League",
         "Conference League",
     ],
-    "tennis": [
-        "Roland Garros", "Wimbledon", "US Open", "Australian Open",
-        "Amburgo", "Ginevra", "Rabat", "Strasburgo",
-    ],
+    # tennis: None means catch-all — handled separately in _match_league
     "basket": [
-        "NBA", "Eurolega", "Serie A",
+        "NBA", "Eurolega", "Serie A", "WNBA", "A2", "Legabasket",
     ],
 }
 
 # Canonical league name from matching keyword
 KEYWORD_TO_LEAGUE: dict[str, str] = {
+    # calcio
     "Serie A": "Serie A",
     "Serie B": "Serie B",
     "Premier League": "Premier League",
@@ -79,16 +79,12 @@ KEYWORD_TO_LEAGUE: dict[str, str] = {
     "Champions League": "Champions League",
     "Europa League": "Europa League",
     "Conference League": "Conference League",
-    "Roland Garros": "Roland Garros",
-    "Wimbledon": "Wimbledon",
-    "US Open": "US Open",
-    "Australian Open": "Australian Open",
-    "Amburgo": "Amburgo",
-    "Ginevra": "Ginevra",
-    "Rabat": "Rabat",
-    "Strasburgo": "Strasburgo",
+    # basket
     "NBA": "NBA",
     "Eurolega": "Eurolega",
+    "WNBA": "WNBA",
+    "A2": "A2 Basket",
+    "Legabasket": "A2 Basket",
 }
 
 # CE (outcome code) → canonical 1X2 outcome name
@@ -96,7 +92,11 @@ CE_TO_OUTCOME = {1: "1", 2: "X", 3: "2"}
 
 
 def _match_league(dt: str, sport_key: str) -> str | None:
-    """Return canonical league name if dt contains a wanted keyword."""
+    """Return canonical league name. Tennis is a catch-all; others use keyword filter."""
+    # Tennis: accept every tournament, use dt directly as the league name
+    if sport_key == "tennis":
+        return dt.strip() if dt.strip() else None
+
     keywords = WANTED_KEYWORDS.get(sport_key, [])
     for kw in keywords:
         if kw.lower() in dt.lower():

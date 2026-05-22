@@ -42,21 +42,19 @@ SPORT_MAP = {
     "BASKET": "basket",
 }
 
-# Leagues we want to track (subset — Betsson returns all, we filter)
-WANTED_LEAGUES = {
+# Leagues we want to track.
+# calcio/basket: explicit set — only these leagues are kept.
+# tennis: None → accept ALL tournaments (ATP/WTA/Challenger all included).
+WANTED_LEAGUES: dict[str, set[str] | None] = {
     "calcio": {
         "Serie A", "Serie B", "Premier League", "La Liga", "LaLiga",
         "Bundesliga", "Ligue 1", "Champions League", "Europa League",
         "Conference League",
     },
-    "tennis": {
-        "Roland Garros", "Wimbledon", "US Open", "Australian Open",
-        "Ginevra", "Amburgo", "Rabat", "Strasburgo",
-        "Roland Garros Femminile", "Wimbledon Femminile",
-        "US Open Femminile", "Australian Open Femminile",
-    },
+    "tennis": None,  # catch-all: every tournament is kept
     "basket": {
         "NBA", "Serie A", "Serie A Basket", "Eurolega",
+        "WNBA", "A2 Basket", "Legabasket A2", "Serie A2 Basket",
     },
 }
 
@@ -112,9 +110,9 @@ def _parse_tms(tms: list) -> list[MatchOdds]:
         # League name
         league = item.get("dt", "")
 
-        # Check if we want this league
-        wanted = WANTED_LEAGUES.get(sport_key, set())
-        if league not in wanted:
+        # Check if we want this league (None = catch-all, accept everything)
+        wanted = WANTED_LEAGUES.get(sport_key)
+        if wanted is not None and league not in wanted:
             continue
 
         # Event info

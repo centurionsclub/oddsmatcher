@@ -86,11 +86,17 @@ _COMP_NAME_TO_LEAGUE: dict[str, dict[str, tuple[str, str]]] = {
     "nba":                   {"basket": ("NBA",              "basket")},
     "eurolega":              {"basket": ("Eurolega",         "basket")},
     "eurolega - uomini":     {"basket": ("Eurolega",         "basket")},
+    "wnba":                  {"basket": ("WNBA",             "basket")},
+    "a2 basket":             {"basket": ("A2 Basket",        "basket")},
+    "legabasket a2":         {"basket": ("A2 Basket",        "basket")},
+    "lba serie a2":          {"basket": ("A2 Basket",        "basket")},
+    "serie a2 basket":       {"basket": ("A2 Basket",        "basket")},
 }
 
-# For tennis we accept ALL competition IDs and label them "ATP"
-# (tournament-specific IDs change every week — no fixed mapping possible)
-_TENNIS_CATCHALL_LEAGUE = "ATP"
+# For tennis we accept ALL competition IDs.
+# The competition name (comp_name_raw) is used directly as the league label
+# so ATP/WTA/Challenger tournaments are kept distinct.
+_TENNIS_USE_COMP_NAME = True  # sentinel — handled in _parse_cds_fixtures
 
 # Market name → canonical key
 SIMPLE_MARKET_MAP: dict[str, str] = {
@@ -217,7 +223,8 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                     if mapping:
                         fix_league, fix_sport = mapping
                     elif sport_key == "tennis":
-                        fix_league = _TENNIS_CATCHALL_LEAGUE
+                        # Use actual competition name (ATP/WTA/Challenger stay distinct)
+                        fix_league = comp_name_raw if comp_name_raw else "Tennis"
                         fix_sport = "tennis"
                     else:
                         # Unknown league — skip and log once
@@ -231,7 +238,8 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                                         cid, comp_name_raw, sport_key)
                         continue
             elif sport_key == "tennis":
-                fix_league = _TENNIS_CATCHALL_LEAGUE
+                # comp_id absent — use competition name directly
+                fix_league = _get_name_str(comp_obj.get("name", "")) or "Tennis"
                 fix_sport = "tennis"
 
         # ── Extract event name and time ────────────────────────────────
