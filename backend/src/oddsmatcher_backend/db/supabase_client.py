@@ -302,10 +302,13 @@ class SupabaseWriter:
 
         for match in results:
             for bm in match.bookmaker_odds:
+                # Use the per-entry bookmaker name (e.g. Pinnacle, Codere, MarathonBet)
+                # falling back to the scraper-level bookmaker_name for single-bk scrapers.
+                bk_name = bm.get("bookmaker") or bookmaker_name
                 for outcome_raw, odds_val in bm["odds"].items():
                     market_norm, outcome_norm = _normalize_market_outcome(match.market, outcome_raw)
                     row: dict[str, Any] = {
-                        "bookmaker": bookmaker_name,
+                        "bookmaker": bk_name,
                         "sport": match.sport,
                         "league": match.league,
                         "event_name": _normalize_event_name(match.event_name),
@@ -322,26 +325,31 @@ class SupabaseWriter:
         if not rows:
             return 0
 
-        event_names = list({r["event_name"] for r in rows})
-
         # Diagnostic: log breakdown by market before writing
-        from collections import Counter
+        from collections import Counter, defaultdict
         market_counts = Counter(r["market"] for r in rows)
+        event_names = list({r["event_name"] for r in rows})
         logger.info("%s live_odds pre-write: %d rows, markets=%s, events=%d",
                     bookmaker_name, len(rows), dict(market_counts), len(event_names))
 
-        try:
-            del_result = (
-                self.client.table("live_odds")
-                .delete()
-                .eq("bookmaker", bookmaker_name)
-                .in_("event_name", event_names)
-                .execute()
-            )
-            logger.info("%s live_odds: deleted %d stale rows",
-                        bookmaker_name, len(del_result.data) if del_result.data else 0)
-        except Exception as e:
-            logger.error("Failed to delete stale %s live_odds: %s", bookmaker_name, e)
+        # Delete stale rows grouped by actual bookmaker (handles multi-bk scrapers)
+        bk_events: dict[str, set] = defaultdict(set)
+        for r in rows:
+            bk_events[r["bookmaker"]].add(r["event_name"])
+
+        for bk, evts in bk_events.items():
+            try:
+                del_result = (
+                    self.client.table("live_odds")
+                    .delete()
+                    .eq("bookmaker", bk)
+                    .in_("event_name", list(evts))
+                    .execute()
+                )
+                logger.info("%s live_odds: deleted %d stale rows for %s",
+                            bookmaker_name, len(del_result.data) if del_result.data else 0, bk)
+            except Exception as e:
+                logger.error("Failed to delete stale %s live_odds: %s", bk, e)
 
         BATCH = 500
         inserted = 0
