@@ -7,7 +7,7 @@ Returns 'tms' list — upcoming matches with odds across all sports.
 Odds format: q/100 → decimal (e.g. q=183 → 1.83)
 1X2 market: sc.d='1X2', sc.eqs[{ce:1→home, ce:2→draw, ce:3→away}]
 DC markets:  in scs[], d∈{'1X','X2','12'}, take eqs[ce:1].q for each
-Over/Under:  in scs[], d='U/O', h=spread*100 (250→2.5), ce:1=Over/ce:2=Under
+Over/Under:  in scs[], d='U/O', h=spread*100 (250→2.5), ce:1=Under/ce:2=Over
 """
 
 import logging
@@ -250,9 +250,9 @@ def _parse_tms(tms: list) -> list[MatchOdds]:
                     val = _q_to_decimal(eq.get("q"))
                     if val:
                         if ce == 1:
-                            uo_markets[sp]["Over"] = val   # spread already in market name
+                            uo_markets[sp]["Under"] = val  # d='U/O' → ce:1=Under, ce:2=Over
                         elif ce == 2:
-                            uo_markets[sp]["Under"] = val  # spread already in market name
+                            uo_markets[sp]["Over"] = val
 
             for sp, odds_uo in uo_markets.items():
                 if odds_uo:
