@@ -19,10 +19,20 @@ from playwright.async_api import Browser, BrowserContext, Page, Playwright, Resp
 from oddsmatcher_backend.scraper.models import MatchOdds
 
 try:
-    from playwright_stealth import stealth_async as _stealth_async
+    from playwright_stealth import Stealth as _Stealth
+    async def _apply_stealth(page) -> None:
+        await _Stealth().apply_stealth_async(page)
     _STEALTH_AVAILABLE = True
 except ImportError:
-    _STEALTH_AVAILABLE = False
+    try:
+        from playwright_stealth import stealth_async as _stealth_async_legacy
+        async def _apply_stealth(page) -> None:
+            await _stealth_async_legacy(page)
+        _STEALTH_AVAILABLE = True
+    except ImportError:
+        async def _apply_stealth(page) -> None:
+            pass
+        _STEALTH_AVAILABLE = False
 
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -78,23 +88,62 @@ class BasePlaywrightScraper(ABC):
 
         self._browser = await self._playwright.chromium.launch(
             headless=False,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                # Prevent JavaScript from detecting automation via navigator.webdriver
+                "--disable-blink-features=AutomationControlled",
+            ],
             proxy=proxy,
         )
         self._context = await self._browser.new_context(
             user_agent=_USER_AGENT,
             locale="it-IT",
             timezone_id="Europe/Rome",
-            viewport={"width": 1280, "height": 800},
+            viewport={"width": 1280, "height": 900},
         )
         self._page = await self._context.new_page()
 
+        # Inline stealth: patch the most common automation detection vectors.
+        # This runs before any page JS executes (add_init_script is evaluated first).
+        await self._page.add_init_script("""
+            // 1. Hide navigator.webdriver (the #1 bot detection signal)
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+                configurable: true,
+            });
+            // 2. Pretend to have real plugins (headless Chrome has none)
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => { const ps = [1, 2, 3, 4, 5]; ps.__proto__ = PluginArray.prototype; return ps; },
+                configurable: true,
+            });
+            // 3. Add languages (missing in headless)
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['it-IT', 'it', 'en-US', 'en'],
+                configurable: true,
+            });
+            // 4. Fake chrome runtime (missing in headless without the flag)
+            if (!window.chrome) {
+                window.chrome = { runtime: {} };
+            }
+            // 5. Permissions API — return 'granted' for notifications (headless returns 'denied')
+            if (navigator.permissions && navigator.permissions.query) {
+                const origQuery = navigator.permissions.query.bind(navigator.permissions);
+                navigator.permissions.query = (params) => {
+                    if (params && params.name === 'notifications') {
+                        return Promise.resolve({ state: 'denied', onchange: null });
+                    }
+                    return origQuery(params);
+                };
+            }
+        """)
+
         # Apply stealth patches to hide headless browser fingerprints (helps vs Cloudflare)
+        await _apply_stealth(self._page)
         if _STEALTH_AVAILABLE:
-            await _stealth_async(self._page)
             self._log.info("[%s] playwright-stealth applied", self.bookmaker_name)
         else:
-            self._log.warning("[%s] playwright-stealth not installed — fingerprint not patched", self.bookmaker_name)
+            self._log.info("[%s] inline stealth applied (playwright-stealth not installed)", self.bookmaker_name)
 
         warmup_url = self.base_url + self.warmup_path
         self._log.info("[%s] Navigating to homepage for Akamai warm-up...", self.bookmaker_name)

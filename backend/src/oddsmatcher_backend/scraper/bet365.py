@@ -1,269 +1,332 @@
-"""Bet365 pre-match odds scraper — powered by OddspAPI.io.
+"""Bet365 pre-match odds scraper — CDP (Chrome DevTools Protocol).
 
-Uses the OddspAPI.io REST API (v4) to fetch Bet365 odds for soccer, basketball
-and tennis.  No browser automation required.
+Connects to a real Chrome instance via CDP so Akamai Bot Manager is bypassed.
+Chrome must be running with remote debugging enabled, OR this module will
+auto-launch it.
+
+Auto-launch command (run once, or let the scraper start it automatically):
+    google-chrome --remote-debugging-port=9222 \\
+                  --user-data-dir="$HOME/.bet365-chrome-profile" \\
+                  --no-first-run --no-default-browser-check
 
 Configuration
 -------------
-ODDSPAPI_KEY   – API key (default: bundled key)
-ODDSPAPI_DAYS  – number of look-ahead days for fixtures (default: 7, max: 9)
+BET365_CDP_PORT  – CDP port (default: 9222)
+BET365_URL       – Base URL of the bet365 site (default: https://www.bet365.it)
+BET365_CHROME    – Path to Chrome/Chromium binary for auto-launch
+                   (default: tries google-chrome, chromium, chromium-browser)
 """
 
 import asyncio
 import logging
 import os
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+import shutil
+import subprocess
+import time
 from typing import Any
 
-import httpx
+from playwright.async_api import async_playwright
 
 from oddsmatcher_backend.scraper.models import MatchOdds
 
 logger = logging.getLogger(__name__)
 
-# ── configuration ────────────────────────────────────────────────────────────
+# ── configuration ─────────────────────────────────────────────────────────────
 
-BOOKMAKER = "Bet365"
-API_KEY   = os.environ.get("ODDSPAPI_KEY", "9decc47d-a843-485d-9706-0ab370da052d")
-API_BASE  = "https://api.oddspapi.io/v4"
+BOOKMAKER  = "Bet365"
+CDP_PORT   = int(os.environ.get("BET365_CDP_PORT", "9222"))
+BASE_URL   = os.environ.get("BET365_URL", "https://www.bet365.it")
+CDP_URL    = f"http://localhost:{CDP_PORT}"
 
-# Days ahead to look for fixtures (API max window: 9 days)
-_LOOKAHEAD_DAYS = min(int(os.environ.get("ODDSPAPI_DAYS", "7")), 9)
+# Seconds to wait after navigation for bet365 JS to render odds
+_WAIT_AFTER_NAV = float(os.environ.get("BET365_WAIT_S", "15"))
 
-# ── market definitions ────────────────────────────────────────────────────────
-# market_id -> {outcome_id -> label}
+# ── league definitions ────────────────────────────────────────────────────────
+# (display_name, sport_key, url_fragment)
+# /#/AS/B1/  = All Sports → Calcio
+# /#/AS/B18/ = All Sports → Basket
+# /#/AS/B13/ = All Sports → Tennis
 
-_SOCCER_1X2  = {101: {101: "1", 102: "X", 103: "2"}}   # Full Time Result
-_BASKET_ML   = {111: {111: "1", 112: "2"}}               # Winner incl. OT
-_TENNIS_ML   = {121: {121: "1", 122: "2"}}               # Winner
-
-# ── sport descriptors ────────────────────────────────────────────────────────
-
-@dataclass
-class _Sport:
-    key: str          # sport_key used in MatchOdds
-    sport_id: int     # OddspAPI sportId
-    markets: dict     # {market_id: {outcome_id: label}}
-    market_label: str # "1X2" or "Moneyline"
-    # How many tournament batches to process (5 per batch, 1s rate-limit gap)
-    max_batches: int = 40
-
-
-_SPORTS = [
-    _Sport("calcio", 10, _SOCCER_1X2, "1X2",      max_batches=60),
-    _Sport("basket", 11, _BASKET_ML,  "Moneyline", max_batches=30),
-    _Sport("tennis", 12, _TENNIS_ML,  "Moneyline", max_batches=30),
+LEAGUES: list[tuple[str, str, str]] = [
+    ("Calcio",  "calcio", "/#/AS/B1/"),
+    ("Basket",  "basket", "/#/AS/B18/"),
+    ("Tennis",  "tennis", "/#/AS/B13/"),
 ]
 
-_SPORT_BY_KEY = {s.key: s for s in _SPORTS}
+# ── Chrome auto-launch ────────────────────────────────────────────────────────
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+_CHROME_CANDIDATES = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
+_CHROME_PROFILE    = os.path.expanduser("~/.bet365-chrome-profile")
 
-async def _get_json(client: httpx.AsyncClient, url: str, params: dict) -> Any:
-    """GET + parse JSON, with one automatic retry on 429."""
-    for attempt in range(3):
-        resp = await client.get(url, params=params)
-        if resp.status_code == 429:
-            retry_sec = 2.0
-            try:
-                data = resp.json()
-                retry_sec = float(
-                    data.get("error", {}).get("retryMs", 2000)
-                ) / 1000 + 0.1
-            except Exception:
-                pass
-            logger.debug("Rate-limited, waiting %.1fs (attempt %d)", retry_sec, attempt + 1)
-            await asyncio.sleep(retry_sec)
-            continue
-        resp.raise_for_status()
-        return resp.json()
-    raise RuntimeError(f"Failed after retries: GET {url}")
+_chrome_proc: subprocess.Popen | None = None
 
 
-def _date_range():
-    """Return (from_str, to_str) for the look-ahead window."""
-    today = datetime.now(timezone.utc).date()
-    end   = today + timedelta(days=_LOOKAHEAD_DAYS)
-    return today.isoformat(), end.isoformat()
+def _find_chrome() -> str | None:
+    """Return the path to the first available Chrome binary."""
+    custom = os.environ.get("BET365_CHROME")
+    if custom:
+        return custom
+    for name in _CHROME_CANDIDATES:
+        path = shutil.which(name)
+        if path:
+            return path
+    return None
 
 
-def _extract_odds(odds_fixture: dict, sport: _Sport) -> list[MatchOdds] | None:
-    """Extract MatchOdds from a single fixture entry in odds-by-tournaments response.
+def _chrome_is_running() -> bool:
+    """Quick check: can we reach the CDP endpoint?"""
+    import urllib.request
+    try:
+        urllib.request.urlopen(f"{CDP_URL}/json/version", timeout=2)
+        return True
+    except Exception:
+        return False
 
-    Returns None if Bet365 has no active 1X2/Moneyline odds for this fixture.
-    """
-    b365 = odds_fixture.get("bookmakerOdds", {}).get("bet365")
-    if not b365 or not b365.get("bookmakerIsActive"):
-        return None
-    if b365.get("suspended"):
-        return None
 
-    markets_data = b365.get("markets", {})
-    results: list[MatchOdds] = []
+def _launch_chrome() -> bool:
+    """Launch Chrome in the background.  Returns True if started."""
+    global _chrome_proc
+    if _chrome_is_running():
+        logger.info("[Bet365] CDP already reachable on port %d", CDP_PORT)
+        return True
 
-    for market_id, outcome_map in sport.markets.items():
-        mdata = markets_data.get(str(market_id))
-        if not mdata or not mdata.get("marketActive"):
-            continue
-
-        outcomes_data = mdata.get("outcomes", {})
-        odds_dict: dict[str, float] = {}
-
-        for oid, label in outcome_map.items():
-            o = outcomes_data.get(str(oid), {})
-            player = o.get("players", {}).get("0", {})
-            price = player.get("price")
-            if price and price > 1.0 and player.get("active"):
-                odds_dict[label] = round(float(price), 3)
-
-        # Need at least 2 outcomes (or 3 for 1X2) to be a valid market
-        min_outcomes = 2 if sport.market_label == "Moneyline" else 3
-        if len(odds_dict) < min_outcomes:
-            continue
-
-        results.append(
-            MatchOdds(
-                sport=sport.key,
-                league="",        # filled in after fixture lookup
-                home_team="",
-                away_team="",
-                event_name="",
-                event_time=odds_fixture.get("startTime"),
-                match_url=b365.get("fixturePath", "https://www.bet365.it"),
-                market=sport.market_label,
-                bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
-            )
+    binary = _find_chrome()
+    if not binary:
+        logger.error(
+            "[Bet365] No Chrome binary found. Install Chrome or set BET365_CHROME. "
+            "Cannot auto-launch."
         )
+        return False
 
-    return results if results else None
+    cmd = [
+        binary,
+        f"--remote-debugging-port={CDP_PORT}",
+        f"--user-data-dir={_CHROME_PROFILE}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-extensions",
+        "--disable-background-networking",
+    ]
+    logger.info("[Bet365] Launching Chrome: %s", " ".join(cmd))
+    try:
+        _chrome_proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        logger.error("[Bet365] Failed to launch Chrome: %s", e)
+        return False
+
+    # Wait up to 10s for CDP to become available
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if _chrome_is_running():
+            logger.info("[Bet365] Chrome ready on port %d", CDP_PORT)
+            return True
+        time.sleep(0.5)
+
+    logger.error("[Bet365] Chrome launched but CDP not reachable after 10s")
+    return False
 
 
-# ── scraper class ────────────────────────────────────────────────────────────
+# ── DOM text parser ───────────────────────────────────────────────────────────
+
+def _parse_page_text(text: str, league_name: str, sport_key: str) -> list[MatchOdds]:
+    """Parse bet365 innerText for a single sport page into MatchOdds rows.
+
+    bet365 renders event rows roughly as:
+        <team1>\\n<team2>\\n<date/time>\\n<odd1>\\n<oddX>\\n<odd2>   (soccer)
+        <team1>\\n<team2>\\n<date/time>\\n<odd1>\\n<odd2>             (basket/tennis)
+
+    We use a line-by-line heuristic:
+    1. Detect price lines (numeric, 1.01–100, one decimal minimum).
+    2. Work backwards from each price group to find team names and time.
+    """
+    import re
+
+    # ── helpers ──
+    _price_re = re.compile(r"^\d{1,3}[.,]\d{1,3}$")
+    _time_re  = re.compile(r"^\d{1,2}:\d{2}$")
+    _date_re  = re.compile(r"^\d{1,2}/\d{1,2}$")
+
+    def is_price(s: str) -> bool:
+        s = s.strip()
+        if not _price_re.match(s):
+            return False
+        try:
+            v = float(s.replace(",", "."))
+            return 1.01 <= v <= 200
+        except ValueError:
+            return False
+
+    def norm_price(s: str) -> float:
+        return round(float(s.strip().replace(",", ".")), 3)
+
+    is_soccer  = sport_key == "calcio"
+    n_prices   = 3 if is_soccer else 2
+
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+
+    results: list[MatchOdds] = []
+    i = 0
+    while i <= len(lines) - n_prices:
+        # Look for a window of n_prices consecutive price lines
+        if all(is_price(lines[i + k]) for k in range(n_prices)):
+            prices = [norm_price(lines[i + k]) for k in range(n_prices)]
+
+            # Scan backwards for time + two team names
+            j = i - 1
+            event_time = None
+            teams: list[str] = []
+
+            while j >= 0 and len(teams) < 2:
+                tok = lines[j]
+                if _time_re.match(tok) or _date_re.match(tok):
+                    if event_time is None:
+                        event_time = tok
+                elif not is_price(tok) and len(tok) > 1 and not tok.isdigit():
+                    teams.insert(0, tok)
+                j -= 1
+
+            if len(teams) < 2:
+                i += n_prices
+                continue
+
+            home, away = teams[-2], teams[-1]
+            event_name = f"{home} - {away}"
+
+            if is_soccer:
+                odds_dict: dict[str, float] = {"1": prices[0], "X": prices[1], "2": prices[2]}
+                market = "1X2"
+            else:
+                odds_dict = {"1": prices[0], "2": prices[1]}
+                market = "Moneyline"
+
+            results.append(MatchOdds(
+                sport=sport_key,
+                league=league_name,
+                home_team=home,
+                away_team=away,
+                event_name=event_name,
+                event_time=event_time,
+                match_url=BASE_URL,
+                market=market,
+                bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_dict}],
+            ))
+            i += n_prices
+        else:
+            i += 1
+
+    return results
+
+
+# ── scraper class ─────────────────────────────────────────────────────────────
 
 class Bet365Scraper:
-    """Pure-HTTP Bet365 scraper via OddspAPI.io."""
+    """CDP-based Bet365 scraper.
+
+    Connects to an existing real Chrome session via CDP so that Akamai
+    Bot Manager does not block the requests.  Falls back to auto-launching
+    Chrome if none is running.
+    """
 
     bookmaker_name = BOOKMAKER
 
     def __init__(self):
         self._log = logging.getLogger(f"{__name__}.Bet365Scraper")
 
-    # ── public interface (matches BasePlaywrightScraper protocol) ────────────
+    # ── public interface ──────────────────────────────────────────────────────
 
     async def scrape_all(self) -> list[MatchOdds]:
         """Scrape all supported sports."""
-        rows: list[MatchOdds] = []
-        async with httpx.AsyncClient(timeout=30) as client:
-            for sport in _SPORTS:
-                try:
-                    sport_rows = await self._scrape_sport_obj(client, sport)
-                    rows.extend(sport_rows)
-                    self._log.info("[Bet365] %-8s %d rows", sport.key, len(sport_rows))
-                except Exception:
-                    self._log.exception("[Bet365] Error scraping %s", sport.key)
-        self._log.info("[Bet365] Total: %d rows", len(rows))
-        return rows
+        return await self._run(None)
 
     async def scrape_sport(self, sport_key: str) -> list[MatchOdds]:
         """Scrape a single sport (e.g. 'calcio', 'basket', 'tennis')."""
-        sport = _SPORT_BY_KEY.get(sport_key)
-        if not sport:
-            self._log.warning("[Bet365] Unknown sport key: %s", sport_key)
-            return []
-        async with httpx.AsyncClient(timeout=30) as client:
-            return await self._scrape_sport_obj(client, sport)
+        return await self._run(sport_key)
 
-    # ── internal ──────────────────────────────────────────────────────────────
+    # ── internals ─────────────────────────────────────────────────────────────
 
-    async def _scrape_sport_obj(
-        self, client: httpx.AsyncClient, sport: _Sport
-    ) -> list[MatchOdds]:
-        date_from, date_to = _date_range()
-
-        # ── step 1: fetch all upcoming fixtures (includes team names) ──────
-        self._log.info("[Bet365] %s: fetching fixtures %s → %s", sport.key, date_from, date_to)
-        try:
-            fixtures_raw = await _get_json(client, f"{API_BASE}/fixtures", {
-                "sportId": sport.sport_id,
-                "from":    date_from,
-                "to":      date_to,
-                "apiKey":  API_KEY,
-            })
-        except Exception:
-            self._log.exception("[Bet365] %s: fixtures fetch failed", sport.key)
+    async def _run(self, sport_filter: str | None) -> list[MatchOdds]:
+        leagues = [lg for lg in LEAGUES if sport_filter is None or lg[1] == sport_filter]
+        if not leagues:
+            self._log.warning("[Bet365] No leagues to scrape for sport_filter=%s", sport_filter)
             return []
 
-        if not isinstance(fixtures_raw, list):
-            self._log.warning("[Bet365] %s: unexpected fixtures response: %s", sport.key, fixtures_raw)
+        # Ensure Chrome is available
+        if not _launch_chrome():
+            self._log.error("[Bet365] Cannot proceed without Chrome CDP")
             return []
 
-        self._log.info("[Bet365] %s: %d fixtures found", sport.key, len(fixtures_raw))
+        all_rows: list[MatchOdds] = []
 
-        # Build lookup: fixtureId → fixture dict
-        fixture_map: dict[str, dict] = {f["fixtureId"]: f for f in fixtures_raw}
-
-        # Extract unique tournament IDs (sorted by most upcoming fixtures first)
-        from collections import Counter
-        tid_counts = Counter(f["tournamentId"] for f in fixtures_raw)
-        tournament_ids = [tid for tid, _ in tid_counts.most_common()]
-
-        self._log.info("[Bet365] %s: %d unique tournaments", sport.key, len(tournament_ids))
-
-        # ── step 2: batch-fetch Bet365 odds by tournament ──────────────────
-        rows: list[MatchOdds] = []
-        max_tids = sport.max_batches * 5
-        batch_tournament_ids = tournament_ids[:max_tids]
-
-        for i in range(0, len(batch_tournament_ids), 5):
-            batch = batch_tournament_ids[i : i + 5]
-            if i > 0:
-                await asyncio.sleep(1.1)   # respect 1000ms rate-limit cooldown
+        async with async_playwright() as pw:
+            try:
+                browser = await pw.chromium.connect_over_cdp(CDP_URL)
+            except Exception as e:
+                self._log.error("[Bet365] CDP connect failed: %s", e)
+                return []
 
             try:
-                odds_raw = await _get_json(client, f"{API_BASE}/odds-by-tournaments", {
-                    "bookmaker":     "bet365",
-                    "tournamentIds": ",".join(str(x) for x in batch),
-                    "apiKey":        API_KEY,
-                })
-            except Exception:
-                self._log.debug("[Bet365] %s: batch %d failed, skipping", sport.key, i // 5)
-                continue
+                # Re-use the first context (real user profile) — don't create a new one
+                contexts = browser.contexts
+                if contexts:
+                    ctx = contexts[0]
+                else:
+                    ctx = await browser.new_context()
 
-            if not isinstance(odds_raw, list):
-                continue
+                for league_name, sport_key, fragment in leagues:
+                    try:
+                        rows = await self._scrape_league(ctx, league_name, sport_key, fragment)
+                        all_rows.extend(rows)
+                        self._log.info("[Bet365] %-8s %d rows", sport_key, len(rows))
+                    except Exception:
+                        self._log.exception("[Bet365] Error scraping %s", league_name)
 
-            for odds_fixture in odds_raw:
-                partial = _extract_odds(odds_fixture, sport)
-                if not partial:
-                    continue
+            finally:
+                # Disconnect only — do NOT close the browser (it's the user's Chrome)
+                await browser.close()
 
-                # Enrich with team / league names from fixture_map
-                fixture_id = odds_fixture.get("fixtureId", "")
-                fdata = fixture_map.get(fixture_id, {})
+        self._log.info("[Bet365] Total: %d rows", len(all_rows))
+        return all_rows
 
-                p1_id = odds_fixture.get("participant1Id")
-                p2_id = odds_fixture.get("participant2Id")
+    async def _scrape_league(
+        self,
+        ctx: Any,
+        league_name: str,
+        sport_key: str,
+        fragment: str,
+    ) -> list[MatchOdds]:
+        url = BASE_URL + fragment
 
-                home = (
-                    fdata.get("participant1Name")
-                    or fdata.get("participant1ShortName")
-                    or f"Team {p1_id}"
-                )
-                away = (
-                    fdata.get("participant2Name")
-                    or fdata.get("participant2ShortName")
-                    or f"Team {p2_id}"
-                )
-                league = fdata.get("tournamentName", "")
+        # Open a new tab so we don't disturb the user's browsing
+        page = await ctx.new_page()
+        try:
+            self._log.info("[Bet365] Navigating to %s", url)
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            except Exception as e:
+                self._log.warning("[Bet365] %s: goto timeout/error (will still try): %s",
+                                  league_name, type(e).__name__)
 
-                for mo in partial:
-                    mo.home_team  = home
-                    mo.away_team  = away
-                    mo.event_name = f"{home} - {away}"
-                    mo.league     = league
+            # Wait for JS rendering — bet365 is heavily dynamic
+            self._log.info("[Bet365] %s: waiting %.0fs for JS render…",
+                           league_name, _WAIT_AFTER_NAV)
+            await asyncio.sleep(_WAIT_AFTER_NAV)
 
-                rows.extend(partial)
+            # Grab visible text
+            try:
+                text = await page.evaluate("document.body.innerText")
+            except Exception as e:
+                self._log.error("[Bet365] %s: could not read page text: %s", league_name, e)
+                return []
 
-        self._log.info("[Bet365] %s: %d rows extracted", sport.key, len(rows))
-        return rows
+            self._log.debug("[Bet365] %s: text length=%d", league_name, len(text))
+
+            rows = _parse_page_text(text, league_name, sport_key)
+            self._log.info("[Bet365] %s: parsed %d events", league_name, len(rows))
+            return rows
+
+        finally:
+            await page.close()

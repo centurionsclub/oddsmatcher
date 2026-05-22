@@ -561,11 +561,16 @@ class BwinScraper(BasePlaywrightScraper):
         self._page = await self._context.new_page()
 
         try:
-            from playwright_stealth import stealth_async as _stealth_async
-            await _stealth_async(self._page)
-            self._log.info("[Bwin] playwright-stealth applied")
+            from playwright_stealth import Stealth as _Stealth
+            await _Stealth().apply_stealth_async(self._page)
+            self._log.info("[Bwin] playwright-stealth applied (v2)")
         except ImportError:
-            self._log.warning("[Bwin] playwright-stealth not installed")
+            try:
+                from playwright_stealth import stealth_async as _sa
+                await _sa(self._page)
+                self._log.info("[Bwin] playwright-stealth applied (v1)")
+            except ImportError:
+                self._log.warning("[Bwin] playwright-stealth not installed")
 
         # ── Step 1: warmup page to acquire session cookies + x-bwin-accessid ──
         access_id: list[str] = []  # mutable for closure capture

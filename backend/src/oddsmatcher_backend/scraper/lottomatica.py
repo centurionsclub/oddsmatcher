@@ -19,7 +19,7 @@ import re
 import unicodedata
 from typing import Any
 
-from playwright.async_api import Browser, BrowserContext, Page, Playwright, Response, async_playwright
+from playwright.async_api import Browser, BrowserContext, Page, Playwright, Request, async_playwright
 
 from oddsmatcher_backend.scraper.models import MatchOdds
 
@@ -180,60 +180,95 @@ class LottomaticaScraper:
     ) -> list[MatchOdds]:
         assert self._page is not None
 
-        captured: list[dict[str, Any]] = []
+        # Capture XHR/fetch REQUEST URLs (not response bodies — Akamai may replace
+        # the response body seen by Playwright with an HTML challenge even though the
+        # real browser receives the actual JSON).  We then re-fetch each URL from
+        # inside the browser via page.evaluate(fetch()) which uses the real session.
+        captured_api_urls: list[str] = []
+        _SKIP_EXTS = (".js", ".css", ".png", ".jpg", ".woff", ".woff2", ".svg",
+                      ".ico", ".gif", ".webp", ".ttf", ".map")
 
-        async def on_response(response: Response) -> None:
-            if "lottomatica.it" not in response.url:
+        def on_request(request: Request) -> None:
+            if request.resource_type not in ("xhr", "fetch"):
                 return
-            # Nessun filtro content-type — Lottomatica può usare tipi non standard
-            try:
-                body = await response.json()
-                captured.append({"url": response.url, "body": body})
-            except Exception:
-                pass
+            ru = request.url
+            if "lottomatica.it" not in ru:
+                return
+            if any(ru.endswith(ext) for ext in _SKIP_EXTS):
+                return
+            if ru not in captured_api_urls:
+                captured_api_urls.append(ru)
+                logger.debug("[Lottomatica] %s: API request captured: %s", league_name, ru[:120])
 
-        self._page.on("response", on_response)
+        self._page.on("request", on_request)
 
         url = BASE_URL + page_path
         logger.info("[Lottomatica] Loading %s", url)
         try:
-            # networkidle fa sempre timeout sulle SPA — durante i 65s on_response cattura le API
-            await self._page.goto(url, wait_until="networkidle", timeout=65_000)
-            logger.info("[Lottomatica] %s: networkidle raggiunto (inatteso)", league_name)
+            await self._page.goto(url, wait_until="domcontentloaded", timeout=30_000)
         except Exception as e:
-            logger.info("[Lottomatica] %s: networkidle timeout (atteso): %s", league_name, type(e).__name__)
+            logger.info("[Lottomatica] %s: goto: %s", league_name, type(e).__name__)
 
-        await self._page.wait_for_timeout(500)
-        self._page.remove_listener("response", on_response)
+        # Wait for SPA data requests to fire
+        await self._page.wait_for_timeout(5_000)
+        self._page.remove_listener("request", on_request)
 
-        logger.info("[Lottomatica] %s: captured %d JSON responses", league_name, len(captured))
+        logger.info("[Lottomatica] %s: %d API URLs captured", league_name, len(captured_api_urls))
 
-        # Log captured URLs + keys + body preview for debugging
+        if not captured_api_urls:
+            logger.warning("[Lottomatica] %s: no API URLs captured (SPA may not have loaded)", league_name)
+            return []
+
+        # Re-fetch each URL from inside the browser — uses real session cookies,
+        # bypasses Akamai's network-layer inspection of Python requests.
         import json as _json
-        for item in captured:
-            body = item["body"]
-            if isinstance(body, dict):
-                keys = list(body.keys())[:8]
-            elif isinstance(body, list):
-                keys = f"list[{len(body)}]"
-                if body and isinstance(body[0], dict):
-                    keys = f"list[{len(body)}] → {list(body[0].keys())[:6]}"
-            else:
-                keys = type(body).__name__
-            body_preview = _json.dumps(body, ensure_ascii=False)[:1000]
-            logger.info("[Lottomatica] CAPTURE url=%s keys=%s BODY=%s", item["url"], keys, body_preview)
+        for api_url in captured_api_urls:
+            try:
+                safe_url = api_url.replace("'", "%27")
+                result = await self._page.evaluate(f"""
+                    async () => {{
+                        try {{
+                            const r = await fetch('{safe_url}', {{
+                                credentials: 'include',
+                                headers: {{'Accept': 'application/json, */*'}}
+                            }});
+                            if (!r.ok) return {{error: r.status}};
+                            return await r.json();
+                        }} catch(e) {{ return {{error: String(e)}}; }}
+                    }}
+                """)
+            except Exception as exc:
+                logger.warning("[Lottomatica] %s: evaluate failed: %s", league_name, exc)
+                continue
 
-        # Parse: find the response containing event/odds data
-        for item in captured:
-            results = _parse_lottomatica_response(
-                item["url"], item["body"],
+            if isinstance(result, dict) and "error" in result:
+                logger.debug("[Lottomatica] %s: fetch error %s from %s",
+                             league_name, result["error"], api_url[:80])
+                continue
+
+            # Log structure for debugging
+            if isinstance(result, dict):
+                keys = list(result.keys())[:8]
+            elif isinstance(result, list):
+                keys = f"list[{len(result)}]"
+                if result and isinstance(result[0], dict):
+                    keys = f"list[{len(result)}] → {list(result[0].keys())[:6]}"
+            else:
+                keys = type(result).__name__
+            logger.info("[Lottomatica] CAPTURE url=%s keys=%s BODY=%s",
+                        api_url[:100], keys, _json.dumps(result, ensure_ascii=False)[:500])
+
+            rows = _parse_lottomatica_response(
+                api_url, result,
                 id_tournament, league_name, sport_key, league_slug, country_slug,
             )
-            if results:
-                logger.info("[Lottomatica] %s: parsed %d rows from %s", league_name, len(results), item["url"])
-                return results
+            if rows:
+                logger.info("[Lottomatica] %s: parsed %d rows from %s",
+                            league_name, len(rows), api_url[:80])
+                return rows
 
-        logger.warning("[Lottomatica] %s: no parseable response in %d captured", league_name, len(captured))
+        logger.warning("[Lottomatica] %s: no parseable data in %d captured URLs",
+                       league_name, len(captured_api_urls))
         return []
 
     @staticmethod
