@@ -14,6 +14,7 @@ from oddsmatcher_backend.scraper.eurobet import EurobetScraper
 from oddsmatcher_backend.scraper.lottomatica import LottomaticaScraper
 from oddsmatcher_backend.scraper.sisal import SisalScraper
 from oddsmatcher_backend.scraper.snai import SnaiScraper
+from oddsmatcher_backend.scraper.theoddsapi import TheOddsAPIScraper
 from oddsmatcher_backend.scraper.williamhill import WilliamHillScraper
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,23 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
     wh_rows       = await _run_direct("William Hill",  WilliamHillScraper, "williamhill")
     bet365_rows   = await _run_direct("Bet365",        Bet365Scraper,      "bet365")
 
+    # ── The Odds API — Pinnacle, Codere IT, MarathonBet ──────────────────────
+    # 1 HTTP request per sport (EU region), ~12 req per full scrape.
+    # Free plan: 500 req/month → safe at max 2 cycles/day.
+    theodds_rows = 0
+    if bookmaker in (None, "pinnacle", "codere", "marathonbet", "theoddsapi"):
+        try:
+            theodds_scraper = TheOddsAPIScraper()
+            theodds_results = await (theodds_scraper.scrape_sport(sport) if sport else theodds_scraper.scrape_all())
+            theodds_writer = SupabaseWriter()
+            theodds_rows = theodds_writer.write_direct_live_odds("TheOddsAPI", theodds_results)
+            logger.info(
+                "TheOddsAPI done: %d market rows → %d live_odds rows",
+                len(theodds_results), theodds_rows,
+            )
+        except Exception as exc:
+            logger.error("TheOddsAPI scrape cycle failed: %s", exc, exc_info=True)
+
     # ── Betfair Exchange — official API (httpx, no Playwright) ───────────────
     betfair_rows = 0
     if bookmaker in (None, "betfair"):
@@ -117,6 +135,7 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
         "betsson_live_rows":  betsson_rows,
         "wh_live_rows":       wh_rows,
         "bet365_live_rows":   bet365_rows,
+        "theodds_live_rows":  theodds_rows,
         "betfair_live_rows":  betfair_rows,
         "stale_cleaned":      cleaned,
         "duration_s":         round(elapsed, 1),

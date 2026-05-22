@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # ── configuration ─────────────────────────────────────────────────────────────
 
 BOOKMAKER = "Bet365"
-API_KEY   = os.environ.get("ODDSPAPI_KEY", "9decc47d-a843-485d-9706-0ab370da052d")
+API_KEY   = os.environ.get("ODDSPAPI_KEY", "49a74e6e-893d-40e6-8b19-5bb593c5143a")
 API_BASE  = "https://api.oddspapi.io/v4"
 
 _LOOKAHEAD_DAYS = min(int(os.environ.get("ODDSPAPI_DAYS", "7")), 9)
