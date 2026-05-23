@@ -497,14 +497,79 @@ async def _probe_api_httpx(proxy_url: str | None) -> list[MatchOdds]:
 class _EurobetPlaywrightScraper(BasePlaywrightScraper):
     """Playwright scraper for www.eurobet.it (Cloudflare, needs mobile proxy).
 
-    Uses BasePlaywrightScraper which captures ALL JSON responses (no URL filter)
-    and logs page HTML + title for debugging.
+    Uses patchright (CF-bypass fork of Playwright) when available.
+    Falls back to standard playwright + stealth if patchright not installed.
+    Captures ALL JSON responses (no URL filter) like BasePlaywrightScraper.
     """
 
     bookmaker_name = BOOKMAKER
     base_url       = BASE_URL
     warmup_path    = "/it/scommesse/"
     leagues        = PLAYWRIGHT_LEAGUES
+
+    async def _start(self) -> None:
+        """Override to use patchright (Cloudflare bypass) instead of plain Playwright."""
+        import urllib.parse as _up
+
+        # Prefer patchright — it patches Chromium's JA3/JA4 TLS fingerprint and
+        # navigator properties at the binary level, bypassing CF Turnstile.
+        try:
+            from patchright.async_api import async_playwright as _async_pw
+            self._log.info("[%s] Using patchright for Cloudflare bypass", self.bookmaker_name)
+            _using_patchright = True
+        except ImportError:
+            from playwright.async_api import async_playwright as _async_pw  # type: ignore[assignment]
+            self._log.warning("[%s] patchright not found — falling back to playwright", self.bookmaker_name)
+            _using_patchright = False
+
+        self._playwright = await _async_pw().start()
+
+        proxy_url = os.environ.get("PROXY_URL")
+        proxy = None
+        if proxy_url:
+            p = _up.urlparse(proxy_url)
+            proxy = {
+                "server":   f"{p.scheme}://{p.hostname}:{p.port}",
+                "username": p.username or "",
+                "password": p.password or "",
+            }
+            self._log.info("[%s] Usando proxy: %s:%s", self.bookmaker_name, p.hostname, p.port)
+
+        launch_args = ["--no-sandbox", "--disable-dev-shm-usage"]
+        if not _using_patchright:
+            launch_args.append("--disable-blink-features=AutomationControlled")
+
+        self._browser = await self._playwright.chromium.launch(
+            headless=False,
+            args=launch_args,
+            proxy=proxy,
+        )
+        self._context = await self._browser.new_context(
+            user_agent=_UA,
+            locale="it-IT",
+            timezone_id="Europe/Rome",
+            viewport={"width": 1280, "height": 900},
+        )
+        self._page = await self._context.new_page()
+
+        if not _using_patchright:
+            # Manual stealth only needed when patchright isn't patching natively
+            await self._page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined, configurable: true});
+                Object.defineProperty(navigator, 'plugins', {get: () => { const ps = [1,2,3,4,5]; ps.__proto__ = PluginArray.prototype; return ps; }, configurable: true});
+                Object.defineProperty(navigator, 'languages', {get: () => ['it-IT','it','en-US','en'], configurable: true});
+                if (!window.chrome) window.chrome = {runtime: {}};
+            """)
+
+        warmup_url = self.base_url + self.warmup_path
+        self._log.info("[%s] Warmup: %s", self.bookmaker_name, warmup_url)
+        try:
+            await self._page.goto(warmup_url, wait_until="domcontentloaded", timeout=40_000)
+            await self._page.wait_for_timeout(5000)
+            title = await self._page.title()
+            self._log.info("[%s] Warmup done — title: %s", self.bookmaker_name, title)
+        except Exception as e:
+            self._log.warning("[%s] Warmup failed: %s", self.bookmaker_name, e)
 
     def parse_response(
         self,

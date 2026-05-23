@@ -9,6 +9,7 @@ description = "CentroQuote scraper and odds pipeline for Oddsmatcher"
 requires-python = ">=3.11"
 dependencies = [
     "playwright>=1.40",
+    "patchright>=1.40",
     "playwright-stealth>=1.0",
     "beautifulsoup4>=4.12",
     "supabase>=2.0",
