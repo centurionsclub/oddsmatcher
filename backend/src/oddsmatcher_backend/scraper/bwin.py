@@ -335,28 +335,44 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
             # Over/Under detection
             if any(kw in mname for kw in ("Over/Under", "Total Goals", "Over Under", "Totale Reti", "Totale gol")):
                 sp_m = re.search(r"(\d+[.,]\d+)", mname)
-                if sp_m:
-                    sp = sp_m.group(1).replace(",", ".")
-                    if sp in UO_SPREADS_WANTED:
-                        odds_uo: dict[str, float] = {}
-                        for r in sels_raw:
-                            if not isinstance(r, dict):
-                                continue
-                            lbl = _get_name_str(r.get("name") or r.get("sourceName", ""))
-                            side = "Over" if "over" in lbl.lower() else ("Under" if "under" in lbl.lower() else None)
-                            if not side:
-                                continue
-                            f = _get_odds_float(r)
-                            if f:
-                                odds_uo[side] = f  # "Over" / "Under" — spread already in market name
-                        if odds_uo:
-                            results.append(MatchOdds(
-                                sport=fix_sport, league=fix_league,
-                                home_team=home, away_team=away,
-                                event_name=event_name, event_time=event_time,
-                                match_url=murl, market=f"Over/Under {sp}",
-                                bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_uo}],
-                            ))
+                sp = sp_m.group(1).replace(",", ".") if sp_m else None
+
+                # Bwin CDS returns market name as bare "Over/Under" with spread
+                # embedded in option labels (e.g. "Over 2.5" / "Under 2.5").
+                # Extract spread from the first option that has a decimal number.
+                if not sp:
+                    for r in sels_raw:
+                        if not isinstance(r, dict):
+                            continue
+                        lbl_raw = _get_name_str(r.get("name") or r.get("sourceName", ""))
+                        sp_lbl = re.search(r"(\d+[.,]\d+)", lbl_raw)
+                        if sp_lbl:
+                            sp = sp_lbl.group(1).replace(",", ".")
+                            break
+
+                if sp and sp in UO_SPREADS_WANTED:
+                    odds_uo: dict[str, float] = {}
+                    for r in sels_raw:
+                        if not isinstance(r, dict):
+                            continue
+                        lbl = _get_name_str(r.get("name") or r.get("sourceName", ""))
+                        # Strip spread from label if embedded: "Over 2.5" → "Over"
+                        lbl_clean = re.sub(r"\s+\d+[.,]\d+", "", lbl).strip()
+                        side = ("Over" if "over" in lbl_clean.lower()
+                                else ("Under" if "under" in lbl_clean.lower() else None))
+                        if not side:
+                            continue
+                        f = _get_odds_float(r)
+                        if f:
+                            odds_uo[side] = f
+                    if odds_uo:
+                        results.append(MatchOdds(
+                            sport=fix_sport, league=fix_league,
+                            home_team=home, away_team=away,
+                            event_name=event_name, event_time=event_time,
+                            match_url=murl, market=f"Over/Under {sp}",
+                            bookmaker_odds=[{"bookmaker": BOOKMAKER, "odds": odds_uo}],
+                        ))
 
     return results
 
