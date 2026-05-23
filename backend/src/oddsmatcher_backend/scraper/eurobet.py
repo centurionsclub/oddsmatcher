@@ -411,6 +411,47 @@ def _parse_detail_response(data: Any, league_name: str, sport_key: str) -> list[
     return results
 
 
+# ─── Next.js __NEXT_DATA__ parser ────────────────────────────────────────────
+
+def _parse_next_data(next_data: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
+    """Extract MatchOdds from Next.js __NEXT_DATA__ embedded in the page HTML.
+
+    Eurobet's Next.js pages include all the page data in a <script id="__NEXT_DATA__">
+    JSON tag.  The odds are somewhere in props.pageProps — we navigate the tree looking
+    for event/market structures.
+    """
+    if not isinstance(next_data, dict):
+        return []
+
+    # Navigate into pageProps
+    page_props = (
+        next_data.get("props", {}).get("pageProps", {})
+    )
+    if not page_props:
+        return []
+
+    # Try several known locations where Eurobet might put odds data
+    candidates: list[Any] = []
+
+    # Common Next.js patterns
+    for key in ("data", "initialData", "events", "avvenimenti", "fixtures",
+                "scommesse", "meetings", "meeting", "palinsesto", "offerte",
+                "betOffers", "odds", "content"):
+        val = page_props.get(key)
+        if val:
+            candidates.append(val)
+
+    # Also try the whole pageProps as-is
+    candidates.append(page_props)
+
+    for candidate in candidates:
+        rows = _parse_detail_response(candidate, league_name, sport_key)
+        if rows:
+            return rows
+
+    return []
+
+
 # ─── httpx direct API probe ──────────────────────────────────────────────────
 #
 # Cloudflare challenges HTML pages but often lets REST API requests through
@@ -570,6 +611,43 @@ class _EurobetPlaywrightScraper(BasePlaywrightScraper):
             self._log.info("[%s] Warmup done — title: %s", self.bookmaker_name, title)
         except Exception as e:
             self._log.warning("[%s] Warmup failed: %s", self.bookmaker_name, e)
+
+    async def _scrape_league(
+        self,
+        league_name: str,
+        sport_key: str,
+        page_path: str,
+    ) -> list[MatchOdds]:
+        """Override: first try API interception, then fall back to __NEXT_DATA__."""
+        import json as _j
+
+        # Run the normal interception pass (base class navigates + waits)
+        results = await super()._scrape_league(league_name, sport_key, page_path)
+        if results:
+            return results
+
+        # Eurobet uses Next.js ISR — odds are baked into __NEXT_DATA__, not AJAX calls
+        self._log.info("[%s] %s: trying __NEXT_DATA__ extraction", self.bookmaker_name, league_name)
+        try:
+            next_data = await self._page.evaluate(
+                "() => { const el = document.getElementById('__NEXT_DATA__'); "
+                "return el ? JSON.parse(el.textContent) : null; }"
+            )
+        except Exception as exc:
+            self._log.warning("[%s] %s: __NEXT_DATA__ eval failed: %s", self.bookmaker_name, league_name, exc)
+            return []
+
+        if not next_data:
+            self._log.warning("[%s] %s: no __NEXT_DATA__ element found", self.bookmaker_name, league_name)
+            return []
+
+        # Log structure for first-run discovery (first 3000 chars)
+        preview = _j.dumps(next_data, ensure_ascii=False)[:3000]
+        self._log.info("[%s-ND] %s: %s", self.bookmaker_name, league_name, preview)
+
+        rows = _parse_next_data(next_data, league_name, sport_key)
+        self._log.info("[%s] %s: %d rows from __NEXT_DATA__", self.bookmaker_name, league_name, len(rows))
+        return rows
 
     def parse_response(
         self,
