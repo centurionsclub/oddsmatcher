@@ -713,14 +713,46 @@ class _EurobetPlaywrightScraper(BasePlaywrightScraper):
         finally:
             self._page.remove_listener("response", _on_response)
 
+        # For tennis/basket: fetch top-disciplines to expose full item structure
+        if sport_key in ("tennis", "basket") and not rows:
+            td_path = (f"/prematch-homepage-service/api/v2/sport-schedule"
+                       f"/services/top-disciplines/1/{sport_key}")
+            try:
+                td_result = await self._page.evaluate(f"""
+                    async () => {{
+                        const r = await fetch('{td_path}', {{
+                            credentials: 'include',
+                            headers: {{'Accept': 'application/json'}}
+                        }});
+                        const data = await r.json();
+                        const groups = Array.isArray(data.result) ? data.result : [];
+                        const g0 = groups[0] || {{}};
+                        const items = g0.itemList || [];
+                        const i0 = items[0] || {{}};
+                        return JSON.stringify({{
+                            n_groups: groups.length,
+                            g0_keys: Object.keys(g0),
+                            g0_meeting: g0.meeting,
+                            n_items_g0: items.length,
+                            i0_keys: Object.keys(i0),
+                            i0_sample: JSON.stringify(i0).substring(0, 3000)
+                        }});
+                    }}
+                """)
+                self._log.info("[%s] %s top-disciplines debug: %s",
+                               self.bookmaker_name, league_name, td_result[:4000])
+            except Exception as exc:
+                self._log.warning("[%s] top-disciplines debug failed: %s",
+                                  self.bookmaker_name, exc)
+
         # Parse intercepted data — try both parsers on every response
         rows: list[MatchOdds] = []
         for resp_url, data in captured:
-            # Log preview for large responses (> 3 KB) to diagnose structure
+            # Skip tiny and CMS-only responses to reduce log noise
             try:
                 import json as _j2
                 preview = _j2.dumps(data)[:500]
-                if len(preview) > 100:
+                if "top-disciplines" in resp_url or "live-cards" in resp_url:
                     self._log.info("[%s] %s: preview %s → %s…",
                                    self.bookmaker_name, league_name, resp_url[-60:], preview[:400])
             except Exception:
