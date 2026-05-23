@@ -376,7 +376,7 @@ function getLeagueFlag(league: string): string {
   if (l.includes("premier") || l.includes("championship") || l.includes("fa cup") || l.includes("league one") || l.includes("league two")) return "🏴󠁧󠁢󠁥󠁮󠁧󠁿";
   if (l.includes("laliga") || l.includes("la liga") || l.includes("segunda")) return "🇪🇸";
   if (l.includes("bundesliga") || l.includes("bundesliga 2")) return "🇩🇪";
-  if (l.includes("ligue 1") || l.includes("ligue 2")) return "🇫🇷";
+  if (l.includes("ligue 1") || l.includes("ligue 2") || l.includes("roland garros") || l.includes("roland-garros")) return "🇫🇷";
   if (l.includes("champions") || l.includes("europa league") || l.includes("conference")) return "🇪🇺";
   if (l.includes("nba")) return "🇺🇸";
   if (l.includes("atp") || l.includes("wta")) return "🌍";
