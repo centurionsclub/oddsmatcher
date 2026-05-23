@@ -38,8 +38,15 @@ _TIMEOUT  = httpx.Timeout(30.0)
 _SEM        = 5         # max concurrent requests (throttle to avoid burst 429)
 _BATCH      = 5         # events per asyncio.gather batch
 _LIMIT      = 200       # max events to fetch from /events per sport
-_MAX_EVENTS = 90        # hard cap on total /odds calls per run
-                        # 90 odds + 3 /events calls = 93 total → under 100/hour quota
+
+# Per-sport cap on /odds calls — ensures every sport is covered even when
+# one sport (e.g. basket) has 150+ events that would crowd out the others.
+# Sum must stay ≤ 94 so total calls (94 odds + 3 /events) < 100/hour quota.
+_SPORT_CAP: dict[str, int] = {
+    "calcio": 25,   # football: season winding down, fewer events
+    "tennis": 35,   # tennis: Roland Garros + other tourneys
+    "basket": 34,   # basket: NBA finals etc.
+}
 
 # internal sport key → API slug
 _SPORT_SLUG = {
@@ -223,19 +230,24 @@ class CombinedOddsApiScraper:
                 if isinstance(res, list):
                     all_events.extend(res)
 
-            # Sort by date (nearest first) so we always cover the most urgent
-            # events if we hit the cap — far-future events are skipped last.
-            all_events.sort(key=lambda x: x[1] or "9999-99-99")
+            # Apply per-sport cap (nearest events first) so every sport gets
+            # fair representation regardless of how many events each has.
+            # e.g. basket might have 154 events but only takes its capped share,
+            # leaving room for tennis and calcio.
+            by_sport: dict[str, list[tuple[int, str, str]]] = {}
+            for ev in all_events:
+                by_sport.setdefault(ev[2], []).append(ev)
 
-            total_raw = len(all_events)
-            if len(all_events) > _MAX_EVENTS:
-                logger.warning(
-                    "[OddsAPI] %d events found, capping at %d to stay under quota",
-                    total_raw, _MAX_EVENTS,
-                )
-                all_events = all_events[:_MAX_EVENTS]
+            all_events = []
+            for sport_name, evs in by_sport.items():
+                evs.sort(key=lambda x: x[1] or "9999-99-99")  # nearest first
+                cap = _SPORT_CAP.get(sport_name, 30)
+                taken = evs[:cap]
+                logger.info("[OddsAPI] %s: using %d/%d events (cap=%d)",
+                            sport_name, len(taken), len(evs), cap)
+                all_events.extend(taken)
 
-            logger.info("[OddsAPI] fetching odds for %d/%d events", len(all_events), total_raw)
+            logger.info("[OddsAPI] fetching odds for %d total events", len(all_events))
 
             # ── 2. fetch odds for all capped events in batches ───────────────
             results: dict[str, list[MatchOdds]] = {"Bet365": [], "Eurobet": []}
@@ -255,10 +267,14 @@ class CombinedOddsApiScraper:
                         display = _BOOKMAKERS[bk_api]
                         results[display].extend(rows)
 
-        # log summary
+        # log summary per bookmaker and per sport
         for display, rows in results.items():
             n_ev = len({r.event_name for r in rows})
-            logger.info("[OddsAPI] %s: %d events, %d rows", display, n_ev, len(rows))
+            by_sport_count: dict[str, int] = {}
+            for r in rows:
+                by_sport_count[r.sport] = by_sport_count.get(r.sport, 0) + 1
+            logger.info("[OddsAPI] %s: %d events, %d rows | by sport: %s",
+                        display, n_ev, len(rows), by_sport_count)
         return results
 
     # ── internals ────────────────────────────────────────────────────────────
