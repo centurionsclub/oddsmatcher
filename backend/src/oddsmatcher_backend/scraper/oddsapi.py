@@ -35,9 +35,11 @@ _API_KEY  = os.environ.get(
 )
 _BASE     = "https://api.odds-api.io/v3"
 _TIMEOUT  = httpx.Timeout(30.0)
-_SEM      = 10          # max concurrent requests
-_BATCH    = 10          # events per asyncio.gather batch
-_LIMIT    = 200         # max events to fetch from /events per sport
+_SEM        = 5         # max concurrent requests (throttle to avoid burst 429)
+_BATCH      = 5         # events per asyncio.gather batch
+_LIMIT      = 200       # max events to fetch from /events per sport
+_MAX_EVENTS = 90        # hard cap on total /odds calls per run
+                        # 90 odds + 3 /events calls = 93 total → under 100/hour quota
 
 # internal sport key → API slug
 _SPORT_SLUG = {
@@ -213,32 +215,45 @@ class CombinedOddsApiScraper:
         all_sports = list(_SPORT_SLUG.keys())   # calcio, tennis, basket
 
         async with httpx.AsyncClient(timeout=_TIMEOUT, http2=True) as client:
-            # ── 1. fetch event IDs for each sport in parallel ────────────────
-            event_tasks = [self._get_event_ids(client, sport) for sport in all_sports]
-            sport_events: list[list[int]] = []
+            # ── 1. fetch event lists for each sport in parallel ──────────────
+            # Returns list of (event_id, date_str, sport) tuples
+            event_tasks = [self._get_events(client, sport) for sport in all_sports]
+            all_events: list[tuple[int, str, str]] = []
             for res in await asyncio.gather(*event_tasks, return_exceptions=True):
-                sport_events.append(res if isinstance(res, list) else [])
+                if isinstance(res, list):
+                    all_events.extend(res)
 
-            # ── 2. for each sport, fetch odds for all events in batches ──────
+            # Sort by date (nearest first) so we always cover the most urgent
+            # events if we hit the cap — far-future events are skipped last.
+            all_events.sort(key=lambda x: x[1] or "9999-99-99")
+
+            total_raw = len(all_events)
+            if len(all_events) > _MAX_EVENTS:
+                logger.warning(
+                    "[OddsAPI] %d events found, capping at %d to stay under quota",
+                    total_raw, _MAX_EVENTS,
+                )
+                all_events = all_events[:_MAX_EVENTS]
+
+            logger.info("[OddsAPI] fetching odds for %d/%d events", len(all_events), total_raw)
+
+            # ── 2. fetch odds for all capped events in batches ───────────────
             results: dict[str, list[MatchOdds]] = {"Bet365": [], "Eurobet": []}
 
-            for sport, event_ids in zip(all_sports, sport_events):
-                if not event_ids:
-                    continue
+            for i in range(0, len(all_events), _BATCH):
+                batch = all_events[i : i + _BATCH]
+                tasks = []
+                for ev_id, _date, sport in batch:
+                    bks = [bk for bk, sports in _BK_SPORTS.items() if sport in sports]
+                    bk_param = ",".join(bks)
+                    tasks.append(self._fetch_odds(client, ev_id, sport, bk_param))
 
-                # which bookmakers care about this sport?
-                bks = [bk for bk, sports in _BK_SPORTS.items() if sport in sports]
-                bk_param = ",".join(bks)
-
-                for i in range(0, len(event_ids), _BATCH):
-                    batch = event_ids[i : i + _BATCH]
-                    tasks = [self._fetch_odds(client, eid, sport, bk_param) for eid in batch]
-                    for outcome in await asyncio.gather(*tasks, return_exceptions=True):
-                        if not isinstance(outcome, dict):
-                            continue
-                        for bk_api, rows in outcome.items():
-                            display = _BOOKMAKERS[bk_api]
-                            results[display].extend(rows)
+                for outcome in await asyncio.gather(*tasks, return_exceptions=True):
+                    if not isinstance(outcome, dict):
+                        continue
+                    for bk_api, rows in outcome.items():
+                        display = _BOOKMAKERS[bk_api]
+                        results[display].extend(rows)
 
         # log summary
         for display, rows in results.items():
@@ -248,22 +263,40 @@ class CombinedOddsApiScraper:
 
     # ── internals ────────────────────────────────────────────────────────────
 
-    async def _get_event_ids(self, client: httpx.AsyncClient, sport: str) -> list[int]:
+    async def _get_events(
+        self, client: httpx.AsyncClient, sport: str
+    ) -> list[tuple[int, str, str]]:
+        """Return list of (event_id, date_str, sport) for active events."""
         slug = _SPORT_SLUG[sport]
         async with self._sem:
             resp = await client.get(
                 f"{_BASE}/events",
                 params={"apiKey": _API_KEY, "sport": slug, "limit": _LIMIT},
             )
+        if resp.status_code == 429:
+            logger.error("[OddsAPI] /events %s → 429 rate limited (quota exhausted)", slug)
+            return []
         if resp.status_code != 200:
             logger.warning("[OddsAPI] /events %s → %d", slug, resp.status_code)
             return []
 
-        events = resp.json()
-        result = [
-            e["id"] for e in events
-            if e.get("status") not in ("settled", "cancelled", "postponed")
-        ]
+        try:
+            data = resp.json()
+            if not isinstance(data, list):
+                logger.warning("[OddsAPI] /events %s unexpected response: %s", slug, str(data)[:200])
+                return []
+        except Exception:
+            return []
+
+        result = []
+        for e in data:
+            if not isinstance(e, dict):
+                continue
+            if e.get("status") in ("settled", "cancelled", "postponed"):
+                continue
+            date_str = e.get("date") or ""
+            result.append((e["id"], date_str, sport))
+
         logger.info("[OddsAPI] /events %s: %d active events", slug, len(result))
         return result
 
@@ -289,10 +322,15 @@ class CombinedOddsApiScraper:
                 logger.debug("[OddsAPI] event %d: %s", event_id, exc)
                 return {}
 
+        if resp.status_code == 429:
+            logger.warning("[OddsAPI] event %d → 429 rate limited", event_id)
+            return {}
         if resp.status_code != 200:
             return {}
         try:
             data = resp.json()
+            if not isinstance(data, dict):
+                return {}
         except Exception:
             return {}
 
