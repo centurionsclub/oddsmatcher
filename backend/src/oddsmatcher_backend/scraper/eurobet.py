@@ -636,68 +636,156 @@ class _EurobetPlaywrightScraper(BasePlaywrightScraper):
         sport_key: str,
         page_path: str,
     ) -> list[MatchOdds]:
-        """Override: navigate the page (CF bypass via patchright), then call
-        detail-service API via page.evaluate() using the browser's session cookies."""
-        import json as _j
+        """Navigate the league page and capture odds data via two strategies:
 
-        # Navigate to league page to ensure session cookies are valid
+        1. Native interception — capture JSON responses the SPA makes after React
+           hydration (detail-service, prematch-*, _next/data).  We wait 12 s to
+           allow the full client-side fetch cycle to complete.
+
+        2. Manual page.evaluate fetch — if interception yields nothing, call the
+           detail-service API ourselves from within the browser context so that
+           session cookies are included automatically.
+        """
+        import json as _j
+        from typing import Any as _Any
+
+        captured: list[tuple[str, _Any]] = []
+
+        # ── Strategy 1: intercept native browser responses ────────────────────
+        _INTERCEPT_KEYWORDS = ("detail-service", "prematch-", "sport-schedule",
+                               "avveniment", "_next/data")
+
+        async def _on_response(response: Any) -> None:
+            resp_url = response.url
+            if not any(k in resp_url for k in _INTERCEPT_KEYWORDS):
+                return
+            try:
+                ct = response.headers.get("content-type", "")
+                if "json" not in ct:
+                    return
+                text = await response.text()
+                if not text or not text.strip().startswith(("{", "[")):
+                    return
+                data = _j.loads(text)
+                captured.append((resp_url, data))
+                self._log.info("[%s] %s: ✓ intercepted %s (len=%d)",
+                               self.bookmaker_name, league_name, resp_url[-100:], len(text))
+            except Exception as exc:
+                self._log.debug("[%s] intercept parse error: %s", self.bookmaker_name, exc)
+
+        self._page.on("response", _on_response)
+
         url = self.base_url + page_path
         self._log.info("[%s] Loading %s", self.bookmaker_name, url)
         try:
             await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-            await self._page.wait_for_timeout(2000)
+            # Wait for React hydration + async data fetches (SPA needs time)
+            await self._page.wait_for_timeout(12_000)
             title = await self._page.title()
-            self._log.info("[%s] %s: title=%s", self.bookmaker_name, league_name, title)
+            self._log.info("[%s] %s: title=%s intercepted=%d", self.bookmaker_name,
+                           league_name, title, len(captured))
+
+            # Log what resources the page actually loaded (diagnostic)
+            try:
+                resource_urls: list[str] = await self._page.evaluate("""
+                    () => performance.getEntriesByType('resource')
+                         .filter(r => r.name.includes('detail-service')
+                                   || r.name.includes('prematch-')
+                                   || r.name.includes('sport-schedule'))
+                         .map(r => r.name)
+                """)
+                for ru in resource_urls[:20]:
+                    self._log.info("[%s] %s: page loaded: %s", self.bookmaker_name, league_name, ru[-120:])
+                if not resource_urls:
+                    self._log.info("[%s] %s: page loaded NO detail-service/prematch resources",
+                                   self.bookmaker_name, league_name)
+            except Exception:
+                pass
         except Exception as exc:
             self._log.warning("[%s] %s: navigation error: %s", self.bookmaker_name, league_name, exc)
+        finally:
+            self._page.remove_listener("response", _on_response)
 
-        # Call detail-service API from within the browser (same-origin, cookies included)
+        # Parse intercepted data
+        rows: list[MatchOdds] = []
+        for resp_url, data in captured:
+            r = _parse_detail_response(data, league_name, sport_key)
+            if r:
+                self._log.info("[%s] %s: %d rows from intercepted %s",
+                               self.bookmaker_name, league_name, len(r), resp_url[-80:])
+                rows.extend(r)
+
+        if rows:
+            return rows
+
+        # ── Strategy 2: manual fetch from browser context ─────────────────────
         alias_entry = _LEAGUE_ALIASES.get(league_name)
         if not alias_entry:
             self._log.warning("[%s] %s: no alias configured", self.bookmaker_name, league_name)
             return []
 
         endpoint_type, path = alias_entry
-        api_path = f"/detail-service/sport-schedule/services/{endpoint_type}/{path}?prematch=1&live=0"
-        self._log.info("[%s] %s: page.evaluate fetch %s", self.bookmaker_name, league_name, api_path)
-        try:
-            result = await self._page.evaluate(f"""
-                async () => {{
-                    try {{
-                        const r = await fetch('{api_path}', {{
-                            credentials: 'include',
-                            headers: {{
-                                'Accept': 'application/json, text/plain, */*',
-                                'X-Requested-With': 'XMLHttpRequest',
-                            }}
-                        }});
-                        const text = await r.text();
-                        return {{status: r.status, body: text.substring(0, 8000)}};
-                    }} catch(e) {{
-                        return {{status: 0, error: String(e)}};
+        page_url = self.base_url + page_path  # used as Referer
+
+        # Try several parameter combinations — the working one may differ by endpoint
+        param_variants = [
+            "?prematch=1&live=0",
+            "?prematch=1&live=0&lang=it",
+            "?prematch=1",
+            "",
+        ]
+        for params in param_variants:
+            api_path = f"/detail-service/sport-schedule/services/{endpoint_type}/{path}{params}"
+            self._log.info("[%s] %s: manual fetch %s", self.bookmaker_name, league_name, api_path)
+            try:
+                result = await self._page.evaluate(f"""
+                    async () => {{
+                        try {{
+                            const r = await fetch('{api_path}', {{
+                                credentials: 'include',
+                                headers: {{
+                                    'Accept': 'application/json, text/plain, */*',
+                                    'Referer': '{page_url}',
+                                }}
+                            }});
+                            const text = await r.text();
+                            return {{status: r.status, body: text.substring(0, 8000)}};
+                        }} catch(e) {{
+                            return {{status: 0, error: String(e)}};
+                        }}
                     }}
-                }}
-            """)
-        except Exception as exc:
-            self._log.warning("[%s] %s: page.evaluate failed: %s", self.bookmaker_name, league_name, exc)
-            return []
+                """)
+            except Exception as exc:
+                self._log.warning("[%s] %s: page.evaluate failed: %s",
+                                  self.bookmaker_name, league_name, exc)
+                continue
 
-        status = result.get("status", 0)
-        body_text = result.get("body", "")
-        self._log.info("[%s] %s: fetch status=%d body_len=%d preview=%s",
-                       self.bookmaker_name, league_name, status, len(body_text), body_text[:300])
+            status = result.get("status", 0)
+            body_text = result.get("body", "")
+            self._log.info("[%s] %s: manual fetch status=%d params=%r preview=%s",
+                           self.bookmaker_name, league_name, status,
+                           params or "(none)", body_text[:250])
 
-        if status != 200 or not body_text:
-            return []
+            if status != 200 or not body_text:
+                continue
+            try:
+                data = _j.loads(body_text)
+            except Exception:
+                continue
 
-        try:
-            data = _j.loads(body_text)
-        except Exception:
-            self._log.warning("[%s] %s: response is not JSON", self.bookmaker_name, league_name)
-            return []
+            # Check for the "no data" soft error
+            if isinstance(data, dict) and data.get("code") == 100:
+                self._log.info("[%s] %s: API code=100 for params=%r, trying next",
+                               self.bookmaker_name, league_name, params)
+                continue
 
-        rows = _parse_detail_response(data, league_name, sport_key)
-        self._log.info("[%s] %s: %d rows from detail-service", self.bookmaker_name, league_name, len(rows))
+            r = _parse_detail_response(data, league_name, sport_key)
+            if r:
+                self._log.info("[%s] %s: %d rows from manual fetch params=%r",
+                               self.bookmaker_name, league_name, len(r), params)
+                rows.extend(r)
+                break
+
         return rows
 
     def parse_response(
