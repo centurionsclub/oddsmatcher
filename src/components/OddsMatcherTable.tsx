@@ -1257,6 +1257,17 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         result = result.filter(o => (o as any).sport === "basket" && ((o as any).scommessa || "").startsWith("1 "));
       } else if (selectedMarket === "Basket 2") {
         result = result.filter(o => (o as any).sport === "basket" && ((o as any).scommessa || "").startsWith("2 "));
+      } else if (selectedMarket.startsWith("Over ") || selectedMarket.startsWith("Under ")) {
+        // O/U: scommessa = "Over" or "Under", spread is in market name ("Over/Under 2.5")
+        const side = selectedMarket.split(" ")[0];    // "Over" | "Under"
+        const spread = selectedMarket.split(" ")[1];  // "2.5"
+        result = result.filter(o => {
+          const opp = o as any;
+          if (opp.sport !== "calcio") return false;
+          const scommessaSide = (opp.scommessa || "").split(" vs ")[0].trim();
+          return scommessaSide.toLowerCase() === side.toLowerCase()
+            && (opp.market || "").includes(spread);
+        });
       } else {
         result = result.filter(o => {
           const opp = o as any;
@@ -1522,6 +1533,12 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       filtered = filtered.filter(r => r.sport === "basket" && r.outcome === "1");
     } else if (selectedMarket === "Basket 2") {
       filtered = filtered.filter(r => r.sport === "basket" && r.outcome === "2");
+    } else if (selectedMarket.startsWith("Over ") || selectedMarket.startsWith("Under ")) {
+      const side = selectedMarket.split(" ")[0];
+      const spread = selectedMarket.split(" ")[1];
+      filtered = filtered.filter(r => r.sport === "calcio"
+        && r.outcome.toLowerCase() === side.toLowerCase()
+        && r.market.includes(spread));
     } else if (selectedMarket) {
       // Calcio market: filter by outcome and exclude other sports
       filtered = filtered.filter(r => r.sport === "calcio" && r.outcome.toLowerCase() === selectedMarket.toLowerCase());
