@@ -464,6 +464,22 @@ def _parse_next_data(next_data: Any, league_name: str, sport_key: str) -> list[M
 # Discipline IDs (guessed from URL patterns — adjust if response confirms them):
 #   4 = calcio,  5 = tennis,  7 = basket
 
+# league_name → (discipline_id, alias) for detail-service API
+_LEAGUE_ALIASES: dict[str, tuple[str, str]] = {
+    "Serie A":           ("4", "serie-a"),
+    "Serie B":           ("4", "serie-b"),
+    "Premier League":    ("4", "premier-league"),
+    "La Liga":           ("4", "primera-division"),
+    "Bundesliga":        ("4", "bundesliga"),
+    "Ligue 1":           ("4", "ligue-1"),
+    "Champions League":  ("4", "champions-league"),
+    "Conference League": ("4", "conference-league"),
+    "Tennis":            ("5", "atp"),
+    "NBA":               ("7", "nba"),
+    "Eurolega":          ("7", "eurolega"),
+    "Serie A Basket":    ("7", "serie-a"),
+}
+
 _API_LEAGUES: list[tuple[str, str, str, str]] = [
     # (league_name, sport_key, discipline_id, alias)
     ("Serie A",           "calcio", "4", "serie-a"),
@@ -618,35 +634,67 @@ class _EurobetPlaywrightScraper(BasePlaywrightScraper):
         sport_key: str,
         page_path: str,
     ) -> list[MatchOdds]:
-        """Override: first try API interception, then fall back to __NEXT_DATA__."""
+        """Override: navigate the page (CF bypass via patchright), then call
+        detail-service API via page.evaluate() using the browser's session cookies."""
         import json as _j
 
-        # Run the normal interception pass (base class navigates + waits)
-        results = await super()._scrape_league(league_name, sport_key, page_path)
-        if results:
-            return results
-
-        # Eurobet uses Next.js ISR — odds are baked into __NEXT_DATA__, not AJAX calls
-        self._log.info("[%s] %s: trying __NEXT_DATA__ extraction", self.bookmaker_name, league_name)
+        # Navigate to league page to ensure session cookies are valid
+        url = self.base_url + page_path
+        self._log.info("[%s] Loading %s", self.bookmaker_name, url)
         try:
-            next_data = await self._page.evaluate(
-                "() => { const el = document.getElementById('__NEXT_DATA__'); "
-                "return el ? JSON.parse(el.textContent) : null; }"
-            )
+            await self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+            await self._page.wait_for_timeout(2000)
+            title = await self._page.title()
+            self._log.info("[%s] %s: title=%s", self.bookmaker_name, league_name, title)
         except Exception as exc:
-            self._log.warning("[%s] %s: __NEXT_DATA__ eval failed: %s", self.bookmaker_name, league_name, exc)
+            self._log.warning("[%s] %s: navigation error: %s", self.bookmaker_name, league_name, exc)
+
+        # Call detail-service API from within the browser (same-origin, cookies included)
+        disc, alias = _LEAGUE_ALIASES.get(league_name, ("", ""))
+        if not disc:
+            self._log.warning("[%s] %s: no alias configured", self.bookmaker_name, league_name)
             return []
 
-        if not next_data:
-            self._log.warning("[%s] %s: no __NEXT_DATA__ element found", self.bookmaker_name, league_name)
+        api_path = f"/detail-service/sport-schedule/services/meeting/{disc}/{alias}?prematch=1&live=0"
+        self._log.info("[%s] %s: page.evaluate fetch %s", self.bookmaker_name, league_name, api_path)
+        try:
+            result = await self._page.evaluate(f"""
+                async () => {{
+                    try {{
+                        const r = await fetch('{api_path}', {{
+                            credentials: 'include',
+                            headers: {{
+                                'Accept': 'application/json, text/plain, */*',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            }}
+                        }});
+                        const text = await r.text();
+                        return {{status: r.status, body: text.substring(0, 8000)}};
+                    }} catch(e) {{
+                        return {{status: 0, error: String(e)}};
+                    }}
+                }}
+            """)
+        except Exception as exc:
+            self._log.warning("[%s] %s: page.evaluate failed: %s", self.bookmaker_name, league_name, exc)
             return []
 
-        # Log structure for first-run discovery (first 3000 chars)
-        preview = _j.dumps(next_data, ensure_ascii=False)[:3000]
-        self._log.info("[%s-ND] %s: %s", self.bookmaker_name, league_name, preview)
+        status = result.get("status", 0)
+        body_text = result.get("body", "")
+        self._log.info("[%s] %s: fetch status=%d body_len=%d preview=%s",
+                       self.bookmaker_name, league_name, status, len(body_text), body_text[:300])
 
-        rows = _parse_next_data(next_data, league_name, sport_key)
-        self._log.info("[%s] %s: %d rows from __NEXT_DATA__", self.bookmaker_name, league_name, len(rows))
+        if status != 200 or not body_text:
+            return []
+
+        try:
+            data = _j.loads(body_text)
+        except Exception:
+            self._log.warning("[%s] %s: response is not JSON", self.bookmaker_name, league_name)
+            return []
+
+        rows = _parse_detail_response(data, league_name, sport_key)
+        self._log.info("[%s] %s: %d rows from detail-service", self.bookmaker_name, league_name, len(rows))
         return rows
 
     def parse_response(
