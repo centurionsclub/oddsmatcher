@@ -58,7 +58,10 @@ export function useOddsSearch() {
             sport,
             market,
             partita: filters.partita || "",
-            campionato: filters.campionato || "",
+            // campionato NON viene inviato all'edge function: filtrare per campionato
+            // prima del matching rimuoverebbe i dati exchange (Betfair) che non hanno
+            // quel campionato, facendo scattare erroneamente la modalità punta-punta.
+            // Il filtro campionato viene applicato in OddsMatcherTable.applyFilters.
           },
         }
       );
