@@ -1,7 +1,7 @@
-"""Bet365 / BetFlag / 888sport scraper via centroquote.it comparison site.
+"""Bet365 / BetFlag scraper via centroquote.it comparison site.
 
 Navigates centroquote.it league/match pages with Playwright, extracts
-odds for Bet365, BetFlag Bookmaker and 888sport for 1X2, Double Chance,
+odds for Bet365 and BetFlag Bookmaker for 1X2, Double Chance,
 BTTS, and Over/Under markets.
 
 Configuration
@@ -27,7 +27,7 @@ ROME_TZ   = ZoneInfo("Europe/Rome")
 BASE_URL  = "https://www.centroquote.it"
 
 # Bookmakers to extract from centroquote pages
-_TARGET_BOOKMAKERS = {"Bet365", "BetFlag Bookmaker", "888sport"}
+_TARGET_BOOKMAKERS = {"Bet365", "BetFlag Bookmaker"}
 
 CONCURRENCY    = 8
 PAGE_WAIT_MS   = 2000
@@ -61,8 +61,6 @@ _BM_ALIASES: dict[str, str] = {
     "bet365":      "Bet365",
     "betflagit":   "BetFlag Bookmaker",
     "betflag":     "BetFlag Bookmaker",
-    "888sport":    "888sport",
-    "888":         "888sport",
 }
 
 def _normalise_bm(raw: str) -> str | None:

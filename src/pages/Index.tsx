@@ -10,11 +10,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getBetfairUrl } from "@/lib/utils";
 
 const BOOKMAKERS = [
-  "888sport", "Bet365", "BetFlag Bookmaker", "Betsson", "Bwin",
+  "Bet365", "BetFlag Bookmaker", "Betsson", "Bwin",
   "Eurobet", "GoldBet", "Lottomatica", "NetWin",
   "Planetwin365", "Sisal", "Snai", "William Hill",
 ];
-// Note: 888sport, Bet365, BetFlag Bookmaker scraped from centroquote.it
+// Note: Bet365, BetFlag Bookmaker scraped from centroquote.it
 
 const EXCHANGES = [
   "Betfair Exchange", "BetFlag Exchange",
