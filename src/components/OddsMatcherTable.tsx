@@ -1245,6 +1245,30 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       const search = committedFilters.partita.toLowerCase();
       result = result.filter(o => o.eventName.toLowerCase().includes(search));
     }
+    if (committedFilters.campionato) {
+      const search = committedFilters.campionato.toLowerCase();
+      result = result.filter(o => ((o as any).league || "").toLowerCase().includes(search));
+    }
+    // Filtro mercato
+    const selectedMarket = committedFilters.selectedMarkets?.[0] ?? "";
+    if (selectedMarket) {
+      if (selectedMarket === "Tennis 1") {
+        result = result.filter(o => (o as any).sport === "tennis" && ((o as any).scommessa || "").startsWith("1 "));
+      } else if (selectedMarket === "Tennis 2") {
+        result = result.filter(o => (o as any).sport === "tennis" && ((o as any).scommessa || "").startsWith("2 "));
+      } else if (selectedMarket === "Basket 1") {
+        result = result.filter(o => (o as any).sport === "basket" && ((o as any).scommessa || "").startsWith("1 "));
+      } else if (selectedMarket === "Basket 2") {
+        result = result.filter(o => (o as any).sport === "basket" && ((o as any).scommessa || "").startsWith("2 "));
+      } else {
+        result = result.filter(o => {
+          const opp = o as any;
+          if (opp.sport !== "calcio") return false;
+          const outcome = (opp.scommessa || "").split(" vs ")[0].trim();
+          return outcome.toLowerCase() === selectedMarket.toLowerCase();
+        });
+      }
+    }
     // Filtro liquidità: mostra solo opportunità con volume exchange >= lay stake calcolato
     if (committedFilters.filtroLiquidita) {
       const stake = parseFloat((committedFilters.stakePunta || "0").replace(",", ".")) || 0;
