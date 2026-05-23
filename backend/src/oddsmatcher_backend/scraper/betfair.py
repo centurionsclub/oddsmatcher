@@ -36,6 +36,43 @@ SPORT_IDS = {
 }
 BF_SPORT_NAME = {v: k for k, v in SPORT_IDS.items()}
 
+# Normalise Betfair competition names → canonical names used by other bookmakers.
+# Betfair uses country-prefixed names ("Italian Serie A") or play-off suffixes
+# ("German Playoff") that would break league-based filtering on the frontend.
+LEAGUE_NAME_MAP: dict[str, str] = {
+    # Italy
+    "italian serie a":              "Serie A",
+    "italian serie b":              "Serie B",
+    "coppa italia":                 "Coppa Italia",
+    # England
+    "english premier league":       "Premier League",
+    "english championship":         "Championship",
+    "sky bet championship":         "Championship",
+    "fa cup":                       "FA Cup",
+    # Germany — playoff/cup are still part of German football season
+    "german bundesliga":            "Bundesliga",
+    "german playoff":               "Bundesliga",
+    "german cup":                   "DFB Pokal",
+    # Spain
+    "spanish la liga":              "La Liga",
+    # France
+    "french ligue 1":               "Ligue 1",
+    "french ligue 1 playoffs":      "Ligue 1",
+    # European cups
+    "uefa champions league":        "Champions League",
+    "uefa europa league":           "Europa League",
+    "uefa europa conference league":"Conference League",
+    # Scotland
+    "scottish fa cup":              "Scottish FA Cup",
+    "scottish premiership":         "Scottish Premiership",
+}
+
+
+def _normalise_league(raw: str) -> str:
+    """Map a Betfair competition name to the canonical name used by other bookmakers."""
+    return LEAGUE_NAME_MAP.get(raw.lower(), raw)
+
+
 # Target competitions for football — keyword sul nome (con prefisso paese
 # dove il nome da solo è troppo generico, es. "premier league").
 # Betfair include il paese nel nome: "English Premier League", "Italian Serie A", ecc.
@@ -250,7 +287,7 @@ def _extract_rows(
     raw_name   = event.get("name", "Unknown")
     event_name = re.sub(r"\s+v\s+", " - ", raw_name)
     event_id   = str(event.get("id", ""))
-    league     = competition.get("name", "Unknown")
+    league     = _normalise_league(competition.get("name", "Unknown"))
 
     # runner selectionId → (name, sortPriority)
     runner_map: dict[int, tuple[str, int]] = {}
