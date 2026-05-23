@@ -5,9 +5,9 @@ Two-tier approach:
      Provides: calcio 1X2 / DC / BTTS for the main leagues.
      Limitation: no O/U, no tennis, no basket (chooseSport 2/3 → retCode:-1).
 
-  2. Playwright + mobile proxy — www.eurobet.it main site.
+  2. Playwright + mobile proxy — www.eurobet.it main site via BasePlaywrightScraper.
      Provides: calcio O/U + ALL tennis + ALL basket.
-     Intercepts the detail-service REST API responses the SPA fires automatically.
+     Intercepts ALL JSON responses (no URL filter), same pattern as Sisal/Lottomatica.
 
 Both sets of results are merged before returning.  Duplicates on the same
 (event_name, market) key are resolved in favour of the webeb source (it is
@@ -15,16 +15,16 @@ faster and more reliable for 1X2/BTTS/DC).
 """
 
 import asyncio
-import json as _json
 import logging
 import os
 import re
-import urllib.parse
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
 
+from oddsmatcher_backend.scraper._base_playwright import BasePlaywrightScraper
 from oddsmatcher_backend.scraper.models import MatchOdds
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ BET_TYPES: list[tuple[int, str]] = [
 # ─── Playwright league config (main site) ────────────────────────────────────
 
 # (league_name, sport_key, page_path)
-# These pages trigger detail-service API calls that we intercept.
+# These pages trigger JSON API calls that BasePlaywrightScraper intercepts.
 PLAYWRIGHT_LEAGUES: list[tuple[str, str, str]] = [
     # Calcio — for O/U (1X2/DC/BTTS already covered by webeb)
     ("Serie A",           "calcio", "/it/scommesse/calcio/serie-a/"),
@@ -93,9 +93,6 @@ PLAYWRIGHT_LEAGUES: list[tuple[str, str, str]] = [
     ("Eurolega",          "basket", "/it/scommesse/basket/competizioni-europee/eurolega/"),
     ("Serie A Basket",    "basket", "/it/scommesse/basket/italia/serie-a/"),
 ]
-
-_SKIP_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".woff", ".woff2", ".css",
-              ".ico", ".svg", ".webp", ".mp4")
 
 # ─── webeb parser ─────────────────────────────────────────────────────────────
 
@@ -251,11 +248,10 @@ def _map_outcome(raw: str) -> str:
 
 
 def _parse_detail_response(data: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
-    """Parse Eurobet detail-service JSON response.
+    """Parse Eurobet detail-service / SPA JSON response.
 
-    Eurobet's detail-service returns a nested structure.  We support several
-    known response shapes and fall back gracefully when unknown keys are seen.
-    The first run in production will log the full body so we can refine this.
+    Supports several known response shapes and falls back gracefully.
+    Full debug logging so we can learn the real structure on first run.
     """
     if not data or not isinstance(data, dict):
         return []
@@ -284,7 +280,7 @@ def _parse_detail_response(data: Any, league_name: str, sport_key: str) -> list[
                      list(result_node.keys())[:10] if isinstance(result_node, dict) else type(result_node))
         return []
 
-    logger.info("[Eurobet-PW] _parse_detail_response: %d events", len(events))
+    logger.info("[Eurobet-PW] _parse_detail_response: %d events for %s", len(events), league_name)
 
     for ev in events:
         if not isinstance(ev, dict):
@@ -311,10 +307,7 @@ def _parse_detail_response(data: Any, league_name: str, sport_key: str) -> list[
         # Determine league from event if possible (tennis tournaments)
         ev_league = (ev.get("campionato") or ev.get("competizione") or
                      ev.get("league") or ev.get("tournament") or league_name)
-        if sport_key == "tennis" and ev_league != league_name:
-            league_name_ev = str(ev_league)
-        else:
-            league_name_ev = league_name
+        league_name_ev = str(ev_league) if (sport_key == "tennis" and ev_league != league_name) else league_name
 
         # Markets — look for odds data in various locations
         market_data: dict[str, dict[str, float]] = {}  # market_key → {outcome → odds}
@@ -418,6 +411,30 @@ def _parse_detail_response(data: Any, league_name: str, sport_key: str) -> list[
     return results
 
 
+# ─── Playwright scraper (extends BasePlaywrightScraper) ───────────────────────
+
+class _EurobetPlaywrightScraper(BasePlaywrightScraper):
+    """Playwright scraper for www.eurobet.it (Cloudflare, needs mobile proxy).
+
+    Uses BasePlaywrightScraper which captures ALL JSON responses (no URL filter)
+    and logs page HTML + title for debugging.
+    """
+
+    bookmaker_name = BOOKMAKER
+    base_url       = BASE_URL
+    warmup_path    = "/it/scommesse/"
+    leagues        = PLAYWRIGHT_LEAGUES
+
+    def parse_response(
+        self,
+        url: str,
+        body: Any,
+        league_name: str,
+        sport_key: str,
+    ) -> list[MatchOdds]:
+        return _parse_detail_response(body, league_name, sport_key)
+
+
 # ─── Main Scraper class ───────────────────────────────────────────────────────
 
 class EurobetScraper:
@@ -458,7 +475,6 @@ class EurobetScraper:
 
         merged = list(seen.values())
         n_ev = len({r.event_name for r in merged})
-        from collections import Counter
         mc = Counter(r.market for r in merged)
         sc = Counter(r.sport  for r in merged)
         logger.info("[Eurobet] Total: %d events, %d rows | markets=%s sports=%s",
@@ -506,200 +522,9 @@ class EurobetScraper:
             logger.info("[Eurobet-PW] No PROXY_URL — skipping Playwright scrape")
             return []
 
-        try:
-            from playwright.async_api import async_playwright
-            try:
-                from playwright_stealth import Stealth as _Stealth
-                async def _apply_stealth(page):
-                    await _Stealth().apply_stealth_async(page)
-            except ImportError:
-                try:
-                    from playwright_stealth import stealth_async as _sa
-                    async def _apply_stealth(page):
-                        await _sa(page)
-                except ImportError:
-                    async def _apply_stealth(page):
-                        pass
-        except ImportError:
-            logger.warning("[Eurobet-PW] Playwright not available — skipping")
-            return []
+        pw_scraper = _EurobetPlaywrightScraper()
 
-        p = urllib.parse.urlparse(proxy_url)
-        proxy = {
-            "server":   f"{p.scheme}://{p.hostname}:{p.port}",
-            "username": p.username or "",
-            "password": p.password or "",
-        }
-
-        all_results: list[MatchOdds] = []
-
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=False,
-                args=["--no-sandbox", "--disable-dev-shm-usage",
-                      "--disable-blink-features=AutomationControlled"],
-                proxy=proxy,
-            )
-            context = await browser.new_context(
-                user_agent=_UA, locale="it-IT",
-                timezone_id="Europe/Rome",
-                viewport={"width": 1280, "height": 900},
-            )
-            page = await context.new_page()
-
-            # Stealth patches
-            await page.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                if (!window.chrome) window.chrome = {runtime: {}};
-            """)
-            await _apply_stealth(page)
-
-            # ── Warmup: homepage to get session cookies ──────────────────────
-            logger.info("[Eurobet-PW] Warmup: %s/it/scommesse/", BASE_URL)
-            try:
-                await page.goto(f"{BASE_URL}/it/scommesse/",
-                                wait_until="domcontentloaded", timeout=40_000)
-                await page.wait_for_timeout(4000)
-                logger.info("[Eurobet-PW] Warmup done: %s", page.url)
-            except Exception as exc:
-                logger.warning("[Eurobet-PW] Warmup failed: %s", exc)
-
-            # ── Per-league scrape ────────────────────────────────────────────
-            for league_name, sport_key, page_path in PLAYWRIGHT_LEAGUES:
-                if sport_filter and sport_key != sport_filter:
-                    continue
-                try:
-                    rows = await self._scrape_pw_league(page, league_name, sport_key, page_path)
-                    all_results.extend(rows)
-                except Exception as exc:
-                    logger.error("[Eurobet-PW] %s failed: %s", league_name, exc, exc_info=True)
-                await asyncio.sleep(1)
-
-            await browser.close()
-
-        seen: dict[tuple[str, str], MatchOdds] = {}
-        for r in all_results:
-            seen[(r.event_name, r.market)] = r
-        return list(seen.values())
-
-    async def _scrape_pw_league(
-        self, page, league_name: str, sport_key: str, page_path: str
-    ) -> list[MatchOdds]:
-        captured: list[dict] = []
-
-        async def on_response(resp) -> None:
-            url_lower = resp.url.lower()
-            if any(url_lower.endswith(ext) for ext in _SKIP_EXTS):
-                return
-            # Only intercept Eurobet API calls (detail-service or similar)
-            if not any(kw in url_lower for kw in (
-                "detail-service", "sport-schedule", "scommesse", "palinsesto",
-                "avveniment", "meeting", "prematch", "odds",
-            )):
-                return
-            try:
-                body = await resp.json()
-                captured.append({"url": resp.url, "body": body})
-            except Exception:
-                pass
-
-        page.on("response", on_response)
-        url = BASE_URL + page_path
-        logger.info("[Eurobet-PW] Loading %s", url)
-        try:
-            await page.goto(url, wait_until="networkidle", timeout=60_000)
-        except Exception as exc:
-            logger.info("[Eurobet-PW] %s: %s (proceeding)", league_name, type(exc).__name__)
-        await page.wait_for_timeout(3000)
-        page.remove_listener("response", on_response)
-
-        logger.info("[Eurobet-PW] %s: captured %d JSON responses", league_name, len(captured))
-
-        # Log first responses for API discovery
-        for item in captured[:3]:
-            preview = _json.dumps(item["body"], ensure_ascii=False)[:600]
-            logger.info("[Eurobet-PW] %s CAPTURE url=%s BODY=%s",
-                        league_name, item["url"], preview)
-
-        # Try to parse each captured response
-        for item in captured:
-            rows = _parse_detail_response(item["body"], league_name, sport_key)
-            if rows:
-                from collections import Counter
-                mc = Counter(r.market for r in rows)
-                logger.info("[Eurobet-PW] %s: %d rows from %s | markets=%s",
-                            league_name, len(rows), item["url"][:100], dict(mc))
-                return rows
-
-        # If no response parsed yet, try page.evaluate fetch() as fallback
-        rows = await self._try_fetch_api(page, league_name, sport_key)
-        if rows:
-            return rows
-
-        logger.warning("[Eurobet-PW] %s: 0 rows parsed from %d captures",
-                       league_name, len(captured))
-        return []
-
-    async def _try_fetch_api(
-        self, page, league_name: str, sport_key: str
-    ) -> list[MatchOdds]:
-        """Fallback: call detail-service directly from browser context using session cookies."""
-        # Map league_name → (discipline_id, alias)
-        _LEAGUE_ALIASES: dict[str, tuple[str, str]] = {
-            "Serie A":           ("4", "serie-a"),
-            "Serie B":           ("4", "serie-b"),
-            "Premier League":    ("4", "premier-league"),
-            "La Liga":           ("4", "primera-division"),
-            "Bundesliga":        ("4", "bundesliga"),
-            "Ligue 1":           ("4", "ligue-1"),
-            "Champions League":  ("4", "champions-league"),
-            "Conference League": ("4", "conference-league"),
-            "Tennis":            ("5", "tennis"),
-            "NBA":               ("7", "nba"),
-            "Eurolega":          ("7", "eurolega"),
-            "Serie A Basket":    ("7", "serie-a"),
-        }
-        disc, alias = _LEAGUE_ALIASES.get(league_name, ("", ""))
-        if not disc:
-            return []
-
-        api_url = (f"/detail-service/sport-schedule/services/meeting/"
-                   f"{disc}/{alias}?prematch=1&live=0")
-        logger.info("[Eurobet-PW] %s: trying page.evaluate fetch %s", league_name, api_url)
-
-        try:
-            result = await page.evaluate(f"""
-                async () => {{
-                    try {{
-                        const resp = await fetch('{api_url}', {{
-                            credentials: 'include',
-                            headers: {{
-                                'Accept': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest',
-                            }}
-                        }});
-                        if (!resp.ok) return {{error: resp.status, url: '{api_url}'}};
-                        return await resp.json();
-                    }} catch (e) {{
-                        return {{error: String(e)}};
-                    }}
-                }}
-            """)
-        except Exception as exc:
-            logger.warning("[Eurobet-PW] %s: page.evaluate failed: %s", league_name, exc)
-            return []
-
-        if not result or not isinstance(result, dict):
-            logger.info("[Eurobet-PW] %s: fetch returned null/non-dict", league_name)
-            return []
-
-        if "error" in result:
-            logger.info("[Eurobet-PW] %s: fetch error: %s", league_name, result)
-            return []
-
-        preview = _json.dumps(result, ensure_ascii=False)[:600]
-        logger.info("[Eurobet-PW] %s: fetch OK, body preview: %s", league_name, preview)
-
-        rows = _parse_detail_response(result, league_name, sport_key)
-        logger.info("[Eurobet-PW] %s: parsed %d rows via fetch", league_name, len(rows))
-        return rows
+        if sport_filter:
+            return await pw_scraper.scrape_sport(sport_filter)
+        else:
+            return await pw_scraper.scrape_all()
