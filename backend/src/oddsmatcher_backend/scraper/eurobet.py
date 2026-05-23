@@ -464,36 +464,38 @@ def _parse_next_data(next_data: Any, league_name: str, sport_key: str) -> list[M
 # Discipline IDs (guessed from URL patterns — adjust if response confirms them):
 #   4 = calcio,  5 = tennis,  7 = basket
 
-# league_name → (discipline_id, alias) for detail-service API
+# league_name → (endpoint_type, full_path) for detail-service API
+# endpoint_type is "meeting" (league-level slug) or "event" (country/slug structure)
+# Paths discovered from live browser network captures on www.eurobet.it
 _LEAGUE_ALIASES: dict[str, tuple[str, str]] = {
-    "Serie A":           ("4", "serie-a"),
-    "Serie B":           ("4", "serie-b"),
-    "Premier League":    ("4", "premier-league"),
-    "La Liga":           ("4", "primera-division"),
-    "Bundesliga":        ("4", "bundesliga"),
-    "Ligue 1":           ("4", "ligue-1"),
-    "Champions League":  ("4", "champions-league"),
-    "Conference League": ("4", "conference-league"),
-    "Tennis":            ("5", "atp"),
-    "NBA":               ("7", "nba"),
-    "Eurolega":          ("7", "eurolega"),
-    "Serie A Basket":    ("7", "serie-a"),
+    "Serie A":           ("meeting", "calcio/serie-a"),
+    "Serie B":           ("meeting", "calcio/serie-b"),
+    "Premier League":    ("event",   "calcio/inghilterra/premier-league"),
+    "La Liga":           ("event",   "calcio/spagna/primera-division"),
+    "Bundesliga":        ("event",   "calcio/germania/bundesliga"),
+    "Ligue 1":           ("event",   "calcio/francia/ligue-1"),
+    "Champions League":  ("event",   "calcio/competizioni-europee/champions-league"),
+    "Conference League": ("event",   "calcio/competizioni-europee/conference-league"),
+    "Tennis":            ("meeting", "tennis"),
+    "NBA":               ("event",   "basket/usa/nba"),
+    "Eurolega":          ("event",   "basket/competizioni-europee/eurolega"),
+    "Serie A Basket":    ("event",   "basket/italia/serie-a"),
 }
 
 _API_LEAGUES: list[tuple[str, str, str, str]] = [
-    # (league_name, sport_key, discipline_id, alias)
-    ("Serie A",           "calcio", "4", "serie-a"),
-    ("Serie B",           "calcio", "4", "serie-b"),
-    ("Premier League",    "calcio", "4", "premier-league"),
-    ("La Liga",           "calcio", "4", "primera-division"),
-    ("Bundesliga",        "calcio", "4", "bundesliga"),
-    ("Ligue 1",           "calcio", "4", "ligue-1"),
-    ("Champions League",  "calcio", "4", "champions-league"),
-    ("Conference League", "calcio", "4", "conference-league"),
-    ("Tennis",            "tennis", "5", "atp"),
-    ("NBA",               "basket", "7", "nba"),
-    ("Eurolega",          "basket", "7", "eurolega"),
-    ("Serie A Basket",    "basket", "7", "serie-a"),
+    # (league_name, sport_key, endpoint_type, full_path)
+    ("Serie A",           "calcio", "meeting", "calcio/serie-a"),
+    ("Serie B",           "calcio", "meeting", "calcio/serie-b"),
+    ("Premier League",    "calcio", "event",   "calcio/inghilterra/premier-league"),
+    ("La Liga",           "calcio", "event",   "calcio/spagna/primera-division"),
+    ("Bundesliga",        "calcio", "event",   "calcio/germania/bundesliga"),
+    ("Ligue 1",           "calcio", "event",   "calcio/francia/ligue-1"),
+    ("Champions League",  "calcio", "event",   "calcio/competizioni-europee/champions-league"),
+    ("Conference League", "calcio", "event",   "calcio/competizioni-europee/conference-league"),
+    ("Tennis",            "tennis", "meeting", "tennis"),
+    ("NBA",               "basket", "event",   "basket/usa/nba"),
+    ("Eurolega",          "basket", "event",   "basket/competizioni-europee/eurolega"),
+    ("Serie A Basket",    "basket", "event",   "basket/italia/serie-a"),
 ]
 
 _API_HEADERS = {
@@ -519,9 +521,9 @@ async def _probe_api_httpx(proxy_url: str | None) -> list[MatchOdds]:
         follow_redirects=True,
         proxy=proxy_url,
     ) as client:
-        for league_name, sport_key, disc, alias in _API_LEAGUES:
-            url = (f"{BASE_URL}/detail-service/sport-schedule/services/meeting/"
-                   f"{disc}/{alias}?prematch=1&live=0")
+        for league_name, sport_key, endpoint_type, path in _API_LEAGUES:
+            url = (f"{BASE_URL}/detail-service/sport-schedule/services/"
+                   f"{endpoint_type}/{path}?prematch=1&live=0")
             try:
                 resp = await client.get(url)
                 ct = resp.headers.get("content-type", "")
@@ -650,12 +652,13 @@ class _EurobetPlaywrightScraper(BasePlaywrightScraper):
             self._log.warning("[%s] %s: navigation error: %s", self.bookmaker_name, league_name, exc)
 
         # Call detail-service API from within the browser (same-origin, cookies included)
-        disc, alias = _LEAGUE_ALIASES.get(league_name, ("", ""))
-        if not disc:
+        alias_entry = _LEAGUE_ALIASES.get(league_name)
+        if not alias_entry:
             self._log.warning("[%s] %s: no alias configured", self.bookmaker_name, league_name)
             return []
 
-        api_path = f"/detail-service/sport-schedule/services/meeting/{disc}/{alias}?prematch=1&live=0"
+        endpoint_type, path = alias_entry
+        api_path = f"/detail-service/sport-schedule/services/{endpoint_type}/{path}?prematch=1&live=0"
         self._log.info("[%s] %s: page.evaluate fetch %s", self.bookmaker_name, league_name, api_path)
         try:
             result = await self._page.evaluate(f"""
