@@ -333,23 +333,28 @@ class SupabaseWriter:
         logger.info("%s live_odds pre-write: %d rows, markets=%s, events=%d",
                     bookmaker_name, len(rows), dict(market_counts), len(event_names))
 
-        # Delete ALL existing rows for each bookmaker — ensures stale events from
-        # previous runs don't accumulate in the DB.
-        bk_set: set[str] = {r["bookmaker"] for r in rows}
+        # Delete existing rows grouped by (bookmaker, sport) — only for the
+        # sport+bookmaker combos actually present in this run.
+        # This prevents wiping tennis rows when tms returns no tennis events.
+        bk_sports: dict[str, set[str]] = defaultdict(set)
+        for r in rows:
+            bk_sports[r["bookmaker"]].add(r["sport"])
 
-        for bk in bk_set:
-            try:
-                del_result = (
-                    self.client.table("live_odds")
-                    .delete()
-                    .eq("bookmaker", bk)
-                    .gt("scraped_at", "1970-01-01T00:00:00+00:00")
-                    .execute()
-                )
-                logger.info("%s live_odds: deleted %d stale rows for %s",
-                            bookmaker_name, len(del_result.data) if del_result.data else 0, bk)
-            except Exception as e:
-                logger.error("Failed to delete stale %s live_odds: %s", bk, e)
+        for bk, sports in bk_sports.items():
+            for sport in sports:
+                try:
+                    del_result = (
+                        self.client.table("live_odds")
+                        .delete()
+                        .eq("bookmaker", bk)
+                        .eq("sport", sport)
+                        .gt("scraped_at", "1970-01-01T00:00:00+00:00")
+                        .execute()
+                    )
+                    logger.info("%s live_odds: deleted %d stale rows for %s/%s",
+                                bookmaker_name, len(del_result.data) if del_result.data else 0, bk, sport)
+                except Exception as e:
+                    logger.error("Failed to delete stale %s/%s live_odds: %s", bk, sport, e)
 
         BATCH = 500
         inserted = 0
@@ -419,18 +424,22 @@ class SupabaseWriter:
         BATCH = 500
         total_inserted = 0
 
+        sports_in_run = list({r["sport"] for r in base_rows})
+
         for bm_name, bm_base, fallback_url in TARGETS:
-            # Delete ALL existing rows for this bookmaker before inserting fresh ones
-            try:
-                (
-                    self.client.table("live_odds")
-                    .delete()
-                    .eq("bookmaker", bm_name)
-                    .gt("scraped_at", "1970-01-01T00:00:00+00:00")
-                    .execute()
-                )
-            except Exception as e:
-                logger.error("Failed to delete stale %s live_odds: %s", bm_name, e)
+            # Delete only the sports present in this run (avoids wiping unrelated sports)
+            for sport in sports_in_run:
+                try:
+                    (
+                        self.client.table("live_odds")
+                        .delete()
+                        .eq("bookmaker", bm_name)
+                        .eq("sport", sport)
+                        .gt("scraped_at", "1970-01-01T00:00:00+00:00")
+                        .execute()
+                    )
+                except Exception as e:
+                    logger.error("Failed to delete stale %s/%s live_odds: %s", bm_name, sport, e)
 
             # Build rows for this bookmaker — riscrivi il dominio base nell'URL
             def _rewrite(url: str, base: str, fallback: str) -> str:
@@ -474,16 +483,19 @@ class SupabaseWriter:
         rows = [{**r, "event_name": _normalize_event_name(r["event_name"])} for r in rows]
         event_names = list({r["event_name"] for r in rows})
 
-        try:
-            (
-                self.client.table("live_odds")
-                .delete()
-                .eq("bookmaker", bookmaker_name)
-                .gt("scraped_at", "1970-01-01T00:00:00+00:00")
-                .execute()
-            )
-        except Exception as e:
-            logger.error("Failed to delete stale Betfair Exchange live_odds: %s", e)
+        sports_in_run = list({r["sport"] for r in rows})
+        for sport in sports_in_run:
+            try:
+                (
+                    self.client.table("live_odds")
+                    .delete()
+                    .eq("bookmaker", bookmaker_name)
+                    .eq("sport", sport)
+                    .gt("scraped_at", "1970-01-01T00:00:00+00:00")
+                    .execute()
+                )
+            except Exception as e:
+                logger.error("Failed to delete stale Betfair Exchange/%s live_odds: %s", sport, e)
 
         BATCH = 500
         inserted = 0
