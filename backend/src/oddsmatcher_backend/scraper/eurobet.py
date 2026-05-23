@@ -706,10 +706,24 @@ class _EurobetPlaywrightScraper(BasePlaywrightScraper):
         finally:
             self._page.remove_listener("response", _on_response)
 
-        # Parse intercepted data
+        # Parse intercepted data — try both parsers on every response
         rows: list[MatchOdds] = []
         for resp_url, data in captured:
+            # Log preview for large responses (> 3 KB) to diagnose structure
+            try:
+                import json as _j2
+                preview = _j2.dumps(data)[:500]
+                if len(preview) > 100:
+                    self._log.info("[%s] %s: preview %s → %s…",
+                                   self.bookmaker_name, league_name, resp_url[-60:], preview[:400])
+            except Exception:
+                pass
+
+            # Try detail-service parser
             r = _parse_detail_response(data, league_name, sport_key)
+            if not r:
+                # Try Next.js pageProps parser (_next/data or embedded page data)
+                r = _parse_next_data(data, league_name, sport_key)
             if r:
                 self._log.info("[%s] %s: %d rows from intercepted %s",
                                self.bookmaker_name, league_name, len(r), resp_url[-80:])
