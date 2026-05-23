@@ -411,6 +411,87 @@ def _parse_detail_response(data: Any, league_name: str, sport_key: str) -> list[
     return results
 
 
+# ─── httpx direct API probe ──────────────────────────────────────────────────
+#
+# Cloudflare challenges HTML pages but often lets REST API requests through
+# when the request looks like AJAX (Accept: application/json, no cookie).
+# We try this first — it's much faster than Playwright.
+#
+# Known detail-service path:
+#   /detail-service/sport-schedule/services/meeting/{disc}/{alias}?prematch=1&live=0
+#
+# Discipline IDs (guessed from URL patterns — adjust if response confirms them):
+#   4 = calcio,  5 = tennis,  7 = basket
+
+_API_LEAGUES: list[tuple[str, str, str, str]] = [
+    # (league_name, sport_key, discipline_id, alias)
+    ("Serie A",           "calcio", "4", "serie-a"),
+    ("Serie B",           "calcio", "4", "serie-b"),
+    ("Premier League",    "calcio", "4", "premier-league"),
+    ("La Liga",           "calcio", "4", "primera-division"),
+    ("Bundesliga",        "calcio", "4", "bundesliga"),
+    ("Ligue 1",           "calcio", "4", "ligue-1"),
+    ("Champions League",  "calcio", "4", "champions-league"),
+    ("Conference League", "calcio", "4", "conference-league"),
+    ("Tennis",            "tennis", "5", "atp"),
+    ("NBA",               "basket", "7", "nba"),
+    ("Eurolega",          "basket", "7", "eurolega"),
+    ("Serie A Basket",    "basket", "7", "serie-a"),
+]
+
+_API_HEADERS = {
+    "User-Agent":      _UA,
+    "Accept":          "application/json, text/plain, */*",
+    "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
+    "Origin":          BASE_URL,
+    "Referer":         f"{BASE_URL}/it/scommesse/calcio/serie-a/",
+    "X-Requested-With": "XMLHttpRequest",
+    "Sec-Fetch-Dest":  "empty",
+    "Sec-Fetch-Mode":  "cors",
+    "Sec-Fetch-Site":  "same-origin",
+}
+
+
+async def _probe_api_httpx(proxy_url: str | None) -> list[MatchOdds]:
+    """Try detail-service API via httpx + mobile proxy, no browser needed."""
+    all_results: list[MatchOdds] = []
+
+    async with httpx.AsyncClient(
+        headers=_API_HEADERS,
+        timeout=15,
+        follow_redirects=True,
+        proxy=proxy_url,
+    ) as client:
+        for league_name, sport_key, disc, alias in _API_LEAGUES:
+            url = (f"{BASE_URL}/detail-service/sport-schedule/services/meeting/"
+                   f"{disc}/{alias}?prematch=1&live=0")
+            try:
+                resp = await client.get(url)
+                ct = resp.headers.get("content-type", "")
+                logger.info(
+                    "[Eurobet-API] %s: status=%d ct=%s len=%d",
+                    league_name, resp.status_code, ct[:60], len(resp.content),
+                )
+                if resp.status_code != 200:
+                    continue
+                if "json" not in ct and not resp.content.startswith(b"{") and not resp.content.startswith(b"["):
+                    preview = resp.text[:300].replace("\n", " ")
+                    logger.info("[Eurobet-API] %s: non-JSON body preview: %s", league_name, preview)
+                    continue
+                data = resp.json()
+                rows = _parse_detail_response(data, league_name, sport_key)
+                logger.info("[Eurobet-API] %s: parsed %d rows", league_name, len(rows))
+                all_results.extend(rows)
+            except Exception as exc:
+                logger.error("[Eurobet-API] %s error: %s", league_name, exc)
+            await asyncio.sleep(0.3)
+
+    seen: dict[tuple[str, str], MatchOdds] = {}
+    for r in all_results:
+        seen[(r.event_name, r.market)] = r
+    return list(seen.values())
+
+
 # ─── Playwright scraper (extends BasePlaywrightScraper) ───────────────────────
 
 class _EurobetPlaywrightScraper(BasePlaywrightScraper):
@@ -514,14 +595,24 @@ class EurobetScraper:
             seen[(r.event_name, r.market)] = r
         return list(seen.values())
 
-    # ── Playwright (main site) ───────────────────────────────────────────────
+    # ── API / Playwright (main site) ─────────────────────────────────────────
 
     async def _run_playwright(self, sport_filter: str | None) -> list[MatchOdds]:
         proxy_url = os.environ.get("PROXY_URL")
         if not proxy_url:
-            logger.info("[Eurobet-PW] No PROXY_URL — skipping Playwright scrape")
+            logger.info("[Eurobet-PW] No PROXY_URL — skipping API+Playwright scrape")
             return []
 
+        # ── Step 1: try httpx direct API call (faster, no browser) ──────────
+        logger.info("[Eurobet-API] Trying direct httpx API probe via mobile proxy...")
+        api_rows = await _probe_api_httpx(proxy_url)
+        logger.info("[Eurobet-API] httpx probe: %d rows", len(api_rows))
+
+        if api_rows:
+            return api_rows
+
+        # ── Step 2: fall back to Playwright if API returned nothing ──────────
+        logger.info("[Eurobet-PW] httpx API returned 0 rows — falling back to Playwright")
         pw_scraper = _EurobetPlaywrightScraper()
 
         if sport_filter:
