@@ -1,8 +1,16 @@
 """odds-api.io scraper — Bet365 and Eurobet IT.
 
-Uses https://api.odds-api.io/v3 to fetch pre-match and live odds.
-Replaces the failing Playwright-based tennis/basket scraping for Eurobet
-and the centroquote.it-based scraper for Bet365.
+Uses https://api.odds-api.io/v3 to fetch pre-match odds.
+
+QUOTA MANAGEMENT
+----------------
+The API allows 100 requests/hour.  This module uses a single combined run:
+  - /events  : 1 call per sport (3 total: football, tennis, basketball)
+  - /odds    : 1 call per event, requesting BOTH bookmakers at once
+                (bookmakers=Bet365,Eurobet IT)
+
+Total per run  ≈  3 + N_events  (typically 50-90 for major leagues)
+With a separate hourly workflow → well under 100 req/hour.
 
 Bookmaker names in the API:  "Bet365"  /  "Eurobet IT"
 """
@@ -27,10 +35,9 @@ _API_KEY  = os.environ.get(
 )
 _BASE     = "https://api.odds-api.io/v3"
 _TIMEOUT  = httpx.Timeout(30.0)
-_SEM      = 20          # max concurrent requests per run
-_BATCH    = 20          # events per asyncio.gather batch
-_LIMIT    = 200         # max events to fetch from /events
-_HORIZON  = 48         # hours ahead — only fetch odds for events within this window
+_SEM      = 10          # max concurrent requests
+_BATCH    = 10          # events per asyncio.gather batch
+_LIMIT    = 200         # max events to fetch from /events per sport
 
 # internal sport key → API slug
 _SPORT_SLUG = {
@@ -39,20 +46,31 @@ _SPORT_SLUG = {
     "basket":  "basketball",
 }
 
+# bookmakers to fetch: api_name → display_name
+_BOOKMAKERS: dict[str, str] = {
+    "Bet365":    "Bet365",
+    "Eurobet IT": "Eurobet",
+}
+
+# sports per bookmaker (Eurobet has no calcio via this API — covered by webeb)
+_BK_SPORTS: dict[str, list[str]] = {
+    "Bet365":     ["calcio", "tennis", "basket"],
+    "Eurobet IT": ["tennis", "basket"],
+}
+
 # API market name → internal market key (None = skip)
 _MARKET_KEY: dict[str, str | None] = {
     "1X2":                  "1X2",
-    "ML":                   "1X2",   # moneyline (2-way or 3-way)
+    "ML":                   "1X2",
     "Moneyline":            "1X2",
     "Double Chance":        "DC",
     "Both Teams To Score":  "BTTS",
     "BTTS":                 "BTTS",
     "Goal/No Goal":         "BTTS",
-    "Totals":               "OU",    # resolved with hdp below
+    "Totals":               "OU",
     "Totals (Games)":       "OU",
     "Total":                "OU",
     "Total (Games)":        "OU",
-    # skip everything else
     "Spread":               None,
     "Spread (Games)":       None,
     "Set Betting":          None,
@@ -78,7 +96,6 @@ def _parse_odds(mkt_name: str, entry: dict, sport: str) -> tuple[str, dict[str, 
     """Return (market_key, odds_dict) or None if this entry should be skipped."""
     raw_key = _MARKET_KEY.get(mkt_name)
 
-    # Also handle "Totals XXX" patterns not explicitly listed
     if raw_key is None and mkt_name.startswith("Totals"):
         raw_key = "OU"
     if raw_key is None and mkt_name.startswith("Total"):
@@ -133,18 +150,23 @@ def _parse_odds(mkt_name: str, entry: dict, sport: str) -> tuple[str, dict[str, 
     return None
 
 
-def _parse_event(data: dict, sport: str, bookmaker_api: str, bookmaker_display: str) -> list[MatchOdds]:
-    """Turn one /odds API response into MatchOdds rows."""
+def _parse_event(
+    data: dict,
+    sport: str,
+    bookmaker_api: str,
+    bookmaker_display: str,
+) -> list[MatchOdds]:
+    """Turn one /odds API response into MatchOdds rows for a given bookmaker."""
     bk_markets: list[dict] = data.get("bookmakers", {}).get(bookmaker_api, [])
     if not bk_markets:
         return []
 
-    home       = data.get("home", "")
-    away       = data.get("away", "")
-    ev_name    = f"{home} - {away}"
-    ev_time    = data.get("date")
-    league     = data.get("league", {}).get("name", "")
-    match_url  = (data.get("urls") or {}).get(bookmaker_api, "")
+    home      = data.get("home", "")
+    away      = data.get("away", "")
+    ev_name   = f"{home} - {away}"
+    ev_time   = data.get("date")
+    league    = data.get("league", {}).get("name", "")
+    match_url = (data.get("urls") or {}).get(bookmaker_api, "")
 
     results: list[MatchOdds] = []
     for market in bk_markets:
@@ -169,16 +191,130 @@ def _parse_event(data: dict, sport: str, bookmaker_api: str, bookmaker_display: 
     return results
 
 
-# ─── Main scraper class ───────────────────────────────────────────────────────
+# ─── Combined scraper (minimises API requests) ───────────────────────────────
+
+class CombinedOddsApiScraper:
+    """Fetch Bet365 + Eurobet odds in a single pass.
+
+    Strategy:
+    - /events  called ONCE per sport  (3 total)
+    - /odds    called ONCE per event, requesting both bookmakers together
+               (bookmakers=Bet365,Eurobet IT)
+
+    This keeps total requests ≈ 3 + N_events per run, vs the naive approach
+    of 6 + 2N that exceeded the 100 req/hour quota.
+    """
+
+    def __init__(self) -> None:
+        self._sem = asyncio.Semaphore(_SEM)
+
+    async def scrape_all(self) -> dict[str, list[MatchOdds]]:
+        """Return {"Bet365": [...], "Eurobet": [...]}."""
+        all_sports = list(_SPORT_SLUG.keys())   # calcio, tennis, basket
+
+        async with httpx.AsyncClient(timeout=_TIMEOUT, http2=True) as client:
+            # ── 1. fetch event IDs for each sport in parallel ────────────────
+            event_tasks = [self._get_event_ids(client, sport) for sport in all_sports]
+            sport_events: list[list[int]] = []
+            for res in await asyncio.gather(*event_tasks, return_exceptions=True):
+                sport_events.append(res if isinstance(res, list) else [])
+
+            # ── 2. for each sport, fetch odds for all events in batches ──────
+            results: dict[str, list[MatchOdds]] = {"Bet365": [], "Eurobet": []}
+
+            for sport, event_ids in zip(all_sports, sport_events):
+                if not event_ids:
+                    continue
+
+                # which bookmakers care about this sport?
+                bks = [bk for bk, sports in _BK_SPORTS.items() if sport in sports]
+                bk_param = ",".join(bks)
+
+                for i in range(0, len(event_ids), _BATCH):
+                    batch = event_ids[i : i + _BATCH]
+                    tasks = [self._fetch_odds(client, eid, sport, bk_param) for eid in batch]
+                    for outcome in await asyncio.gather(*tasks, return_exceptions=True):
+                        if not isinstance(outcome, dict):
+                            continue
+                        for bk_api, rows in outcome.items():
+                            display = _BOOKMAKERS[bk_api]
+                            results[display].extend(rows)
+
+        # log summary
+        for display, rows in results.items():
+            n_ev = len({r.event_name for r in rows})
+            logger.info("[OddsAPI] %s: %d events, %d rows", display, n_ev, len(rows))
+        return results
+
+    # ── internals ────────────────────────────────────────────────────────────
+
+    async def _get_event_ids(self, client: httpx.AsyncClient, sport: str) -> list[int]:
+        slug = _SPORT_SLUG[sport]
+        async with self._sem:
+            resp = await client.get(
+                f"{_BASE}/events",
+                params={"apiKey": _API_KEY, "sport": slug, "limit": _LIMIT},
+            )
+        if resp.status_code != 200:
+            logger.warning("[OddsAPI] /events %s → %d", slug, resp.status_code)
+            return []
+
+        events = resp.json()
+        result = [
+            e["id"] for e in events
+            if e.get("status") not in ("settled", "cancelled", "postponed")
+        ]
+        logger.info("[OddsAPI] /events %s: %d active events", slug, len(result))
+        return result
+
+    async def _fetch_odds(
+        self,
+        client: httpx.AsyncClient,
+        event_id: int,
+        sport: str,
+        bk_param: str,          # e.g. "Bet365,Eurobet IT"
+    ) -> dict[str, list[MatchOdds]]:
+        """Fetch odds for one event and all bookmakers in one API call."""
+        async with self._sem:
+            try:
+                resp = await client.get(
+                    f"{_BASE}/odds",
+                    params={
+                        "apiKey":     _API_KEY,
+                        "eventId":    event_id,
+                        "bookmakers": bk_param,
+                    },
+                )
+            except Exception as exc:
+                logger.debug("[OddsAPI] event %d: %s", event_id, exc)
+                return {}
+
+        if resp.status_code != 200:
+            return {}
+        try:
+            data = resp.json()
+        except Exception:
+            return {}
+
+        out: dict[str, list[MatchOdds]] = {}
+        for bk_api in bk_param.split(","):
+            bk_api = bk_api.strip()
+            rows = _parse_event(data, sport, bk_api, _BOOKMAKERS[bk_api])
+            if rows:
+                out[bk_api] = rows
+        return out
+
+
+# ─── Legacy single-bookmaker scraper (kept for scrape_sport() compatibility) ─
 
 class OddsApiScraper:
-    """Fetch pre-match odds from odds-api.io for given bookmakers + sports."""
+    """Single-bookmaker scraper — used by EurobetScraper.scrape_sport()."""
 
     def __init__(
         self,
-        bookmaker_api: str,        # name used by the API  e.g. "Bet365"
-        bookmaker_display: str,    # name stored in DB      e.g. "Bet365"
-        sports: list[str],         # internal keys          e.g. ["calcio","tennis","basket"]
+        bookmaker_api: str,
+        bookmaker_display: str,
+        sports: list[str],
     ) -> None:
         self._bk_api     = bookmaker_api
         self._bk_display = bookmaker_display
@@ -193,73 +329,44 @@ class OddsApiScraper:
         async with httpx.AsyncClient(timeout=_TIMEOUT, http2=True) as client:
             tasks = [self._scrape_sport(client, s) for s in self._sports]
             all_rows = await asyncio.gather(*tasks, return_exceptions=True)
-
         results: list[MatchOdds] = []
         for sport, rows in zip(self._sports, all_rows):
             if isinstance(rows, Exception):
                 logger.error("[%s] %s: %s", self._bk_display, sport, rows)
             else:
-                logger.info("[%s] %s: %d rows", self._bk_display, sport, len(rows))
                 results.extend(rows)
-
         return results
 
     async def scrape_sport(self, sport: str) -> list[MatchOdds]:
         async with httpx.AsyncClient(timeout=_TIMEOUT, http2=True) as client:
             return await self._scrape_sport(client, sport)
 
-    # ── internals ────────────────────────────────────────────────────────────
-
     async def _scrape_sport(self, client: httpx.AsyncClient, sport: str) -> list[MatchOdds]:
         slug = _SPORT_SLUG.get(sport, sport)
         event_ids = await self._get_event_ids(client, slug)
-        logger.info("[%s] %s: %d events to check", self._bk_display, sport, len(event_ids))
         if not event_ids:
             return []
-
         results: list[MatchOdds] = []
         for i in range(0, len(event_ids), _BATCH):
             batch = event_ids[i : i + _BATCH]
             tasks = [self._fetch_odds(client, eid, sport) for eid in batch]
-            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-            for r in batch_results:
+            for r in await asyncio.gather(*tasks, return_exceptions=True):
                 if isinstance(r, list):
                     results.extend(r)
         return results
 
     async def _get_event_ids(self, client: httpx.AsyncClient, slug: str) -> list[int]:
-        """Fetch event IDs for this sport, limited to the next _HORIZON hours."""
         async with self._sem:
             resp = await client.get(
                 f"{_BASE}/events",
                 params={"apiKey": _API_KEY, "sport": slug, "limit": _LIMIT},
             )
         if resp.status_code != 200:
-            logger.warning("[%s] /events %s → %d", self._bk_display, slug, resp.status_code)
             return []
-
-        events   = resp.json()
-        now      = datetime.now(timezone.utc)
-        cutoff   = now + timedelta(hours=_HORIZON)
-        result: list[int] = []
-
-        for e in events:
-            if e.get("status") in ("settled", "cancelled", "postponed"):
-                continue
-            # Filter to events that start within the next _HORIZON hours
-            date_str = e.get("date") or e.get("startTime") or e.get("commence_time")
-            if date_str:
-                try:
-                    ev_dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                    if ev_dt > cutoff or ev_dt < now - timedelta(hours=3):
-                        continue   # too far in future, or already finished
-                except Exception:
-                    pass           # no valid date → include anyway (safe fallback)
-            result.append(e["id"])
-
-        logger.info("[%s] /events %s: %d/%d events within next %dh",
-                    self._bk_display, slug, len(result), len(events), _HORIZON)
-        return result
+        return [
+            e["id"] for e in resp.json()
+            if e.get("status") not in ("settled", "cancelled", "postponed")
+        ]
 
     async def _fetch_odds(self, client: httpx.AsyncClient, event_id: int, sport: str) -> list[MatchOdds]:
         async with self._sem:
@@ -267,15 +374,14 @@ class OddsApiScraper:
                 resp = await client.get(
                     f"{_BASE}/odds",
                     params={
-                        "apiKey":      _API_KEY,
-                        "eventId":     event_id,
-                        "bookmakers":  self._bk_api,
+                        "apiKey":     _API_KEY,
+                        "eventId":    event_id,
+                        "bookmakers": self._bk_api,
                     },
                 )
             except Exception as exc:
                 logger.debug("[%s] event %d: %s", self._bk_display, event_id, exc)
                 return []
-
         if resp.status_code != 200:
             return []
         try:
@@ -285,19 +391,14 @@ class OddsApiScraper:
         return _parse_event(data, sport, self._bk_api, self._bk_display)
 
 
-# ─── Pre-configured scrapers ─────────────────────────────────────────────────
+# ─── Pre-configured single-bookmaker scrapers (legacy, used by eurobet.py) ───
 
 class Bet365Scraper:
-    """Bet365 via odds-api.io — football, tennis, basketball."""
-
+    """Bet365 via odds-api.io — kept for backwards compatibility."""
     bookmaker_name = "Bet365"
 
     def __init__(self) -> None:
-        self._inner = OddsApiScraper(
-            bookmaker_api="Bet365",
-            bookmaker_display="Bet365",
-            sports=["calcio", "tennis", "basket"],
-        )
+        self._inner = OddsApiScraper("Bet365", "Bet365", ["calcio", "tennis", "basket"])
 
     async def scrape_all(self) -> list[MatchOdds]:
         return await self._inner.scrape_all()
@@ -307,16 +408,11 @@ class Bet365Scraper:
 
 
 class EurobetApiScraper:
-    """Eurobet tennis + basket via odds-api.io (football handled by webeb)."""
-
+    """Eurobet tennis + basket via odds-api.io."""
     bookmaker_name = "Eurobet"
 
     def __init__(self) -> None:
-        self._inner = OddsApiScraper(
-            bookmaker_api="Eurobet IT",
-            bookmaker_display="Eurobet",
-            sports=["tennis", "basket"],
-        )
+        self._inner = OddsApiScraper("Eurobet IT", "Eurobet", ["tennis", "basket"])
 
     async def scrape_all(self) -> list[MatchOdds]:
         return await self._inner.scrape_all()

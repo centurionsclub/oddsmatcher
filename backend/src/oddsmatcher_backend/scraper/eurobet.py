@@ -869,33 +869,16 @@ class EurobetScraper:
         return await self._run(sport_filter=sport)
 
     async def _run(self, sport_filter: str | None) -> list[MatchOdds]:
-        # Run webeb (httpx) and Playwright in parallel
-        webeb_task = asyncio.create_task(self._run_webeb(sport_filter))
-        pw_task    = asyncio.create_task(self._run_playwright(sport_filter))
-        webeb_rows, pw_rows = await asyncio.gather(webeb_task, pw_task,
-                                                   return_exceptions=True)
-
-        if isinstance(webeb_rows, Exception):
-            logger.error("[Eurobet] webeb failed: %s", webeb_rows)
-            webeb_rows = []
-        if isinstance(pw_rows, Exception):
-            logger.error("[Eurobet] Playwright failed: %s", pw_rows)
-            pw_rows = []
-
-        # Merge: webeb wins on duplicate (event_name, market) — it's more reliable
-        seen: dict[tuple[str, str], MatchOdds] = {}
-        for r in pw_rows:       # PW first (lower priority)
-            seen[(r.event_name, r.market)] = r
-        for r in webeb_rows:    # webeb overwrites (higher priority)
-            seen[(r.event_name, r.market)] = r
-
-        merged = list(seen.values())
-        n_ev = len({r.event_name for r in merged})
-        mc = Counter(r.market for r in merged)
-        sc = Counter(r.sport  for r in merged)
-        logger.info("[Eurobet] Total: %d events, %d rows | markets=%s sports=%s",
-                    n_ev, len(merged), dict(mc), dict(sc))
-        return merged
+        # Webeb only: calcio 1X2/DC/BTTS via legacy httpx API.
+        # Tennis + basket are fetched by CombinedOddsApiScraper in the
+        # dedicated hourly scrape_oddsapi.yml workflow (to share API quota).
+        webeb_rows = await self._run_webeb(sport_filter)
+        n_ev = len({r.event_name for r in webeb_rows})
+        mc = Counter(r.market for r in webeb_rows)
+        sc = Counter(r.sport  for r in webeb_rows)
+        logger.info("[Eurobet] webeb: %d events, %d rows | markets=%s sports=%s",
+                    n_ev, len(webeb_rows), dict(mc), dict(sc))
+        return webeb_rows
 
     # ── webeb ────────────────────────────────────────────────────────────────
 

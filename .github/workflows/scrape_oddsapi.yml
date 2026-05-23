@@ -1,0 +1,37 @@
+name: Scrape odds-api.io (Bet365 + Eurobet)
+
+# Runs ONCE PER HOUR — keeps API usage well under the 100 req/hour quota.
+# Math: 3 /events calls + ~N /odds calls (one per event, both bookmakers together)
+# Typical N = 50-90 events → ~55-95 requests per run, under the 100/hour limit.
+
+on:
+  schedule:
+    - cron: "5 * * * *"   # at :05 of every hour
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  scrape-oddsapi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -e .
+
+      - name: Scrape Bet365 + Eurobet via odds-api.io
+        working-directory: backend
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ODDSAPI_KEY: ${{ secrets.ODDSAPI_KEY }}
+        run: python -m oddsmatcher_backend.main scrape --bookmaker oddsapi

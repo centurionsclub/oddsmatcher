@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from oddsmatcher_backend.config.settings import settings
 from oddsmatcher_backend.db.supabase_client import SupabaseWriter
-from oddsmatcher_backend.scraper.oddsapi import Bet365Scraper
+from oddsmatcher_backend.scraper.oddsapi import Bet365Scraper, CombinedOddsApiScraper
 from oddsmatcher_backend.scraper.betfair import BetfairScraper
 from oddsmatcher_backend.scraper.betsson import BetssonScraper
 from oddsmatcher_backend.scraper.bwin import BwinScraper
@@ -92,6 +92,26 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
     wh_rows       = await _run_direct("William Hill",  WilliamHillScraper, "williamhill")
     bet365_rows   = await _run_direct("Bet365",        Bet365Scraper,      "bet365")
 
+    # ── odds-api.io combined (Bet365 + Eurobet tennis/basket) ─────────────────
+    # Run as "--bookmaker oddsapi" in a dedicated hourly GitHub Actions job.
+    # Fetches /events once per sport and /odds once per event for BOTH bookmakers
+    # → 3 + N total API calls instead of 6 + 2N.
+    oddsapi_bet365_rows  = 0
+    oddsapi_eurobet_rows = 0
+    if bookmaker in (None, "oddsapi"):
+        try:
+            combined = CombinedOddsApiScraper()
+            combined_results = await combined.scrape_all()
+            w = SupabaseWriter()
+            oddsapi_bet365_rows  = w.write_direct_live_odds("Bet365",  combined_results.get("Bet365",  []))
+            oddsapi_eurobet_rows = w.write_direct_live_odds("Eurobet", combined_results.get("Eurobet", []))
+            logger.info(
+                "OddsAPI combined done: Bet365=%d rows, Eurobet=%d rows",
+                oddsapi_bet365_rows, oddsapi_eurobet_rows,
+            )
+        except Exception as exc:
+            logger.error("OddsAPI combined scrape failed: %s", exc, exc_info=True)
+
 
     # ── Betfair Exchange — official API (httpx, no Playwright) ───────────────
     betfair_rows = 0
@@ -110,17 +130,19 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
 
     elapsed = (datetime.now(timezone.utc) - start).total_seconds()
     stats = {
-        "sisal_live_rows":    sisal_rows,
-        "lotto_live_rows":    lotto_rows,
-        "eurobet_live_rows":  eurobet_rows,
-        "snai_live_rows":     snai_rows,
-        "bwin_live_rows":     bwin_rows,
-        "betsson_live_rows":  betsson_rows,
-        "wh_live_rows":       wh_rows,
-        "bet365_live_rows":   bet365_rows,
-        "betfair_live_rows":  betfair_rows,
-        "stale_cleaned":      cleaned,
-        "duration_s":         round(elapsed, 1),
+        "sisal_live_rows":           sisal_rows,
+        "lotto_live_rows":           lotto_rows,
+        "eurobet_live_rows":         eurobet_rows,
+        "snai_live_rows":            snai_rows,
+        "bwin_live_rows":            bwin_rows,
+        "betsson_live_rows":         betsson_rows,
+        "wh_live_rows":              wh_rows,
+        "bet365_live_rows":          bet365_rows,
+        "betfair_live_rows":         betfair_rows,
+        "oddsapi_bet365_live_rows":  oddsapi_bet365_rows,
+        "oddsapi_eurobet_live_rows": oddsapi_eurobet_rows,
+        "stale_cleaned":             cleaned,
+        "duration_s":                round(elapsed, 1),
     }
     logger.info("Scrape cycle complete in %.1fs: %s", elapsed, stats)
     return stats

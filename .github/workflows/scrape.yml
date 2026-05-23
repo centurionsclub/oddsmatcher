@@ -89,10 +89,12 @@ jobs:
         run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape --bookmaker lottomatica
 
   # ── Eurobet ───────────────────────────────────────────────────────────
+  # Webeb calcio only (httpx, no browser, no proxy required).
+  # Tennis + basket are handled by scrape_oddsapi.yml (hourly, combined job).
   scrape-eurobet:
     if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'eurobet' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -101,29 +103,17 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install Xvfb
-        run: sudo apt-get install -y xvfb
-
       - name: Install dependencies
         working-directory: backend
         run: pip install -e .
 
-      - name: Cache Patchright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: patchright-chromium-${{ runner.os }}-${{ hashFiles('backend/pyproject.toml') }}
-
-      - name: Install Patchright browsers
-        run: patchright install chromium --with-deps
-
-      - name: Scrape Eurobet
+      - name: Scrape Eurobet (webeb calcio)
         working-directory: backend
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           PROXY_URL: ${{ secrets.PROXY_URL }}
-        run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape --bookmaker eurobet
+        run: python -m oddsmatcher_backend.main scrape --bookmaker eurobet --sport calcio
 
   # ── Snai ─────────────────────────────────────────────────────────────
   scrape-snai:
@@ -302,38 +292,4 @@ jobs:
         run: python -m oddsmatcher_backend.main scrape --bookmaker betfair
 
   # ── Bet365 ────────────────────────────────────────────────────────────
-  scrape-bet365:
-    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'bet365' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install Xvfb
-        run: sudo apt-get install -y xvfb
-
-      - name: Install dependencies
-        working-directory: backend
-        run: pip install -e .
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('backend/pyproject.toml') }}
-
-      - name: Install Playwright browsers
-        run: playwright install chromium --with-deps
-
-      - name: Scrape Bet365
-        working-directory: backend
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          PROXY_URL: ${{ secrets.PROXY_URL }}
-        run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape --bookmaker bet365
+  # Bet365 is now handled by scrape_oddsapi.yml (odds-api.io, hourly, no playwright).
