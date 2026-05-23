@@ -1,15 +1,23 @@
 """Lottomatica pregame odds scraper.
 
-Strategy: Playwright browser + network response interception.
-Navigate to each Lottomatica tournament page; the SPA fires internal
-API calls automatically.  We capture those JSON responses and parse them —
-no direct API calls from Python (which Akamai blocks with 403).
+Strategy: Playwright browser + on_response interception of Angular XHR.
+
+Lottomatica is an Angular SPA.  When a tournament page loads, Angular fires
+an XHR to:
+    GET /api/sport/pregame/getOverviewEventsAams/0/{did}/0/{eid}/0/0/0
+
+where `did` = discipline (1=calcio, 2=basket, 5=tennis) and `eid` = the
+tournament ID already known from the TOURNAMENTS list.
+
+Akamai blocks any *scripted* re-fetch (403), but Angular's natural XHR
+returns the real JSON (200, ~14–50 KB).  We intercept that response via
+Playwright's on_response handler and parse it — no re-fetch needed.
 
 Flow per tournament:
-  1. Navigate to the Lottomatica tournament page
-  2. Intercept JSON responses from lottomatica.it
-  3. Find the response with event/odds data
-  4. Parse and return MatchOdds
+  1. Register on_response listener for the specific endpoint URL.
+  2. Navigate to the Lottomatica tournament page.
+  3. Angular fires the XHR → Playwright captures the response body.
+  4. Parse and return MatchOdds rows.
 """
 
 import asyncio
@@ -19,7 +27,7 @@ import re
 import unicodedata
 from typing import Any
 
-from playwright.async_api import Browser, BrowserContext, Page, Playwright, Request, async_playwright
+from playwright.async_api import Browser, BrowserContext, Page, Playwright, Response, async_playwright
 
 from oddsmatcher_backend.scraper.models import MatchOdds
 
@@ -28,8 +36,13 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://www.lottomatica.it"
 BOOKMAKER = "lottomatica"
 
+# Discipline IDs used by Lottomatica's internal API
+_DID = {"calcio": 1, "basket": 2, "tennis": 5}
+
 # fmt: off
-# (id_tournament, league_name, sport_key, league_slug, country_slug, page_url)
+# (eid, league_name, sport_key, league_slug, country_slug, page_url)
+# eid   = tournament ID → used in the getOverviewEventsAams path
+# page_url = the Lottomatica SPA URL to navigate to (triggers the XHR)
 TOURNAMENTS: list[tuple[int, str, str, str, str, str]] = [
     (93,      "Serie A",           "calcio", "serie-a",            "italia",                  "/scommesse/sport/calcio/italia/serie-a/"),
     (1626630, "Serie B",           "calcio", "serie-b",            "italia",                  "/scommesse/sport/calcio/italia/serie-b/"),
@@ -41,12 +54,14 @@ TOURNAMENTS: list[tuple[int, str, str, str, str, str]] = [
     (247944,  "Europa League",     "calcio", "europa-league",      "internazionali-di-club",  "/scommesse/sport/calcio/internazionali-di-club/europa-league/"),
     (5675488, "Conference League", "calcio", "conference-league",  "internazionali-di-club",  "/scommesse/sport/calcio/internazionali-di-club/conference-league/"),
     # Basket
-    (54529,   "NBA",               "basket", "nba",                   "usa",          "/scommesse/sport/basket/usa/nba?did=2&nid=8455&eid=54529"),
-    (890160,  "Serie A Basket",    "basket", "serie-a",               "italia",       "/scommesse/sport/basket/italia/serie-a?did=2&nid=7606&eid=890160"),
-    (26064,   "A2 Basket",         "basket", "a2",                    "italia",       "/scommesse/sport/basket/italia/a2?did=2&nid=7606&eid=26064"),
-    (155272,  "WNBA",              "basket", "wnba",                  "usa",          "/scommesse/sport/basket/usa/wnba?did=2&nid=8455&eid=155272"),
-    # Tennis — overview page loads all active tournaments dynamically (id=0 = catch-all)
-    (0,       "ATP",               "tennis", "tennis",                "internazionale", "/scommesse/sport/tennis/"),
+    (54529,   "NBA",            "basket", "nba",      "usa",    "/scommesse/sport/basket/usa/nba?did=2&nid=8455&eid=54529"),
+    (890160,  "Serie A Basket", "basket", "serie-a",  "italia", "/scommesse/sport/basket/italia/serie-a?did=2&nid=7606&eid=890160"),
+    (26064,   "A2 Basket",      "basket", "a2",       "italia", "/scommesse/sport/basket/italia/a2?did=2&nid=7606&eid=26064"),
+    (155272,  "WNBA",           "basket", "wnba",     "usa",    "/scommesse/sport/basket/usa/wnba?did=2&nid=8455&eid=155272"),
+    # Tennis — navigate to the primo-piano overview, which triggers XHR for each
+    # active Grand Slam / ATP / WTA tournament.  We capture ALL getOverviewEventsAams
+    # responses on that page.  eid=0 means "catch-all from overview page".
+    (0,       "ATP/WTA",        "tennis", "tennis",   "internazionale", "/scommesse/sport/tennis/primo-piano/eventi-oggi-domani"),
 ]
 # fmt: on
 
@@ -55,7 +70,7 @@ SIMPLE_MARKET_MAP: dict[str, str] = {
     "DC": "Doppia Chance",
     "GG/NG": "Goal No Goal",
     "Esito Finale": "1X2",
-    # Basket 2-way (NBA, WNBA, Serie A Basket ecc.)
+    # Basket 2-way
     "T/T Risultato": "1X2",
     "Testa a Testa Risultato": "1X2",
     # Tennis
@@ -71,6 +86,9 @@ _USER_AGENT = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
+# Timeout (ms) to wait for the Angular XHR after page navigation
+_XHR_WAIT_MS = 12_000
+
 
 def _slugify_team(name: str) -> str:
     nfkd = unicodedata.normalize("NFKD", name)
@@ -79,7 +97,7 @@ def _slugify_team(name: str) -> str:
 
 
 class LottomaticaScraper:
-    """Scrapes pregame odds from Lottomatica via Playwright network interception."""
+    """Scrapes pregame odds from Lottomatica via Playwright on_response interception."""
 
     def __init__(self, browser=None):
         self._playwright: Playwright | None = None
@@ -152,16 +170,17 @@ class LottomaticaScraper:
 
     async def _scrape_tournaments(self, sport: str | None) -> list[MatchOdds]:
         all_results: list[MatchOdds] = []
-        for id_tournament, league_name, sport_key, league_slug, country_slug, page_path in TOURNAMENTS:
+        for eid, league_name, sport_key, league_slug, country_slug, page_path in TOURNAMENTS:
             if sport and sport_key != sport:
                 continue
             try:
                 results = await self._scrape_tournament(
-                    id_tournament, league_name, sport_key, league_slug, country_slug, page_path
+                    eid, league_name, sport_key, league_slug, country_slug, page_path
                 )
                 all_results.extend(results)
                 n_events = len({r.event_name for r in results})
-                logger.info("[Lottomatica] %s — %d events, %d market rows", league_name, n_events, len(results))
+                logger.info("[Lottomatica] %s — %d events, %d market rows",
+                            league_name, n_events, len(results))
             except Exception as exc:
                 logger.error("[Lottomatica] %s failed: %s", league_name, exc, exc_info=True)
             await asyncio.sleep(0.5)
@@ -171,7 +190,7 @@ class LottomaticaScraper:
 
     async def _scrape_tournament(
         self,
-        id_tournament: int,
+        eid: int,
         league_name: str,
         sport_key: str,
         league_slug: str,
@@ -179,152 +198,100 @@ class LottomaticaScraper:
         page_path: str,
     ) -> list[MatchOdds]:
         assert self._page is not None
+        import json as _json
 
-        # Capture XHR/fetch REQUEST URLs + headers (not response bodies — Akamai may
-        # replace the response body seen by Playwright with an HTML challenge even
-        # though the real browser receives the actual JSON).  We then re-fetch each
-        # URL from inside the browser via page.evaluate(fetch()) which uses the real
-        # session cookies AND replays the original request headers (including any
-        # Authorization: Bearer token set by the SPA).
-        captured_requests: list[dict] = []  # [{url, headers}]
-        _SKIP_EXTS = (".js", ".css", ".png", ".jpg", ".woff", ".woff2", ".svg",
-                      ".ico", ".gif", ".webp", ".ttf", ".map")
+        did = _DID.get(sport_key, 1)
 
-        def on_request(request: Request) -> None:
-            if request.resource_type not in ("xhr", "fetch"):
-                return
-            ru = request.url
-            if "lottomatica.it" not in ru:
-                return
-            if any(ru.endswith(ext) for ext in _SKIP_EXTS):
-                return
-            if not any(r["url"] == ru for r in captured_requests):
-                # request.headers is a synchronous dict property
-                hdrs = dict(request.headers)
-                captured_requests.append({"url": ru, "headers": hdrs})
-                logger.debug("[Lottomatica] %s: API request captured: %s", league_name, ru[:120])
+        # ── Intercept the Angular XHR response via on_response ──────────────
+        # Angular fires GET /api/sport/pregame/getOverviewEventsAams/0/{did}/0/{eid}/0/0/0
+        # naturally when the tournament page loads.  We capture that response body
+        # directly — no scripted re-fetch needed (Akamai would block it).
+        #
+        # For the tennis overview page (eid=0) we capture ANY getOverviewEventsAams
+        # response, since the page loads multiple tournaments dynamically.
 
-        self._page.on("request", on_request)
+        captured_bodies: list[tuple[str, Any]] = []  # [(url, parsed_json)]
+
+        def _is_target(url: str) -> bool:
+            if "getOverviewEventsAams" not in url:
+                return False
+            if eid == 0:
+                # Tennis overview: capture all tournament responses
+                return True
+            # Specific tournament: match the eid in the path
+            return f"/{eid}/" in url or url.endswith(f"/{eid}/0/0/0") or f"0/{eid}/0" in url
+
+        async def on_response(response: Response) -> None:
+            try:
+                url = response.url
+                if not _is_target(url):
+                    return
+                if response.status != 200:
+                    logger.warning("[Lottomatica] %s: XHR %d for %s",
+                                   league_name, response.status, url[50:120])
+                    return
+                body = await response.body()
+                try:
+                    data = _json.loads(body)
+                except Exception:
+                    logger.warning("[Lottomatica] %s: non-JSON response from %s (len=%d, preview=%s)",
+                                   league_name, url[50:120], len(body), body[:100])
+                    return
+                logger.info("[Lottomatica] %s: captured XHR → %s (len=%d)",
+                            league_name, url[50:120], len(body))
+                captured_bodies.append((url, data))
+            except Exception as exc:
+                logger.warning("[Lottomatica] %s: on_response error: %s", league_name, exc)
+
+        self._page.on("response", on_response)
 
         url = BASE_URL + page_path
         logger.info("[Lottomatica] Loading %s", url)
         try:
             await self._page.goto(url, wait_until="domcontentloaded", timeout=30_000)
         except Exception as e:
-            logger.info("[Lottomatica] %s: goto: %s", league_name, type(e).__name__)
+            logger.info("[Lottomatica] %s: goto exception: %s", league_name, type(e).__name__)
 
-        # Wait for SPA data requests to fire
-        await self._page.wait_for_timeout(5_000)
-        self._page.remove_listener("request", on_request)
+        # Wait for Angular to boot and fire its XHR calls
+        # For tennis (eid=0) wait a bit longer since multiple tournaments load
+        wait_ms = _XHR_WAIT_MS if eid == 0 else _XHR_WAIT_MS
+        await self._page.wait_for_timeout(wait_ms)
+        self._page.remove_listener("response", on_response)
 
-        logger.info("[Lottomatica] %s: %d API URLs captured", league_name, len(captured_requests))
-        for req in captured_requests[:3]:
-            auth = req["headers"].get("authorization", req["headers"].get("Authorization", ""))
-            logger.info("[Lottomatica] %s: sample URL → %s  (auth=%s)",
-                        league_name, req["url"][:200],
-                        (auth[:40] + "…") if auth else "none")
+        logger.info("[Lottomatica] %s: %d XHR responses captured", league_name, len(captured_bodies))
 
-        if not captured_requests:
-            logger.warning("[Lottomatica] %s: no API URLs captured (SPA may not have loaded)", league_name)
+        if not captured_bodies:
+            logger.warning("[Lottomatica] %s: no getOverviewEventsAams response intercepted "
+                           "(Angular may not have fired the XHR yet)", league_name)
             return []
 
-        # Re-fetch each URL from inside the browser — uses real session cookies AND
-        # the original headers (especially Authorization: Bearer), bypassing Akamai.
-        import json as _json
-        for req_info in captured_requests:
-            api_url = req_info["url"]
-            orig_headers = req_info["headers"]
-            # Build a safe JS object literal for the headers we want to forward.
-            # Keep: authorization, x-* custom headers, accept, content-type.
-            # Drop: host, origin, referer, sec-*, cookie (handled by credentials:'include')
-            _DROP = {"host", "origin", "referer", "cookie", "content-length"}
-            fwd_headers = {
-                k: v for k, v in orig_headers.items()
-                if k.lower() not in _DROP
-                and not k.lower().startswith("sec-")
-            }
-            # Ensure we accept JSON
-            fwd_headers.setdefault("accept", "application/json, */*")
-            headers_js = _json.dumps(fwd_headers)
-            try:
-                safe_url = api_url.replace("'", "%27")
-                result = await self._page.evaluate(f"""
-                    async () => {{
-                        try {{
-                            const r = await fetch('{safe_url}', {{
-                                credentials: 'include',
-                                headers: {headers_js}
-                            }});
-                            if (!r.ok) return {{error: r.status}};
-                            return await r.json();
-                        }} catch(e) {{ return {{error: String(e)}}; }}
-                    }}
-                """)
-            except Exception as exc:
-                logger.warning("[Lottomatica] %s: evaluate failed: %s", league_name, exc)
-                continue
-
-            if isinstance(result, dict) and "error" in result:
-                logger.warning("[Lottomatica] %s: fetch error %s from %s",
-                               league_name, result["error"], api_url[:80])
-                continue
-
-            # Log structure for debugging
-            if isinstance(result, dict):
-                keys = list(result.keys())[:8]
-            elif isinstance(result, list):
-                keys = f"list[{len(result)}]"
-                if result and isinstance(result[0], dict):
-                    keys = f"list[{len(result)}] → {list(result[0].keys())[:6]}"
-            else:
-                keys = type(result).__name__
-            logger.info("[Lottomatica] CAPTURE url=%s keys=%s BODY=%s",
-                        api_url[:100], keys, _json.dumps(result, ensure_ascii=False)[:500])
-
+        # Parse all captured responses
+        all_rows: list[MatchOdds] = []
+        for resp_url, data in captured_bodies:
             rows = _parse_lottomatica_response(
-                api_url, result,
-                id_tournament, league_name, sport_key, league_slug, country_slug,
+                resp_url, data, eid, league_name, sport_key, league_slug, country_slug,
             )
             if rows:
                 logger.info("[Lottomatica] %s: parsed %d rows from %s",
-                            league_name, len(rows), api_url[:80])
-                return rows
+                            league_name, len(rows), resp_url[50:120])
+                all_rows.extend(rows)
 
-        logger.warning("[Lottomatica] %s: no parseable data in %d captured URLs",
-                       league_name, len(captured_requests))
-
-        # ── Fallback: extract __NEXT_DATA__ embedded in the page HTML ──────
-        # Next.js apps embed the server-side rendered JSON in a script tag as
-        # window.__NEXT_DATA__.  Try to extract odds data from there if the API
-        # re-fetch approach above failed.
-        try:
-            next_data = await self._page.evaluate("() => window.__NEXT_DATA__ || null")
-            if next_data:
-                logger.info("[Lottomatica] %s: __NEXT_DATA__ found, keys=%s",
-                            league_name, list(next_data.keys())[:8])
-                rows = _parse_lottomatica_response(
-                    "__NEXT_DATA__", next_data,
-                    id_tournament, league_name, sport_key, league_slug, country_slug,
-                )
-                if rows:
-                    logger.info("[Lottomatica] %s: parsed %d rows from __NEXT_DATA__",
-                                league_name, len(rows))
-                    return rows
+        if not all_rows:
+            # Log structure to help adapt the parser
+            for resp_url, data in captured_bodies[:1]:
+                if isinstance(data, dict):
+                    keys = list(data.keys())[:10]
+                elif isinstance(data, list):
+                    keys = f"list[{len(data)}]"
+                    if data and isinstance(data[0], dict):
+                        keys = f"list[{len(data)}] keys={list(data[0].keys())[:8]}"
                 else:
-                    # Log a snippet so we can adapt the parser later
-                    logger.info("[Lottomatica] %s: __NEXT_DATA__ not parseable by current parser. "
-                                "Sample: %s", league_name,
-                                _json.dumps(next_data, ensure_ascii=False)[:400])
-            else:
-                logger.info("[Lottomatica] %s: __NEXT_DATA__ not found on page", league_name)
-        except Exception as nde:
-            logger.warning("[Lottomatica] %s: __NEXT_DATA__ extraction failed: %s", league_name, nde)
+                    keys = type(data).__name__
+                logger.warning("[Lottomatica] %s: parser got 0 rows. Response structure: %s | sample: %s",
+                               league_name, keys,
+                               _json.dumps(data, ensure_ascii=False)[:400])
 
-        return []
-
-    @staticmethod
-    def _count_unique_events(results: list[MatchOdds]) -> int:
-        return len({r.event_name for r in results})
+        return all_rows
 
 
 # ── response parser ────────────────────────────────────────────────────
@@ -332,23 +299,18 @@ class LottomaticaScraper:
 def _parse_lottomatica_response(
     url: str,
     body: Any,
-    id_tournament: int,
+    eid: int,
     league_name: str,
     sport_key: str,
     league_slug: str,
     country_slug: str,
 ) -> list[MatchOdds]:
-    """Try to extract MatchOdds from a captured Lottomatica JSON response.
-
-    Lottomatica's internal API (via the SPA) returns events in a `leo` list.
-    Each event has market data in `mmkW` dict, with spreads in `spd` and
-    selections in `asl`.  This mirrors the old httpx-based parser.
-    """
+    """Parse a getOverviewEventsAams JSON response into MatchOdds rows."""
     try:
         # Known structure: {"leo": [...events...]}
         if isinstance(body, dict) and "leo" in body:
             return _parse_leo_list(
-                body["leo"], id_tournament, league_name, sport_key, league_slug, country_slug
+                body["leo"], eid, league_name, sport_key, league_slug, country_slug
             )
 
         # Sometimes nested one level deeper
@@ -356,8 +318,15 @@ def _parse_lottomatica_response(
             for v in body.values():
                 if isinstance(v, dict) and "leo" in v:
                     return _parse_leo_list(
-                        v["leo"], id_tournament, league_name, sport_key, league_slug, country_slug
+                        v["leo"], eid, league_name, sport_key, league_slug, country_slug
                     )
+                if isinstance(v, list) and v and isinstance(v[0], dict) and "leo" in v[0]:
+                    rows = []
+                    for item in v:
+                        rows.extend(_parse_leo_list(
+                            item.get("leo", []), eid, league_name, sport_key, league_slug, country_slug
+                        ))
+                    return rows
 
         return []
     except Exception as e:
@@ -367,7 +336,7 @@ def _parse_lottomatica_response(
 
 def _parse_leo_list(
     events: list,
-    id_tournament: int,
+    eid: int,
     league_name: str,
     sport_key: str,
     league_slug: str,
@@ -388,13 +357,12 @@ def _parse_leo_list(
 
         home_slug = _slugify_team(home)
         away_slug = _slugify_team(away)
-        if id_tournament == 0:
-            # catch-all overview page (e.g. tennis) — use sport-level URL
+        if eid == 0:
             match_url = f"{BASE_URL}/scommesse/sport/{sport_key}/"
         else:
             match_url = (
                 f"{BASE_URL}/scommesse/sport/{sport_key}/{country_slug}/{league_slug}"
-                f"/{home_slug}-{away_slug}?tid={id_tournament}&eid={ei}"
+                f"/{home_slug}-{away_slug}?tid={eid}&eid={ei}"
             )
 
         market_rows = _parse_markets(event, event_name, home, away, event_time, league_name, sport_key, match_url)
@@ -425,8 +393,6 @@ def _parse_markets(
                 for sel in spread_data.get("asl", []):
                     ov = sel.get("ov")
                     sn = sel.get("sn", "")
-                    # cls=1 means "active" for football; basket may use cls=0 or other
-                    # values.  Accept any cls when ov is a valid playable price.
                     if ov and ov > 1.0:
                         odds_dict[sn] = float(ov)
             if odds_dict:
@@ -463,17 +429,9 @@ def _parse_markets(
 
 
 def _parse_date(date_str: str) -> str:
-    """Parse Lottomatica date string (Italian local time) → UTC ISO string.
-
-    Lottomatica returns dates in Italian time (CET = UTC+1 in winter,
-    CEST = UTC+2 in summer). We use the ``dateutil`` / stdlib ``zoneinfo``
-    to convert properly so that all scrapers store UTC in the DB.
-    """
     try:
         from datetime import datetime, timezone, timedelta
         dt_naive = datetime.strptime(date_str, "%d-%m-%Y %H:%M")
-        # Determine Italy offset: CEST (UTC+2) Mar–Oct, CET (UTC+1) Nov–Feb
-        # Use a simple heuristic: month 3-10 → UTC+2, else UTC+1
         italy_offset = 2 if 3 <= dt_naive.month <= 10 else 1
         dt_local = dt_naive.replace(tzinfo=timezone(timedelta(hours=italy_offset)))
         return dt_local.astimezone(timezone.utc).isoformat()
