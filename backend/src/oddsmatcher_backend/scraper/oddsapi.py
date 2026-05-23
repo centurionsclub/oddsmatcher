@@ -44,8 +44,8 @@ _LIMIT      = 200       # max events to fetch from /events per sport
 # Sum must stay ≤ 94 so total calls (94 odds + 3 /events) < 100/hour quota.
 _SPORT_CAP: dict[str, int] = {
     "calcio": 25,
-    "tennis": 50,   # higher cap since league filter dramatically reduces candidates
-    "basket": 44,
+    "tennis": 45,   # includes Challenger + qualifying now (sum: 25+45+25 = 95 < 100)
+    "basket": 25,
 }
 
 # League name substrings to SKIP — these are minor/amateur events that
@@ -53,14 +53,14 @@ _SPORT_CAP: dict[str, int] = {
 # Matching is case-insensitive on the league name.
 _LEAGUE_SKIP: dict[str, list[str]] = {
     "tennis": [
-        "itf",          # ITF Futures/Challengers (e.g. "ITF Men - Hurghada")
-        "challenger",   # ATP/WTA Challenger series
+        "itf",          # ITF Futures (e.g. "ITF Men - Hurghada") — not quoted by major bks
+        # "challenger" removed: Bet365/Eurobet DO cover ATP/WTA Challenger events
         "doubles",      # Doubles events (only singles are quoted)
         "mixed",        # Mixed doubles
         "juniors",
         "junior",
         "exhibition",
-        "qualifying",
+        # "qualifying" removed: Grand Slam qualifying IS covered by Bet365/Eurobet
     ],
     "basket": [
         "wnba",
