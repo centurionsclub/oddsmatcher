@@ -333,18 +333,17 @@ class SupabaseWriter:
         logger.info("%s live_odds pre-write: %d rows, markets=%s, events=%d",
                     bookmaker_name, len(rows), dict(market_counts), len(event_names))
 
-        # Delete stale rows grouped by actual bookmaker (handles multi-bk scrapers)
-        bk_events: dict[str, set] = defaultdict(set)
-        for r in rows:
-            bk_events[r["bookmaker"]].add(r["event_name"])
+        # Delete ALL existing rows for each bookmaker — ensures stale events from
+        # previous runs don't accumulate in the DB.
+        bk_set: set[str] = {r["bookmaker"] for r in rows}
 
-        for bk, evts in bk_events.items():
+        for bk in bk_set:
             try:
                 del_result = (
                     self.client.table("live_odds")
                     .delete()
                     .eq("bookmaker", bk)
-                    .in_("event_name", list(evts))
+                    .gt("scraped_at", "1970-01-01T00:00:00+00:00")
                     .execute()
                 )
                 logger.info("%s live_odds: deleted %d stale rows for %s",
@@ -421,13 +420,13 @@ class SupabaseWriter:
         total_inserted = 0
 
         for bm_name, bm_base, fallback_url in TARGETS:
-            # Delete stale rows for this bookmaker
+            # Delete ALL existing rows for this bookmaker before inserting fresh ones
             try:
                 (
                     self.client.table("live_odds")
                     .delete()
                     .eq("bookmaker", bm_name)
-                    .in_("event_name", event_names)
+                    .gt("scraped_at", "1970-01-01T00:00:00+00:00")
                     .execute()
                 )
             except Exception as e:
@@ -480,7 +479,7 @@ class SupabaseWriter:
                 self.client.table("live_odds")
                 .delete()
                 .eq("bookmaker", bookmaker_name)
-                .in_("event_name", event_names)
+                .gt("scraped_at", "1970-01-01T00:00:00+00:00")
                 .execute()
             )
         except Exception as e:
