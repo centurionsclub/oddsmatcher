@@ -33,5 +33,5 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          ODDSAPI_KEY: ${{ secrets.ODDSAPI_KEY }}
+          # ODDSAPI_KEY: add to GitHub Secrets if you want to override the built-in key
         run: python -m oddsmatcher_backend.main scrape --bookmaker oddsapi

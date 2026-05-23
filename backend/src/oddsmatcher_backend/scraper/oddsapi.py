@@ -29,9 +29,9 @@ logger = logging.getLogger(__name__)
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 
-_API_KEY  = os.environ.get(
-    "ODDSAPI_KEY",
-    "2e79cb122e3b02e9ed206cd8f94119bc383e7e772b3251b3bbe63184dad30d99",
+_API_KEY  = (
+    os.environ.get("ODDSAPI_KEY")
+    or "2e79cb122e3b02e9ed206cd8f94119bc383e7e772b3251b3bbe63184dad30d99"
 )
 _BASE     = "https://api.odds-api.io/v3"
 _TIMEOUT  = httpx.Timeout(30.0)
