@@ -58,10 +58,15 @@ TOURNAMENTS: list[tuple[int, str, str, str, str, str]] = [
     (890160,  "Serie A Basket", "basket", "serie-a",  "italia", "/scommesse/sport/basket/italia/serie-a?did=2&nid=7606&eid=890160"),
     (26064,   "A2 Basket",      "basket", "a2",       "italia", "/scommesse/sport/basket/italia/a2?did=2&nid=7606&eid=26064"),
     (155272,  "WNBA",           "basket", "wnba",     "usa",    "/scommesse/sport/basket/usa/wnba?did=2&nid=8455&eid=155272"),
-    # Tennis — navigate to the primo-piano overview, which triggers XHR for each
-    # active Grand Slam / ATP / WTA tournament.  We capture ALL getOverviewEventsAams
-    # responses on that page.  eid=0 means "catch-all from overview page".
-    (0,       "ATP/WTA",        "tennis", "tennis",   "internazionale", "/scommesse/sport/tennis/primo-piano/eventi-oggi-domani"),
+    # Tennis — specific tournament pages.  Each page triggers its own
+    # getOverviewEventsAams XHR.  These are the active 2026 Grand Slams;
+    # the scraper also auto-discovers additional active tournaments from
+    # getProgram/ (see _scrape_tennis_dynamic below).
+    # Roland Garros 2026 (main draw + qualifying, late May – early June)
+    (161046, "Roland Garros M", "tennis", "slam-maschile", "internazionale",
+             "/scommesse/sport/tennis/slam-maschile/roland-garros-m?did=5&nid=2541018&eid=161046"),
+    (161035, "Roland Garros F", "tennis", "slam-femminile", "internazionale",
+             "/scommesse/sport/tennis/slam-femminile/roland-garros-f?did=5&nid=2541021&eid=161035"),
 ]
 # fmt: on
 
@@ -155,18 +160,104 @@ class LottomaticaScraper:
     async def scrape_all(self) -> list[MatchOdds]:
         await self._start()
         try:
-            return await self._scrape_tournaments(None)
+            all_rows = await self._scrape_tournaments(None)
+            # Also discover dynamic tennis tournaments from getProgram/
+            extra_tennis = await self._scrape_tennis_dynamic()
+            all_rows.extend(extra_tennis)
+            return all_rows
         finally:
             await self._stop()
 
     async def scrape_sport(self, sport: str) -> list[MatchOdds]:
         await self._start()
         try:
-            return await self._scrape_tournaments(sport)
+            rows = await self._scrape_tournaments(sport)
+            if sport == "tennis":
+                rows.extend(await self._scrape_tennis_dynamic())
+            return rows
         finally:
             await self._stop()
 
     # ── internals ─────────────────────────────────────────────────────
+
+    async def _scrape_tennis_dynamic(self) -> list[MatchOdds]:
+        """Discover active tennis tournaments from getProgram/ and scrape them.
+
+        The hardcoded TOURNAMENTS list covers Roland Garros M/F but other
+        active ATP/WTA events (e.g. concurrent 250/500 tournaments) may
+        only appear in getProgram/.  This method:
+          1. Navigates to the tennis overview → Angular fires getProgram/
+          2. Captures that response via on_response
+          3. Tries to parse tournament URLs/EIDs from the JSON
+          4. Navigates to each discovered tournament (skipping already-scraped ones)
+        """
+        import json as _json
+        assert self._page is not None
+
+        # Already-scraped EIDs (from the static TOURNAMENTS list)
+        done_eids = {t[0] for t in TOURNAMENTS if t[2] == "tennis"}
+
+        program_data: list[Any] = []
+
+        async def on_program(response: Response) -> None:
+            try:
+                if "getProgram" not in response.url:
+                    return
+                if response.status != 200:
+                    return
+                body = await response.body()
+                data = _json.loads(body)
+                program_data.append(data)
+                logger.info("[Lottomatica] tennis getProgram/ captured (%d bytes), keys=%s",
+                            len(body),
+                            list(data.keys())[:10] if isinstance(data, dict) else f"list[{len(data)}]")
+            except Exception as exc:
+                logger.warning("[Lottomatica] tennis getProgram/ capture error: %s", exc)
+
+        self._page.on("response", on_program)
+        try:
+            await self._page.goto(
+                BASE_URL + "/scommesse/sport/tennis/primo-piano/eventi-oggi-domani",
+                wait_until="domcontentloaded",
+                timeout=30_000,
+            )
+            await self._page.wait_for_timeout(8_000)
+        except Exception as e:
+            logger.warning("[Lottomatica] tennis overview nav failed: %s", e)
+        finally:
+            self._page.remove_listener("response", on_program)
+
+        if not program_data:
+            logger.warning("[Lottomatica] getProgram/ not captured on tennis overview page")
+            return []
+
+        # Parse the program to find tennis tournament page URLs/EIDs
+        extra_tournaments = _extract_tennis_tournaments(program_data[0], done_eids)
+        if not extra_tournaments:
+            logger.info("[Lottomatica] no additional tennis tournaments found in getProgram/")
+            # Log the structure for debugging
+            d = program_data[0]
+            logger.info("[Lottomatica] getProgram/ structure: %s",
+                        _json.dumps(d, ensure_ascii=False)[:600])
+            return []
+
+        logger.info("[Lottomatica] getProgram/ found %d extra tennis tournaments: %s",
+                    len(extra_tournaments), [t[1] for t in extra_tournaments])
+
+        all_rows: list[MatchOdds] = []
+        for eid, name, page_path in extra_tournaments:
+            try:
+                rows = await self._scrape_tournament(
+                    eid, name, "tennis", "tennis", "internazionale", page_path
+                )
+                all_rows.extend(rows)
+                logger.info("[Lottomatica] %s — %d events, %d rows", name,
+                            len({r.event_name for r in rows}), len(rows))
+            except Exception as exc:
+                logger.error("[Lottomatica] %s dynamic failed: %s", name, exc, exc_info=True)
+            await asyncio.sleep(0.5)
+
+        return all_rows
 
     async def _scrape_tournaments(self, sport: str | None) -> list[MatchOdds]:
         all_results: list[MatchOdds] = []
@@ -292,6 +383,55 @@ class LottomaticaScraper:
                                _json.dumps(data, ensure_ascii=False)[:400])
 
         return all_rows
+
+
+# ── getProgram/ tournament discovery ─────────────────────────────────
+
+def _extract_tennis_tournaments(
+    data: Any,
+    skip_eids: set[int],
+) -> list[tuple[int, str, str]]:
+    """Try to extract active tennis tournament info from a getProgram/ response.
+
+    Returns list of (eid, league_name, page_url) for tournaments NOT in skip_eids.
+    The getProgram/ structure is not yet fully known; this function tries
+    several heuristic approaches and logs what it finds.
+    """
+    import json as _json
+    results = []
+
+    def _walk(obj: Any, depth: int = 0) -> None:
+        if depth > 6 or len(results) > 20:
+            return
+        if isinstance(obj, dict):
+            # Look for entries that have both an eid/id field and a URL/path field
+            eid_val = obj.get("eid") or obj.get("id") or obj.get("idTournament") or obj.get("idManif")
+            url_val = (obj.get("url") or obj.get("path") or obj.get("href") or
+                       obj.get("pageUrl") or obj.get("link") or "")
+            did_val = obj.get("did") or obj.get("idDiscipline") or obj.get("discipline")
+            name_val = obj.get("name") or obj.get("label") or obj.get("description") or obj.get("desc") or ""
+
+            if (eid_val and url_val and str(did_val) == "5" and
+                    int(eid_val) not in skip_eids and "tennis" in str(url_val).lower()):
+                results.append((int(eid_val), str(name_val) or f"Tennis {eid_val}", str(url_val)))
+
+            for v in obj.values():
+                _walk(v, depth + 1)
+
+        elif isinstance(obj, list):
+            for item in obj:
+                _walk(item, depth + 1)
+
+    _walk(data)
+
+    # De-duplicate by eid
+    seen: set[int] = set()
+    unique = []
+    for eid, name, url in results:
+        if eid not in seen:
+            seen.add(eid)
+            unique.append((eid, name, url))
+    return unique
 
 
 # ── response parser ────────────────────────────────────────────────────
