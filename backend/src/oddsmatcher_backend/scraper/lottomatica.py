@@ -214,6 +214,8 @@ class LottomaticaScraper:
         self._page.remove_listener("request", on_request)
 
         logger.info("[Lottomatica] %s: %d API URLs captured", league_name, len(captured_api_urls))
+        for u in captured_api_urls[:3]:
+            logger.info("[Lottomatica] %s: sample URL → %s", league_name, u[:200])
 
         if not captured_api_urls:
             logger.warning("[Lottomatica] %s: no API URLs captured (SPA may not have loaded)", league_name)
@@ -242,8 +244,8 @@ class LottomaticaScraper:
                 continue
 
             if isinstance(result, dict) and "error" in result:
-                logger.debug("[Lottomatica] %s: fetch error %s from %s",
-                             league_name, result["error"], api_url[:80])
+                logger.warning("[Lottomatica] %s: fetch error %s from %s",
+                               league_name, result["error"], api_url[:80])
                 continue
 
             # Log structure for debugging
