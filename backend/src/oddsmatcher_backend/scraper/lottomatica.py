@@ -180,11 +180,13 @@ class LottomaticaScraper:
     ) -> list[MatchOdds]:
         assert self._page is not None
 
-        # Capture XHR/fetch REQUEST URLs (not response bodies — Akamai may replace
-        # the response body seen by Playwright with an HTML challenge even though the
-        # real browser receives the actual JSON).  We then re-fetch each URL from
-        # inside the browser via page.evaluate(fetch()) which uses the real session.
-        captured_api_urls: list[str] = []
+        # Capture XHR/fetch REQUEST URLs + headers (not response bodies — Akamai may
+        # replace the response body seen by Playwright with an HTML challenge even
+        # though the real browser receives the actual JSON).  We then re-fetch each
+        # URL from inside the browser via page.evaluate(fetch()) which uses the real
+        # session cookies AND replays the original request headers (including any
+        # Authorization: Bearer token set by the SPA).
+        captured_requests: list[dict] = []  # [{url, headers}]
         _SKIP_EXTS = (".js", ".css", ".png", ".jpg", ".woff", ".woff2", ".svg",
                       ".ico", ".gif", ".webp", ".ttf", ".map")
 
@@ -196,8 +198,10 @@ class LottomaticaScraper:
                 return
             if any(ru.endswith(ext) for ext in _SKIP_EXTS):
                 return
-            if ru not in captured_api_urls:
-                captured_api_urls.append(ru)
+            if not any(r["url"] == ru for r in captured_requests):
+                # request.headers is a synchronous dict property
+                hdrs = dict(request.headers)
+                captured_requests.append({"url": ru, "headers": hdrs})
                 logger.debug("[Lottomatica] %s: API request captured: %s", league_name, ru[:120])
 
         self._page.on("request", on_request)
@@ -213,18 +217,35 @@ class LottomaticaScraper:
         await self._page.wait_for_timeout(5_000)
         self._page.remove_listener("request", on_request)
 
-        logger.info("[Lottomatica] %s: %d API URLs captured", league_name, len(captured_api_urls))
-        for u in captured_api_urls[:3]:
-            logger.info("[Lottomatica] %s: sample URL → %s", league_name, u[:200])
+        logger.info("[Lottomatica] %s: %d API URLs captured", league_name, len(captured_requests))
+        for req in captured_requests[:3]:
+            auth = req["headers"].get("authorization", req["headers"].get("Authorization", ""))
+            logger.info("[Lottomatica] %s: sample URL → %s  (auth=%s)",
+                        league_name, req["url"][:200],
+                        (auth[:40] + "…") if auth else "none")
 
-        if not captured_api_urls:
+        if not captured_requests:
             logger.warning("[Lottomatica] %s: no API URLs captured (SPA may not have loaded)", league_name)
             return []
 
-        # Re-fetch each URL from inside the browser — uses real session cookies,
-        # bypasses Akamai's network-layer inspection of Python requests.
+        # Re-fetch each URL from inside the browser — uses real session cookies AND
+        # the original headers (especially Authorization: Bearer), bypassing Akamai.
         import json as _json
-        for api_url in captured_api_urls:
+        for req_info in captured_requests:
+            api_url = req_info["url"]
+            orig_headers = req_info["headers"]
+            # Build a safe JS object literal for the headers we want to forward.
+            # Keep: authorization, x-* custom headers, accept, content-type.
+            # Drop: host, origin, referer, sec-*, cookie (handled by credentials:'include')
+            _DROP = {"host", "origin", "referer", "cookie", "content-length"}
+            fwd_headers = {
+                k: v for k, v in orig_headers.items()
+                if k.lower() not in _DROP
+                and not k.lower().startswith("sec-")
+            }
+            # Ensure we accept JSON
+            fwd_headers.setdefault("accept", "application/json, */*")
+            headers_js = _json.dumps(fwd_headers)
             try:
                 safe_url = api_url.replace("'", "%27")
                 result = await self._page.evaluate(f"""
@@ -232,7 +253,7 @@ class LottomaticaScraper:
                         try {{
                             const r = await fetch('{safe_url}', {{
                                 credentials: 'include',
-                                headers: {{'Accept': 'application/json, */*'}}
+                                headers: {headers_js}
                             }});
                             if (!r.ok) return {{error: r.status}};
                             return await r.json();
@@ -270,7 +291,35 @@ class LottomaticaScraper:
                 return rows
 
         logger.warning("[Lottomatica] %s: no parseable data in %d captured URLs",
-                       league_name, len(captured_api_urls))
+                       league_name, len(captured_requests))
+
+        # ── Fallback: extract __NEXT_DATA__ embedded in the page HTML ──────
+        # Next.js apps embed the server-side rendered JSON in a script tag as
+        # window.__NEXT_DATA__.  Try to extract odds data from there if the API
+        # re-fetch approach above failed.
+        try:
+            next_data = await self._page.evaluate("() => window.__NEXT_DATA__ || null")
+            if next_data:
+                logger.info("[Lottomatica] %s: __NEXT_DATA__ found, keys=%s",
+                            league_name, list(next_data.keys())[:8])
+                rows = _parse_lottomatica_response(
+                    "__NEXT_DATA__", next_data,
+                    id_tournament, league_name, sport_key, league_slug, country_slug,
+                )
+                if rows:
+                    logger.info("[Lottomatica] %s: parsed %d rows from __NEXT_DATA__",
+                                league_name, len(rows))
+                    return rows
+                else:
+                    # Log a snippet so we can adapt the parser later
+                    logger.info("[Lottomatica] %s: __NEXT_DATA__ not parseable by current parser. "
+                                "Sample: %s", league_name,
+                                _json.dumps(next_data, ensure_ascii=False)[:400])
+            else:
+                logger.info("[Lottomatica] %s: __NEXT_DATA__ not found on page", league_name)
+        except Exception as nde:
+            logger.warning("[Lottomatica] %s: __NEXT_DATA__ extraction failed: %s", league_name, nde)
+
         return []
 
     @staticmethod
