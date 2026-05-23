@@ -691,11 +691,8 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     const bookmakerSide = data.data.filter(odd => !isOnExchangeSide(odd.bookmaker));
     const rawExchangeSide = data.data.filter(odd => isOnExchangeSide(odd.bookmaker));
 
-    // Punta-punta when the user explicitly selects bookmakers as counter side,
-    // OR when there is no exchange data at all for this sport (e.g. basket, tennis —
-    // Betfair only covers calcio, so rawExchangeSide is empty for other sports).
-    // In that case we automatically fall back to book-vs-book matching.
-    const effectivePuntaPunta = isPuntaPuntaMode || rawExchangeSide.length === 0;
+    // Punta-punta only when the user explicitly selects bookmakers as counter side.
+    const effectivePuntaPunta = isPuntaPuntaMode;
     // In punta-punta, escludiamo i veri exchange (Betfair Exchange ecc.) dall'allPool:
     // hanno quote lay, non back — non sono confrontabili con i bookmaker.
     const allPool = effectivePuntaPunta
