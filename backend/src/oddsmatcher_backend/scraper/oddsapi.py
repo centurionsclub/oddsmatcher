@@ -43,9 +43,35 @@ _LIMIT      = 200       # max events to fetch from /events per sport
 # one sport (e.g. basket) has 150+ events that would crowd out the others.
 # Sum must stay ≤ 94 so total calls (94 odds + 3 /events) < 100/hour quota.
 _SPORT_CAP: dict[str, int] = {
-    "calcio": 25,   # football: season winding down, fewer events
-    "tennis": 35,   # tennis: Roland Garros + other tourneys
-    "basket": 34,   # basket: NBA finals etc.
+    "calcio": 25,
+    "tennis": 50,   # higher cap since league filter dramatically reduces candidates
+    "basket": 44,
+}
+
+# League name substrings to SKIP — these are minor/amateur events that
+# Bet365 and Eurobet IT almost never quote (wasted API calls).
+# Matching is case-insensitive on the league name.
+_LEAGUE_SKIP: dict[str, list[str]] = {
+    "tennis": [
+        "itf",          # ITF Futures/Challengers (e.g. "ITF Men - Hurghada")
+        "challenger",   # ATP/WTA Challenger series
+        "doubles",      # Doubles events (only singles are quoted)
+        "mixed",        # Mixed doubles
+        "juniors",
+        "junior",
+        "exhibition",
+        "qualifying",
+    ],
+    "basket": [
+        "wnba",
+        "g league",
+        "g-league",
+        "nba 2k",
+        "summer league",
+    ],
+    "calcio": [
+        # Keep all football for now — 22 events is already small
+    ],
 }
 
 # internal sport key → API slug
@@ -304,16 +330,24 @@ class CombinedOddsApiScraper:
         except Exception:
             return []
 
+        skip_terms = [s.lower() for s in _LEAGUE_SKIP.get(sport, [])]
         result = []
+        skipped = 0
         for e in data:
             if not isinstance(e, dict):
                 continue
             if e.get("status") in ("settled", "cancelled", "postponed"):
                 continue
+            # Filter out minor leagues that bookmakers don't cover
+            league_name = (e.get("league") or {}).get("name", "").lower()
+            if skip_terms and any(t in league_name for t in skip_terms):
+                skipped += 1
+                continue
             date_str = e.get("date") or ""
             result.append((e["id"], date_str, sport))
 
-        logger.info("[OddsAPI] /events %s: %d active events", slug, len(result))
+        logger.info("[OddsAPI] /events %s: %d active events (%d skipped as minor leagues)",
+                    slug, len(result), skipped)
         return result
 
     async def _fetch_odds(
