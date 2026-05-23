@@ -280,7 +280,9 @@ def _parse_detail_response(data: Any, league_name: str, sport_key: str) -> list[
                      list(result_node.keys())[:10] if isinstance(result_node, dict) else type(result_node))
         return []
 
-    logger.info("[Eurobet-PW] _parse_detail_response: %d events for %s", len(events), league_name)
+    logger.info("[Eurobet-PW] _parse_detail_response: %d events for %s; first event keys=%s",
+                len(events), league_name,
+                list(events[0].keys())[:20] if events and isinstance(events[0], dict) else "?")
 
     for ev in events:
         if not isinstance(ev, dict):
@@ -414,29 +416,34 @@ def _parse_detail_response(data: Any, league_name: str, sport_key: str) -> list[
 # ─── Next.js __NEXT_DATA__ parser ────────────────────────────────────────────
 
 def _parse_next_data(next_data: Any, league_name: str, sport_key: str) -> list[MatchOdds]:
-    """Extract MatchOdds from Next.js __NEXT_DATA__ embedded in the page HTML.
+    """Extract MatchOdds from Next.js data responses.
 
-    Eurobet's Next.js pages include all the page data in a <script id="__NEXT_DATA__">
-    JSON tag.  The odds are somewhere in props.pageProps — we navigate the tree looking
-    for event/market structures.
+    Handles two shapes:
+    - __NEXT_DATA__ embedded in HTML: {"props": {"pageProps": {...}}}
+    - _next/data/*.json API response:  {"pageProps": {...}, "__N_SSG": true}
     """
     if not isinstance(next_data, dict):
         return []
 
-    # Navigate into pageProps
-    page_props = (
-        next_data.get("props", {}).get("pageProps", {})
+    # Navigate into pageProps — handle both __NEXT_DATA__ and _next/data API shapes
+    page_props: dict = (
+        (next_data.get("props") or {}).get("pageProps")
+        or next_data.get("pageProps")
+        or {}
     )
     if not page_props:
         return []
 
+    logger.info("[Eurobet-PW] _parse_next_data: pageProps keys=%s", list(page_props.keys())[:20])
+
     # Try several known locations where Eurobet might put odds data
     candidates: list[Any] = []
 
-    # Common Next.js patterns
-    for key in ("data", "initialData", "events", "avvenimenti", "fixtures",
-                "scommesse", "meetings", "meeting", "palinsesto", "offerte",
-                "betOffers", "odds", "content"):
+    # Recurse into common wrapper keys
+    for key in ("data", "initialData", "initialState", "sportSchedule",
+                "events", "avvenimenti", "fixtures", "scommesse", "meetings",
+                "meeting", "palinsesto", "offerte", "betOffers", "odds",
+                "content", "pageData", "schedule", "items"):
         val = page_props.get(key)
         if val:
             candidates.append(val)
