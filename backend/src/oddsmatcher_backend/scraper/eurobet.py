@@ -40,6 +40,9 @@ _HEADERS = {
 # chooseSport: 1=calcio, 2=basket, 3=tennis
 # meetingsParam: league/meeting ID
 WEBEB_MEETINGS: dict[str, list[tuple[str, int, int]]] = {
+    # NOTE: the webeb legacy API (web.eurobet.it) only supports calcio (chooseSport=1).
+    # chooseSport=2 (basket) and chooseSport=3 (tennis) always return retCode:-1.
+    # Tennis and basket are only available on www.eurobet.it (Cloudflare-protected).
     "calcio": [
         ("Champions League",  1, 18),
         ("Conference League", 1, 2474),
@@ -49,14 +52,6 @@ WEBEB_MEETINGS: dict[str, list[tuple[str, int, int]]] = {
         ("Ligue 1",           1, 14),
         ("Serie A",           1, 21),
         ("Serie B",           1, 22),
-    ],
-    "tennis": [
-        ("Roland Garros", 3, 145),
-    ],
-    "basket": [
-        ("NBA",            2, 12),
-        ("Eurolega",       2, 9),
-        ("Serie A Basket", 2, 3),
     ],
 }
 
