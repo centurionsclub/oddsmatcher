@@ -930,27 +930,15 @@ class EurobetScraper:
             seen[(r.event_name, r.market)] = r
         return list(seen.values())
 
-    # ── API / Playwright (main site) ─────────────────────────────────────────
+    # ── odds-api.io (tennis + basket) ────────────────────────────────────────
 
     async def _run_playwright(self, sport_filter: str | None) -> list[MatchOdds]:
-        proxy_url = os.environ.get("PROXY_URL")
-        if not proxy_url:
-            logger.info("[Eurobet-PW] No PROXY_URL — skipping API+Playwright scrape")
-            return []
-
-        # ── Step 1: try httpx direct API call (faster, no browser) ──────────
-        logger.info("[Eurobet-API] Trying direct httpx API probe via mobile proxy...")
-        api_rows = await _probe_api_httpx(proxy_url)
-        logger.info("[Eurobet-API] httpx probe: %d rows", len(api_rows))
-
-        if api_rows:
-            return api_rows
-
-        # ── Step 2: fall back to Playwright if API returned nothing ──────────
-        logger.info("[Eurobet-PW] httpx API returned 0 rows — falling back to Playwright")
-        pw_scraper = _EurobetPlaywrightScraper()
-
+        """Fetch tennis + basket odds from odds-api.io (replaces Playwright scraper)."""
+        from oddsmatcher_backend.scraper.oddsapi import EurobetApiScraper
+        scraper = EurobetApiScraper()
         if sport_filter:
-            return await pw_scraper.scrape_sport(sport_filter)
-        else:
-            return await pw_scraper.scrape_all()
+            if sport_filter == "calcio":
+                # calcio is fully covered by webeb — no need to call oddsapi
+                return []
+            return await scraper.scrape_sport(sport_filter)
+        return await scraper.scrape_all()

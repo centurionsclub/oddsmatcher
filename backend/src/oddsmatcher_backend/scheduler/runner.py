@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from oddsmatcher_backend.config.settings import settings
 from oddsmatcher_backend.db.supabase_client import SupabaseWriter
-from oddsmatcher_backend.scraper.bet365 import Bet365Scraper
+from oddsmatcher_backend.scraper.oddsapi import Bet365Scraper
 from oddsmatcher_backend.scraper.betfair import BetfairScraper
 from oddsmatcher_backend.scraper.betsson import BetssonScraper
 from oddsmatcher_backend.scraper.bwin import BwinScraper
