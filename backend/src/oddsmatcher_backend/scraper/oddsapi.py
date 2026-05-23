@@ -10,6 +10,7 @@ Bookmaker names in the API:  "Bet365"  /  "Eurobet IT"
 import asyncio
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -28,7 +29,8 @@ _BASE     = "https://api.odds-api.io/v3"
 _TIMEOUT  = httpx.Timeout(30.0)
 _SEM      = 20          # max concurrent requests per run
 _BATCH    = 20          # events per asyncio.gather batch
-_LIMIT    = 500         # max events to fetch from /events
+_LIMIT    = 200         # max events to fetch from /events
+_HORIZON  = 48         # hours ahead — only fetch odds for events within this window
 
 # internal sport key → API slug
 _SPORT_SLUG = {
@@ -226,7 +228,7 @@ class OddsApiScraper:
         return results
 
     async def _get_event_ids(self, client: httpx.AsyncClient, slug: str) -> list[int]:
-        """Fetch all non-settled event IDs for this sport."""
+        """Fetch event IDs for this sport, limited to the next _HORIZON hours."""
         async with self._sem:
             resp = await client.get(
                 f"{_BASE}/events",
@@ -235,11 +237,29 @@ class OddsApiScraper:
         if resp.status_code != 200:
             logger.warning("[%s] /events %s → %d", self._bk_display, slug, resp.status_code)
             return []
-        events = resp.json()
-        return [
-            e["id"] for e in events
-            if e.get("status") not in ("settled", "cancelled", "postponed")
-        ]
+
+        events   = resp.json()
+        now      = datetime.now(timezone.utc)
+        cutoff   = now + timedelta(hours=_HORIZON)
+        result: list[int] = []
+
+        for e in events:
+            if e.get("status") in ("settled", "cancelled", "postponed"):
+                continue
+            # Filter to events that start within the next _HORIZON hours
+            date_str = e.get("date") or e.get("startTime") or e.get("commence_time")
+            if date_str:
+                try:
+                    ev_dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                    if ev_dt > cutoff or ev_dt < now - timedelta(hours=3):
+                        continue   # too far in future, or already finished
+                except Exception:
+                    pass           # no valid date → include anyway (safe fallback)
+            result.append(e["id"])
+
+        logger.info("[%s] /events %s: %d/%d events within next %dh",
+                    self._bk_display, slug, len(result), len(events), _HORIZON)
+        return result
 
     async def _fetch_odds(self, client: httpx.AsyncClient, event_id: int, sport: str) -> list[MatchOdds]:
         async with self._sem:
