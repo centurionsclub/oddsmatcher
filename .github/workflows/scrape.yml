@@ -89,12 +89,14 @@ jobs:
         run: xvfb-run --auto-servernum python -m oddsmatcher_backend.main scrape --bookmaker lottomatica
 
   # ── Eurobet ───────────────────────────────────────────────────────────
-  # Webeb calcio only (httpx, no browser, no proxy required).
-  # Tennis + basket are handled by scrape_oddsapi.yml (hourly, combined job).
+  # Webeb httpx only (no browser, no proxy required).
+  # Scrapes: calcio 1X2/DC/BTTS (fixed meetings) +
+  #          tennis H2H (chooseSport=3, dynamic discovery) +
+  #          basket H2H (chooseSport=2, dynamic discovery)
   scrape-eurobet:
     if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'eurobet' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -107,13 +109,13 @@ jobs:
         working-directory: backend
         run: pip install -e .
 
-      - name: Scrape Eurobet (webeb calcio)
+      - name: Scrape Eurobet (webeb calcio + tennis + basket)
         working-directory: backend
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           PROXY_URL: ${{ secrets.PROXY_URL }}
-        run: python -m oddsmatcher_backend.main scrape --bookmaker eurobet --sport calcio
+        run: python -m oddsmatcher_backend.main scrape --bookmaker eurobet
 
   # ── Snai ─────────────────────────────────────────────────────────────
   scrape-snai:
