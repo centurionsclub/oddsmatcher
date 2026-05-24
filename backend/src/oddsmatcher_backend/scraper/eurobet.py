@@ -3,7 +3,8 @@
 Two-tier approach:
   1. webeb legacy API (web.eurobet.it/webeb/sport) — httpx, no proxy needed.
      Provides: calcio 1X2 / DC / BTTS for the main leagues.
-     Limitation: no O/U, no tennis, no basket (chooseSport 2/3 → retCode:-1).
+               tennis H2H (T/T Escl. Ritiro, betTypesParam=20540) — ALL active tournaments
+               discovered dynamically by scanning meetingsParam 1-300 with chooseSport=3.
 
   2. Playwright + mobile proxy — www.eurobet.it main site via BasePlaywrightScraper.
      Provides: calcio O/U + ALL tennis + ALL basket.
@@ -51,9 +52,7 @@ _HEADERS = {
 
 # (league_name, chooseSport, meetingsParam)
 WEBEB_MEETINGS: dict[str, list[tuple[str, int, int]]] = {
-    # NOTE: the webeb legacy API (web.eurobet.it) only supports calcio (chooseSport=1).
-    # chooseSport=2 (basket) and chooseSport=3 (tennis) always return retCode:-1.
-    # Tennis and basket are only available on www.eurobet.it (Cloudflare-protected).
+    # calcio: chooseSport=1, meetingsParam = fixed league IDs
     "calcio": [
         ("Champions League",  1, 18),
         ("Conference League", 1, 2474),
@@ -64,6 +63,10 @@ WEBEB_MEETINGS: dict[str, list[tuple[str, int, int]]] = {
         ("Serie A",           1, 21),
         ("Serie B",           1, 22),
     ],
+    # tennis: meetingsParam IDs are discovered dynamically at scrape time.
+    # This list is used as a fast-path cache; discovery fills it at runtime.
+    # chooseSport=3, betTypesParam=20540 (T/T Escl. Ritiro = H2H match winner)
+    "tennis": [],
 }
 
 BET_TYPES: list[tuple[int, str]] = [
@@ -71,6 +74,13 @@ BET_TYPES: list[tuple[int, str]] = [
     (200018, "DC"),
     (18,     "BTTS"),
 ]
+
+# Tennis H2H bet type on webeb (chooseSport=3)
+# betTypesParam=20540 → "T/T (Escl. Ritiro)" = H2H match winner, settlement excludes retirements
+TENNIS_BET_TYPE = 20540
+TENNIS_CHOOSE_SPORT = 3
+# Range of meetingsParam values to scan for active tennis tournaments
+TENNIS_SCAN_RANGE = range(1, 301)
 
 # ─── Playwright league config (main site) ────────────────────────────────────
 
@@ -179,6 +189,10 @@ def _parse_webeb_html(html: str, league_name: str, sport_key: str, bet_label: st
             outcome_mapped = ("Goal" if ol in ("goal", "si", "sì", "yes", "gg")
                               else "No Goal" if ol in ("nogoal", "no goal", "no", "ng")
                               else outcome)
+        elif bet_code == str(TENNIS_BET_TYPE) or "t/t" in bn_lower:
+            # Tennis H2H market — outcomes are "1" (player 1 wins) or "2" (player 2 wins)
+            market_key = "1X2"
+            outcome_mapped = {"1": "1", "2": "2"}.get(outcome, outcome)
         else:
             continue
 
@@ -869,9 +883,9 @@ class EurobetScraper:
         return await self._run(sport_filter=sport)
 
     async def _run(self, sport_filter: str | None) -> list[MatchOdds]:
-        # Webeb only: calcio 1X2/DC/BTTS via legacy httpx API.
-        # Tennis + basket are fetched by CombinedOddsApiScraper in the
-        # dedicated hourly scrape_oddsapi.yml workflow (to share API quota).
+        # Webeb: calcio 1X2/DC/BTTS + tennis H2H via legacy httpx API.
+        # Tennis meetings are discovered dynamically (scan meetingsParam 1-300).
+        # Basket is not supported by webeb and is ignored.
         webeb_rows = await self._run_webeb(sport_filter)
         n_ev = len({r.event_name for r in webeb_rows})
         mc = Counter(r.market for r in webeb_rows)
@@ -882,6 +896,34 @@ class EurobetScraper:
 
     # ── webeb ────────────────────────────────────────────────────────────────
 
+    @staticmethod
+    async def _discover_webeb_tennis(client: "httpx.AsyncClient") -> list[tuple[int, str]]:
+        """Scan meetingsParam 1-300 with chooseSport=3 and betTypesParam=TENNIS_BET_TYPE.
+
+        Returns list of (meetingsParam, tournament_name) for active tournaments
+        that have H2H (T/T Escl. Ritiro) match data.
+        """
+        found: list[tuple[int, str]] = []
+        for mid in TENNIS_SCAN_RANGE:
+            url = _webeb_url(TENNIS_CHOOSE_SPORT, mid, TENNIS_BET_TYPE)
+            try:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    continue
+                body = resp.text
+                if "retCode:-1" in body or "placeBet" not in body:
+                    continue
+                # Extract tournament name from the <h1> tag
+                m = re.search(r"<h1>[^<]*<img[^>]+>&nbsp;\s*([^<\r\n]+)", body)
+                name = m.group(1).strip() if m else f"Tennis_{mid}"
+                found.append((mid, name))
+                logger.info("[Eurobet] webeb tennis: discovered meetingsParam=%d name=%r", mid, name)
+            except Exception as exc:
+                logger.debug("[Eurobet] webeb tennis discovery %d: %s", mid, exc)
+            await asyncio.sleep(0.05)
+        logger.info("[Eurobet] webeb tennis discovery: %d active tournament(s) found", len(found))
+        return found
+
     async def _run_webeb(self, sport_filter: str | None) -> list[MatchOdds]:
         proxy_url = os.environ.get("PROXY_URL")
         all_results: list[MatchOdds] = []
@@ -890,10 +932,9 @@ class EurobetScraper:
             headers=_HEADERS, timeout=20, follow_redirects=True,
             proxy=proxy_url,
         ) as client:
-            for sport_key, meetings in WEBEB_MEETINGS.items():
-                if sport_filter and sport_key != sport_filter:
-                    continue
-                for league_name, choose_sport, meetings_param in meetings:
+            # ── Calcio (fixed meetings) ───────────────────────────────────────
+            if not sport_filter or sport_filter == "calcio":
+                for league_name, choose_sport, meetings_param in WEBEB_MEETINGS["calcio"]:
                     league_rows: list[MatchOdds] = []
                     for bet_param, bet_label in BET_TYPES:
                         url = _webeb_url(choose_sport, meetings_param, bet_param)
@@ -901,12 +942,28 @@ class EurobetScraper:
                             resp = await client.get(url)
                             if resp.status_code != 200:
                                 continue
-                            rows = _parse_webeb_html(resp.text, league_name, sport_key, bet_label)
+                            rows = _parse_webeb_html(resp.text, league_name, "calcio", bet_label)
                             logger.info("[Eurobet] webeb %s/%s: %d rows", league_name, bet_label, len(rows))
                             league_rows.extend(rows)
                         except Exception as exc:
                             logger.error("[Eurobet] webeb %s/%s error: %s", league_name, bet_label, exc)
                     all_results.extend(league_rows)
+
+            # ── Tennis (dynamic discovery) ────────────────────────────────────
+            if not sport_filter or sport_filter == "tennis":
+                tennis_meetings = await self._discover_webeb_tennis(client)
+                for meetings_param, tournament_name in tennis_meetings:
+                    url = _webeb_url(TENNIS_CHOOSE_SPORT, meetings_param, TENNIS_BET_TYPE)
+                    try:
+                        resp = await client.get(url)
+                        if resp.status_code != 200:
+                            continue
+                        rows = _parse_webeb_html(resp.text, tournament_name, "tennis", "1X2")
+                        logger.info("[Eurobet] webeb tennis %s (meetingsParam=%d): %d rows",
+                                    tournament_name, meetings_param, len(rows))
+                        all_results.extend(rows)
+                    except Exception as exc:
+                        logger.error("[Eurobet] webeb tennis %s error: %s", tournament_name, exc)
 
         seen: dict[tuple[str, str], MatchOdds] = {}
         for r in all_results:
