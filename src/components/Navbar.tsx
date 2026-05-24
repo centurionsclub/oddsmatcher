@@ -41,7 +41,11 @@ export function Navbar() {
         </div>
         {user && (
           <div className="flex items-center gap-3">
-            <span className="text-slate-400 text-xs">{user.email}</span>
+            <div className="w-7 h-7 rounded-full bg-[#1a2535] border border-[#253347] flex items-center justify-center text-slate-300" title={user.email}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+              </svg>
+            </div>
             <button
               onClick={handleSignOut}
               className="px-3 py-1.5 text-xs font-semibold text-slate-300 border border-[#253347] rounded hover:border-red-500/60 hover:text-red-400 transition-colors"
@@ -92,7 +96,12 @@ export function Navbar() {
           })}
           {user && (
             <div className="px-4 py-3 flex items-center justify-between">
-              <span className="text-slate-400 text-xs truncate max-w-[200px]">{user.email}</span>
+              <div className="flex items-center gap-2 text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+                </svg>
+                <span className="text-xs truncate max-w-[180px]">{user.email}</span>
+              </div>
               <button
                 onClick={handleSignOut}
                 className="px-3 py-1.5 text-xs font-semibold text-red-400 border border-red-500/40 rounded"
