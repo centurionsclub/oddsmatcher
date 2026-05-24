@@ -183,14 +183,24 @@ class LottomaticaScraper:
 
         captured: list[dict[str, Any]] = []
 
+        import json as _json
+
         async def on_response(response: Response) -> None:
             if "lottomatica.it" not in response.url:
                 return
-            # Nessun filtro content-type — Lottomatica può usare tipi non standard
+            if response.status != 200:
+                return
             try:
-                body = await response.json()
+                raw = await response.body()
+            except Exception as exc:
+                logger.warning("[Lottomatica] %s: body() failed for %s: %s",
+                               league_name, response.url[40:100], exc)
+                return
+            try:
+                body = _json.loads(raw)
                 captured.append({"url": response.url, "body": body})
             except Exception:
+                # Not JSON (HTML, binary, etc.) — skip silently
                 pass
 
         self._page.on("response", on_response)
@@ -210,7 +220,6 @@ class LottomaticaScraper:
         logger.info("[Lottomatica] %s: captured %d JSON responses", league_name, len(captured))
 
         # Log captured URLs + keys + body preview for debugging
-        import json as _json
         for item in captured:
             body = item["body"]
             if isinstance(body, dict):
