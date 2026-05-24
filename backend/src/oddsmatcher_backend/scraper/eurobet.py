@@ -141,20 +141,22 @@ def _parse_italy_date(date_str: str, time_str: str = "") -> str | None:
 
 
 def _extract_event_times(html: str) -> dict[str, str]:
-    date_times = re.findall(
-        r'class="box_container_scommesse_info[^"]*"[^>]*>.*?'
-        r'<h4>\s*(\d+/\d+)\s*</h4>\s*<p>\s*(\d+:\d+)',
+    # Match each event's time block directly to its event code in one pass.
+    # This is robust to multiple loadSingleEventPage calls per event (tennis/basket
+    # have 2+ calls per row, which used to break the old count-equality check).
+    matches = re.findall(
+        r'box_container_scommesse_info[^>]*>.*?'
+        r'<h4>\s*(\d+/\d+)\s*</h4>\s*<p>\s*(\d+:\d+).*?'
+        r'loadSingleEventPage\s*\(\s*\d+\s*,\s*(\d+)\s*,',
         html, re.DOTALL,
     )
-    event_codes = re.findall(r'loadSingleEventPage\s*\(\s*\d+\s*,\s*(\d+)\s*,', html)
     result: dict[str, str] = {}
-    if len(date_times) == len(event_codes) and date_times:
-        current_year = datetime.now().year
-        for (date_part, time_part), code in zip(date_times, event_codes):
-            full_date = f"{date_part}/{current_year}"
-            parsed = _parse_italy_date(full_date, time_part)
-            if parsed:
-                result[code] = parsed
+    current_year = datetime.now().year
+    for date_part, time_part, code in matches:
+        full_date = f"{date_part}/{current_year}"
+        parsed = _parse_italy_date(full_date, time_part)
+        if parsed:
+            result[code] = parsed
     return result
 
 
