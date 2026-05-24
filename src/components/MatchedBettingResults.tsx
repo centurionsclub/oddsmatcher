@@ -62,6 +62,28 @@ function normalizeEventName(name: string): string {
     .replace(/'/g, '');
 }
 
+/**
+ * Tennis cross-format matching:
+ * Lottomatica stores "Lastname, Firstname - Lastname, Firstname"
+ * Betfair stores    "Lastname I - Lastname I" (initial, no comma, possibly reversed order)
+ *
+ * Extract surnames from the comma-format side and check all appear in the other name.
+ */
+function matchTennisNames(a: string, b: string): boolean {
+  const commaName = a.includes(',') ? a : b.includes(',') ? b : null;
+  const otherName = a.includes(',') ? b : b.includes(',') ? a : null;
+  if (!commaName || !otherName) return false;
+
+  const parts = commaName.split(/\s*[-–—]\s*/);
+  if (parts.length !== 2) return false;
+
+  const surnames = parts.map(p => p.split(',')[0].trim().toLowerCase().replace(/[^a-z]/g, ''));
+  const otherLetters = otherName.toLowerCase().replace(/[^a-z]/g, '');
+
+  // Both surnames must appear in the other name and be ≥ 3 chars (avoids matching initials)
+  return surnames.every(s => s.length >= 3 && otherLetters.includes(s));
+}
+
 export function MatchedBettingResults({ data, filters, commission, loading, error }: MatchedBettingResultsProps) {
   if (loading) {
     return (
@@ -132,6 +154,9 @@ export function MatchedBettingResults({ data, filters, commission, loading, erro
     const findMatchingEvents = (sourceEvent: OddsData, pool: OddsData[]): OddsData[] => {
       const normalized = normalizeEventName(sourceEvent.eventName);
       return pool.filter(ev => {
+        // Tennis cross-format: "Lastname, Firstname - ..." vs "Lastname I - ..." (possibly reversed)
+        if ((sourceEvent.eventName.includes(',') || ev.eventName.includes(',')) &&
+            matchTennisNames(sourceEvent.eventName, ev.eventName)) return true;
         const norm = normalizeEventName(ev.eventName);
         return normalized === norm ||
           normalized.includes(norm.substring(0, 10)) ||

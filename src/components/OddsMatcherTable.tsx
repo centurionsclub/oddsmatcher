@@ -204,7 +204,33 @@ function normalizeEventName(name: string): string {
   return words.sort().join("");
 }
 
+/**
+ * Tennis cross-format matching:
+ * Lottomatica stores "Lastname, Firstname - Lastname, Firstname"
+ * Betfair stores    "Lastname I - Lastname I" (with initial, no comma, possibly reversed order)
+ *
+ * Strategy: extract surnames from the comma-format name and verify that ALL of them
+ * appear in the other name (letter-only comparison, order-independent).
+ */
+function matchTennisNames(a: string, b: string): boolean {
+  const commaName = a.includes(',') ? a : b.includes(',') ? b : null;
+  const otherName = a.includes(',') ? b : b.includes(',') ? a : null;
+  if (!commaName || !otherName) return false;
+
+  const parts = commaName.split(/\s*[-–—]\s*/);
+  if (parts.length !== 2) return false;
+
+  const surnames = parts.map(p => p.split(',')[0].trim().toLowerCase().replace(/[^a-z]/g, ''));
+  const otherLetters = otherName.toLowerCase().replace(/[^a-z]/g, '');
+
+  // Both surnames must appear in the other name and be at least 3 chars (avoids initials)
+  return surnames.every(s => s.length >= 3 && otherLetters.includes(s));
+}
+
 function eventNamesMatch(a: string, b: string): boolean {
+  // Tennis cross-format: handles "Lastname, Firstname - Lastname, Firstname" vs "Lastname I - Lastname I"
+  if ((a.includes(',') || b.includes(',')) && matchTennisNames(a, b)) return true;
+
   const na = normalizeEventName(a);
   const nb = normalizeEventName(b);
   if (na === nb) return true;
