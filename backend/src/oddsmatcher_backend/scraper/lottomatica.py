@@ -207,15 +207,37 @@ class LottomaticaScraper:
 
         url = BASE_URL + page_path
         logger.info("[Lottomatica] Loading %s", url)
+        page_closed = False
         try:
             # networkidle fa sempre timeout sulle SPA — durante i 65s on_response cattura le API
             await self._page.goto(url, wait_until="networkidle", timeout=65_000)
             logger.info("[Lottomatica] %s: networkidle raggiunto (inatteso)", league_name)
         except Exception as e:
-            logger.info("[Lottomatica] %s: networkidle timeout (atteso): %s", league_name, type(e).__name__)
+            err_name = type(e).__name__
+            logger.info("[Lottomatica] %s: goto ended: %s", league_name, err_name)
+            if "TargetClosed" in err_name or "Target closed" in str(e):
+                page_closed = True
 
-        await self._page.wait_for_timeout(500)
-        self._page.remove_listener("response", on_response)
+        # Extra wait so late-arriving XHRs are captured; skip if page is dead
+        if not page_closed:
+            try:
+                await self._page.wait_for_timeout(2000)
+            except Exception:
+                page_closed = True
+
+        try:
+            self._page.remove_listener("response", on_response)
+        except Exception:
+            pass
+
+        # If the page closed unexpectedly, create a fresh one for next tournament
+        if page_closed:
+            logger.warning("[Lottomatica] %s: page closed — recreating page", league_name)
+            try:
+                assert self._context is not None
+                self._page = await self._context.new_page()
+            except Exception as exc:
+                logger.error("[Lottomatica] Failed to recreate page: %s", exc)
 
         logger.info("[Lottomatica] %s: captured %d JSON responses", league_name, len(captured))
 
