@@ -52,6 +52,38 @@ LEAGUES: list[tuple[str, str, str, str, str]] = [
 ]
 # fmt: on
 
+# Discipline codes in alberaturaPrematch
+_DISC_CALCIO = "1"
+_DISC_TENNIS = "3"
+
+# slug usato nella URL evento per ogni lega calcio (mappato dal nome canonico)
+_CALCIO_SLUG: dict[str, str] = {
+    "Serie A":           "calcio/serie-a",
+    "Serie B":           "calcio/serie-b",
+    "Premier League":    "calcio/inghilterra/premier-league",
+    "La Liga":           "calcio/spagna/liga",
+    "Bundesliga":        "calcio/germania/bundesliga",
+    "Ligue 1":           "calcio/francia/ligue-1",
+    "Champions League":  "calcio/champions-league",
+    "Europa League":     "calcio/europa-league",
+    "Conference League": "calcio/conference-league",
+}
+
+# Mappa substring (lowercase) del campo descrizione Sisal → nome canonico lega
+# Le stringhe più specifiche devono venire PRIMA di quelle generiche.
+_CALCIO_WHITELIST: list[tuple[str, str]] = [
+    ("champions league",  "Champions League"),
+    ("europa league",     "Europa League"),
+    ("conference league", "Conference League"),
+    ("serie a",           "Serie A"),        # deve venire DOPO "serie a2" se necessario
+    ("serie b",           "Serie B"),
+    ("premier league",    "Premier League"),
+    ("bundesliga",        "Bundesliga"),
+    ("ligue 1",           "Ligue 1"),
+    ("la liga",           "La Liga"),
+    ("liga",              "La Liga"),        # fallback per "Liga" senza "La"
+]
+
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -196,6 +228,16 @@ class SisalScraper:
     async def _scrape_leagues(self, sport: str | None) -> list[MatchOdds]:
         all_results: list[MatchOdds] = []
 
+        # Calcio: discovery dinamica tramite alberaturaPrematch → schedaManifestazione diretta
+        # Più robusto dell'intercettazione SPA per Champions/Bundesliga/Ligue 1 etc.
+        if not sport or sport == "calcio":
+            try:
+                calcio_rows = await self._scrape_calcio_dynamic()
+                all_results.extend(calcio_rows)
+                logger.info("[Sisal] Calcio (dynamic) — %d rows", len(calcio_rows))
+            except Exception as exc:
+                logger.error("[Sisal] Calcio dynamic scrape failed: %s", exc, exc_info=True)
+
         # Tennis: discovery dinamica tramite alberaturaPrematch → schedaManifestazione diretta
         if not sport or sport == "tennis":
             try:
@@ -208,6 +250,8 @@ class SisalScraper:
         for league_name, sport_key, sisal_slug, country_slug, url_type in LEAGUES:
             if sport and sport_key != sport:
                 continue
+            if sport_key == "calcio":
+                continue  # già gestito sopra con discovery dinamica
             if sport_key == "tennis":
                 continue  # già gestito sopra con discovery dinamica
             try:
@@ -307,6 +351,113 @@ class SisalScraper:
 
             await asyncio.sleep(0.2)
 
+        return all_rows
+
+    async def _scrape_calcio_dynamic(self) -> list[MatchOdds]:
+        """Discover active calcio competitions via alberaturaPrematch, then fetch
+        each whitelisted competition's schedaManifestazione from within the browser.
+
+        Replaces the fragile URL-navigation + on_request interception approach for
+        calcio leagues. The alberaturaPrematch endpoint lists all active competitions
+        so we automatically pick up Bundesliga, Ligue 1, Champions/Europa/Conference
+        League etc. without depending on SPA navigation timing.
+        """
+        assert self._page is not None
+        API_BASE = "https://betting.sisal.it/api/lettura-palinsesto-sport/palinsesto/prematch"
+
+        try:
+            alberat = await self._page.evaluate(f"""
+                async () => {{
+                    try {{
+                        const r = await fetch('{API_BASE}/alberaturaPrematch', {{
+                            credentials: 'include',
+                            headers: {{'Accept': 'application/json'}}
+                        }});
+                        return await r.json();
+                    }} catch(e) {{ return {{error: String(e)}}; }}
+                }}
+            """)
+        except Exception as exc:
+            logger.warning("[Sisal] Calcio dynamic: alberaturaPrematch fetch failed: %s", exc)
+            return []
+
+        if isinstance(alberat, dict) and "error" in alberat:
+            logger.warning("[Sisal] Calcio dynamic: alberaturaPrematch error: %s", alberat["error"])
+            return []
+
+        manif_map = alberat.get("manifestazioneMap", {})
+        manif_by_disc = alberat.get("manifestazioneListByDisciplinaTutti", {})
+        calcio_keys = manif_by_disc.get(_DISC_CALCIO, [])
+
+        if not calcio_keys:
+            logger.warning("[Sisal] Calcio dynamic: no active competitions found")
+            return []
+
+        logger.info("[Sisal] Calcio dynamic: %d competitions in alberaturaPrematch", len(calcio_keys))
+
+        all_rows: list[MatchOdds] = []
+        seen: set[str] = set()
+
+        for key in calcio_keys:
+            manif = manif_map.get(key, {})
+            comp_name = manif.get("descrizione", key)
+            comp_lower = comp_name.lower()
+
+            # Match against whitelist
+            league_name: str | None = None
+            for substr, canonical in _CALCIO_WHITELIST:
+                if substr in comp_lower:
+                    league_name = canonical
+                    break
+
+            if league_name is None:
+                logger.debug("[Sisal] Calcio dynamic: skipping '%s' (not in whitelist)", comp_name)
+                continue
+
+            sisal_slug = _CALCIO_SLUG.get(league_name, "calcio")
+            scheda_url = (f"{API_BASE}/v1/schedaManifestazione/0/{key}"
+                          f"?offerId=0&metaTplEnabled=true&deep=true")
+
+            try:
+                result = await self._page.evaluate(f"""
+                    async () => {{
+                        try {{
+                            const r = await fetch('{scheda_url}', {{
+                                credentials: 'include',
+                                headers: {{'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}}
+                            }});
+                            if (!r.ok) return {{error: r.status}};
+                            return await r.json();
+                        }} catch(e) {{ return {{error: String(e)}}; }}
+                    }}
+                """)
+            except Exception as exc:
+                logger.warning("[Sisal] Calcio dynamic %s (%s): fetch failed: %s", league_name, key, exc)
+                continue
+
+            if isinstance(result, dict) and "error" in result:
+                logger.debug("[Sisal] Calcio dynamic %s (%s): API error %s", league_name, key, result["error"])
+                continue
+
+            n_events = len(result.get("avvenimentoFeList", []))
+            if n_events == 0:
+                logger.debug("[Sisal] Calcio dynamic %s (%s): 0 events", league_name, key)
+                continue
+
+            logger.info("[Sisal] Calcio dynamic %s (%s): %d events", league_name, key, n_events)
+            rows = _parse_scheda(result, league_name, "calcio", sisal_slug)
+            for row in rows:
+                k = f"{row.event_name}|{row.market}"
+                if k not in seen:
+                    seen.add(k)
+                    all_rows.append(row)
+
+            await asyncio.sleep(0.2)
+
+        logger.info("[Sisal] Calcio dynamic: %d total rows from %d whitelisted competitions",
+                    len(all_rows), sum(1 for k in calcio_keys
+                                       if any(s in manif_map.get(k, {}).get("descrizione", "").lower()
+                                              for s, _ in _CALCIO_WHITELIST)))
         return all_rows
 
     async def _scrape_league(
