@@ -200,15 +200,13 @@ def _parse_schedaAvvenimento(
 
         # ── 1X2 (full-time result only) ───────────────────────────────
         # Match "1X2 ESITO FINALE" / "ESITO FINALE 1X2" / "TESTA A TESTA RISULTATO"
-        # Exclude half-time, corners, handicap, combo (MARCATORE, SCARTO, HANDICAP, ANGOLO, CORNER)
-        # Tennis market names: "VINCENTE INCONTRO", "ESITO INCONTRO" (2-outcome, no X)
+        # Tennis: "T/T MATCH (ESCL. RITIRO)" (codiceScommessa=20540) — confirmed via browser
+        # Exclude half-time, corners, handicap variants
         _is_1x2 = (
             ("ESITO FINALE" in _mname_up and "TEMPO" not in _mname_up)
             or _mname_up in ("TESTA A TESTA RISULTATO", "TESTA A TESTA")
             or (_mname_up == "ESITO INCONTRO 1X2 SENZA SCARTO")
-            or ("VINCENTE INCONTRO" in _mname_up and "HANDICAP" not in _mname_up)
-            or (_mname_up in ("ESITO INCONTRO", "VINCENTE MATCH", "ESITO MATCH",
-                              "MATCH WINNER", "WINNER", "RESULT"))
+            or ("T/T MATCH" in _mname_up and "HANDICAP" not in _mname_up)
         )
         if _is_1x2:
             odds_dict: dict[str, float] = {}
