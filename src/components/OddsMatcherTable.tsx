@@ -737,7 +737,8 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     if (effectivePuntaPunta) {
       // ── PUNTA-PUNTA ──
       allPool.forEach(bmEvent => {
-        const matchingCounters = findMatchingEvents(bmEvent, exchangeSide);
+        const matchingCounters = findMatchingEvents(bmEvent, exchangeSide)
+          .filter(ev => (ev.sport || "calcio") === (bmEvent.sport || "calcio"));
         if (matchingCounters.length === 0) return;
         const outcomes = getOutcomes(bmEvent);
         const hasDrawKey = "X" in bmEvent.odds || "draw" in bmEvent.odds;
@@ -1161,7 +1162,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
     const eventGroups = new Map<string, OddsData[]>();
     bookmakerOdds.forEach(bm => {
-      const key = normalizeEventName(bm.eventName) + "|" + bm.market;
+      const key = normalizeEventName(bm.eventName) + "|" + bm.market + "|" + (bm.sport || "calcio");
       if (!eventGroups.has(key)) eventGroups.set(key, []);
       eventGroups.get(key)!.push(bm);
     });
@@ -1209,7 +1210,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     const bookmakerOdds = data.data.filter(odd => !isExchange(odd.bookmaker));
     const eventGroups = new Map<string, OddsData[]>();
     bookmakerOdds.forEach(bm => {
-      const key = normalizeEventName(bm.eventName) + "|" + bm.market;
+      const key = normalizeEventName(bm.eventName) + "|" + bm.market + "|" + (bm.sport || "calcio");
       if (!eventGroups.has(key)) eventGroups.set(key, []);
       eventGroups.get(key)!.push(bm);
     });
