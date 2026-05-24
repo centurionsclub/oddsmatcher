@@ -129,6 +129,11 @@ def _parse_italy_date(date_str: str, time_str: str = "") -> str | None:
         s = f"{date_str.strip()} {time_str.strip()}".strip()
         fmt = "%d/%m/%Y %H:%M" if time_str.strip() else "%d/%m/%Y"
         dt = datetime.strptime(s, fmt)
+        # When only a date is provided (no time), use end-of-day 23:59 so that
+        # events remain visible all day (rather than appearing to have already
+        # started at midnight when the edge function applies its cutoff filter).
+        if not time_str.strip():
+            dt = dt.replace(hour=23, minute=59, second=59)
         off = 2 if 3 <= dt.month <= 10 else 1
         return dt.replace(tzinfo=timezone(timedelta(hours=off))).astimezone(timezone.utc).isoformat()
     except Exception:
