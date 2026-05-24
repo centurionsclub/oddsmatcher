@@ -253,6 +253,38 @@ class LottomaticaScraper:
 
 # ── response parser ────────────────────────────────────────────────────
 
+def _collect_leo_events(obj: Any, depth: int = 0) -> list:
+    """Recursively collect all 'leo' event lists from a JSON structure.
+
+    Grand Slams like Roland Garros nest events by round/draw:
+      {"rnd": [{"rn": "Primo Turno", "leo": [...]}, ...]}
+    or by discipline/nationality:
+      {"disc": [{"naz": [{"leo": [...]}]}]}
+
+    We search up to depth=6, merge all found `leo` lists into one.
+    When a dict has a `leo` key we collect its contents but do NOT recurse
+    into `leo` itself — this avoids double-counting if events also nest `leo`.
+    """
+    if depth > 6 or not obj:
+        return []
+
+    all_events: list = []
+
+    if isinstance(obj, dict):
+        if "leo" in obj and isinstance(obj["leo"], list):
+            all_events.extend(obj["leo"])
+        # Recurse into non-leo values only (skip the list we already added)
+        for k, v in obj.items():
+            if k != "leo" and isinstance(v, (dict, list)):
+                all_events.extend(_collect_leo_events(v, depth + 1))
+
+    elif isinstance(obj, list):
+        for item in obj:
+            all_events.extend(_collect_leo_events(item, depth + 1))
+
+    return all_events
+
+
 def _parse_lottomatica_response(
     url: str,
     body: Any,
@@ -266,22 +298,25 @@ def _parse_lottomatica_response(
 
     Lottomatica's internal API (via the SPA) returns events in a `leo` list.
     Each event has market data in `mmkW` dict, with spreads in `spd` and
-    selections in `asl`.  This mirrors the old httpx-based parser.
+    selections in `asl`.
+
+    Grand Slams (Roland Garros etc.) nest events by round inside `rnd` lists;
+    _collect_leo_events walks the full JSON tree to merge all found `leo` lists.
     """
     try:
-        # Known structure: {"leo": [...events...]}
-        if isinstance(body, dict) and "leo" in body:
-            return _parse_leo_list(
-                body["leo"], id_tournament, league_name, sport_key, league_slug, country_slug
-            )
+        # Only care about getOverviewEventsAams and getProgram responses
+        if "getOverviewEventsAams" not in url and "getProgram" not in url:
+            return []
 
-        # Sometimes nested one level deeper
-        if isinstance(body, dict):
-            for v in body.values():
-                if isinstance(v, dict) and "leo" in v:
-                    return _parse_leo_list(
-                        v["leo"], id_tournament, league_name, sport_key, league_slug, country_slug
-                    )
+        events = _collect_leo_events(body)
+        if events:
+            logger.info(
+                "[Lottomatica] %s: found %d events via recursive leo search in %s",
+                league_name, len(events), url.split("/api/")[1][:60] if "/api/" in url else url[-60:]
+            )
+            return _parse_leo_list(
+                events, id_tournament, league_name, sport_key, league_slug, country_slug
+            )
 
         return []
     except Exception as e:
