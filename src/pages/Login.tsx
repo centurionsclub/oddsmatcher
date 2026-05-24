@@ -27,8 +27,8 @@ const Login = () => {
         <img
           src="/logo-centurion.png"
           alt="Centurion Club"
-          className="mx-auto mb-4 w-36 md:w-44"
-          style={{ mixBlendMode: "lighten" }}
+          className="mx-auto mb-4 w-36 md:w-44 rounded-xl"
+          style={{ backgroundColor: "#0d1320" }}
         />
         <h1 className="text-3xl md:text-4xl font-bold text-[#c8922d]" style={{ fontFamily: "'Cinzel', serif", letterSpacing: "0.15em" }}>
           ODDSMATCHER
