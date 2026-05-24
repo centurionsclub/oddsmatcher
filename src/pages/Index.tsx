@@ -195,7 +195,10 @@ const Index = () => {
     setFiltersOpen(false); // nascondi i filtri subito
     setMultiplaResetKey(k => k + 1); // reset selezione multipla
     searchOdds({
-      sport: selectedSport,
+      // La multipla usa sempre tutti gli sport perché incrocia calcio (bookmaker)
+      // con Betfair Exchange. Se l'utente ha filtrato su tennis, fetchare solo tennis
+      // svuota il bookmakerPool (calcio 1X2) e la multipla non mostra nulla.
+      sport: activeSubTab === "multipla" ? "tutti" : selectedSport,
       mercato: "tutti",
       partita,
       campionato,
