@@ -304,8 +304,10 @@ def _parse_lottomatica_response(
     _collect_leo_events walks the full JSON tree to merge all found `leo` lists.
     """
     try:
-        # Only care about getOverviewEventsAams and getProgram responses
-        if "getOverviewEventsAams" not in url and "getProgram" not in url:
+        # Only parse getOverviewEventsAams — that's where per-tournament events live.
+        # getProgram contains navigation/overview data and must NOT be parsed here
+        # (it may have stale or cross-tournament events that would stop the loop early).
+        if "getOverviewEventsAams" not in url:
             return []
 
         events = _collect_leo_events(body)
