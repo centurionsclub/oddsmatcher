@@ -1257,11 +1257,13 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
   const applyFilters = <T extends { eventName: string; bookmaker?: string; quotaBook?: number }>(items: T[]): T[] => {
     let result = items;
-    // Usa committedFilters (snapshot al momento dell'ultimo Aggiorna)
-    if (committedFilters.bookmaker.length > 0) {
+    // Filtro bookmaker: usa il prop live `filters.bookmaker` (non lo snapshot committed)
+    // così aggiunge/rimuove bookmaker senza aspettare il prossimo Aggiorna.
+    const liveBookmakerFilter = filters.bookmaker ?? [];
+    if (liveBookmakerFilter.length > 0) {
       result = result.filter(opp => {
         const book = (opp as any).bookmaker || (opp as any).bestBookmaker || "";
-        return committedFilters.bookmaker.some(bm =>
+        return liveBookmakerFilter.some(bm =>
           book.toLowerCase().includes(bm.toLowerCase()) ||
           bm.toLowerCase().includes(book.toLowerCase())
         );
