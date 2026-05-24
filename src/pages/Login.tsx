@@ -25,7 +25,7 @@ const Login = () => {
     <div className="min-h-screen bg-[#0d1320] flex flex-col items-center justify-center px-4">
       <div className="mb-8 text-center">
         <img
-          src="/logo-centurion.png"
+          src="/logo-centurion.jpg"
           alt="Centurion Club"
           className="mx-auto mb-4 w-36 md:w-44"
         />
