@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
-  { path: "/", label: "ODDSMATCHER" },
   { path: "/punta-banca", label: "PUNTA → BANCA" },
   { path: "/punta-punta", label: "PUNTA → PUNTA" },
   { path: "/punta-3vie", label: "PUNTA → 3 VIE" },
