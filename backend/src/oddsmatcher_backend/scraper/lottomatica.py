@@ -45,9 +45,15 @@ TOURNAMENTS: list[tuple[int, str, str, str, str, str]] = [
     (890160,  "Serie A Basket",    "basket", "serie-a",               "italia",       "/scommesse/sport/basket/italia/serie-a?did=2&nid=7606&eid=890160"),
     (26064,   "A2 Basket",         "basket", "a2",                    "italia",       "/scommesse/sport/basket/italia/a2?did=2&nid=7606&eid=26064"),
     (155272,  "WNBA",              "basket", "wnba",                  "usa",          "/scommesse/sport/basket/usa/wnba?did=2&nid=8455&eid=155272"),
-    # Tennis — pagine specifiche dei tornei attivi (ognuna triggera il proprio XHR)
-    (161046, "Roland Garros M",   "tennis", "slam-maschile",  "internazionale", "/scommesse/sport/tennis/slam-maschile/roland-garros-m?did=5&nid=2541018&eid=161046"),
-    (161035, "Roland Garros F",   "tennis", "slam-femminile", "internazionale", "/scommesse/sport/tennis/slam-femminile/roland-garros-f?did=5&nid=2541021&eid=161035"),
+    # Tennis — pagine slam senza eid/nid (cambiano ogni anno): la SPA carica l'edizione attiva dal slug.
+    # id_tournament=0 → match URL cade back al link sport-level (non serve tid nel link evento).
+    (0, "Roland Garros M",   "tennis", "slam-maschile",  "internazionale", "/scommesse/sport/tennis/slam-maschile/roland-garros-m"),
+    (0, "Roland Garros F",   "tennis", "slam-femminile", "internazionale", "/scommesse/sport/tennis/slam-femminile/roland-garros-f"),
+    # Wimbledon, US Open, Australian Open (navigati solo se attivi — 0 eventi = skip silenzioso)
+    (0, "Wimbledon M",       "tennis", "slam-maschile",  "internazionale", "/scommesse/sport/tennis/slam-maschile/wimbledon-m"),
+    (0, "Wimbledon F",       "tennis", "slam-femminile", "internazionale", "/scommesse/sport/tennis/slam-femminile/wimbledon-f"),
+    (0, "US Open M",         "tennis", "slam-maschile",  "internazionale", "/scommesse/sport/tennis/slam-maschile/us-open-m"),
+    (0, "US Open F",         "tennis", "slam-femminile", "internazionale", "/scommesse/sport/tennis/slam-femminile/us-open-f"),
 ]
 # fmt: on
 
