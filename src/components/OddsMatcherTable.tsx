@@ -1001,9 +1001,12 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     );
 
     // Exchange side: solo exchange reali (Betfair Exchange, BetFlag Exchange…)
-    // Rispetta la selezione dell'utente se ha scelto exchange specifici
+    // Se l'utente è in modalità punta-punta (ha selezionato un bookmaker non-exchange)
+    // la multipla usa comunque tutti gli exchange reali — il lay su bookmaker non esiste.
     const exchangePool = data.data.filter(odd => {
       if (!isRealExchange(odd.bookmaker)) return false;
+      // In punta-punta mode: ignora committedExchanges e usa tutti i real exchange
+      if (isPuntaPuntaMode) return true;
       if (committedExchanges && committedExchanges.length > 0) {
         return committedExchanges.some(ex =>
           odd.bookmaker.toLowerCase().includes(ex.toLowerCase()) ||
