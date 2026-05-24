@@ -229,6 +229,9 @@ function matchTennisNames(a: string, b: string): boolean {
 
 function eventNamesMatch(a: string, b: string): boolean {
   // Tennis cross-format: handles "Lastname, Firstname - Lastname, Firstname" vs "Lastname I - Lastname I"
+  // Require at least one name to have a comma (Lottomatica format) AND the match to be confirmed.
+  // Using OR (not AND) allows matching comma-format against initial-format, but we skip entirely
+  // if neither name has a comma (prevents football "Team A - Team B" from triggering tennis logic).
   if ((a.includes(',') || b.includes(',')) && matchTennisNames(a, b)) return true;
 
   const na = normalizeEventName(a);

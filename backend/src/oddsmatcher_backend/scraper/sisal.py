@@ -195,19 +195,119 @@ class SisalScraper:
 
     async def _scrape_leagues(self, sport: str | None) -> list[MatchOdds]:
         all_results: list[MatchOdds] = []
+
+        # Tennis: discovery dinamica tramite alberaturaPrematch → schedaManifestazione diretta
+        if not sport or sport == "tennis":
+            try:
+                tennis_rows = await self._scrape_tennis_dynamic()
+                all_results.extend(tennis_rows)
+                logger.info("[Sisal] Tennis (dynamic) — %d rows", len(tennis_rows))
+            except Exception as exc:
+                logger.error("[Sisal] Tennis dynamic scrape failed: %s", exc, exc_info=True)
+
         for league_name, sport_key, sisal_slug, country_slug, url_type in LEAGUES:
             if sport and sport_key != sport:
                 continue
+            if sport_key == "tennis":
+                continue  # già gestito sopra con discovery dinamica
             try:
                 results = await self._scrape_league(league_name, sport_key, sisal_slug, url_type)
                 all_results.extend(results)
                 logger.info("[Sisal] %s — %d match+market rows", league_name, len(results))
             except Exception as exc:
                 logger.error("[Sisal] %s failed: %s", league_name, exc, exc_info=True)
-            await asyncio.sleep(0.3)  # breve pausa tra leghe (era 1.0s)
+            await asyncio.sleep(0.3)
 
         logger.info("[Sisal] Total rows: %d", len(all_results))
         return all_results
+
+    async def _scrape_tennis_dynamic(self) -> list[MatchOdds]:
+        """Discover active tennis tournaments via alberaturaPrematch, then fetch
+        each tournament's schedaManifestazione directly from within the browser."""
+        assert self._page is not None
+        API_BASE = "https://betting.sisal.it/api/lettura-palinsesto-sport/palinsesto/prematch"
+        TENNIS_DISC = "3"
+
+        # Fetch alberaturaPrematch to get active tennis tournament keys
+        try:
+            alberat = await self._page.evaluate(f"""
+                async () => {{
+                    try {{
+                        const r = await fetch('{API_BASE}/alberaturaPrematch', {{
+                            credentials: 'include',
+                            headers: {{'Accept': 'application/json'}}
+                        }});
+                        return await r.json();
+                    }} catch(e) {{ return {{error: String(e)}}; }}
+                }}
+            """)
+        except Exception as exc:
+            logger.warning("[Sisal] Tennis: alberaturaPrematch fetch failed: %s", exc)
+            return []
+
+        if isinstance(alberat, dict) and "error" in alberat:
+            logger.warning("[Sisal] Tennis: alberaturaPrematch error: %s", alberat["error"])
+            return []
+
+        manif_map = alberat.get("manifestazioneMap", {})
+        manif_by_disc = alberat.get("manifestazioneListByDisciplinaTutti", {})
+        tennis_keys = manif_by_disc.get(TENNIS_DISC, [])
+
+        if not tennis_keys:
+            logger.warning("[Sisal] Tennis: no active tournaments found in alberaturaPrematch")
+            return []
+
+        logger.info("[Sisal] Tennis: discovered %d tournaments: %s", len(tennis_keys), tennis_keys)
+
+        all_rows: list[MatchOdds] = []
+        seen: set[str] = set()
+
+        for key in tennis_keys:
+            manif = manif_map.get(key, {})
+            tournament_name = manif.get("descrizione", key)
+
+            # Skip specials / antepost
+            if any(w in tournament_name.lower() for w in ("special", "antepost", "tavolo")):
+                continue
+
+            scheda_url = (f"{API_BASE}/v1/schedaManifestazione/0/{key}"
+                          f"?offerId=0&metaTplEnabled=true&deep=true")
+            try:
+                result = await self._page.evaluate(f"""
+                    async () => {{
+                        try {{
+                            const r = await fetch('{scheda_url}', {{
+                                credentials: 'include',
+                                headers: {{'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}}
+                            }});
+                            if (!r.ok) return {{error: r.status}};
+                            return await r.json();
+                        }} catch(e) {{ return {{error: String(e)}}; }}
+                    }}
+                """)
+            except Exception as exc:
+                logger.warning("[Sisal] Tennis %s: fetch failed: %s", tournament_name, exc)
+                continue
+
+            if isinstance(result, dict) and "error" in result:
+                logger.debug("[Sisal] Tennis %s: API error %s", tournament_name, result["error"])
+                continue
+
+            n_events = len(result.get("avvenimentoFeList", []))
+            logger.info("[Sisal] Tennis %s: %d events", tournament_name, n_events)
+            if n_events == 0:
+                continue
+
+            rows = _parse_scheda(result, tournament_name, "tennis", "tennis")
+            for row in rows:
+                k = f"{row.event_name}|{row.market}"
+                if k not in seen:
+                    seen.add(k)
+                    all_rows.append(row)
+
+            await asyncio.sleep(0.2)
+
+        return all_rows
 
     async def _scrape_league(
         self,
