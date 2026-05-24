@@ -201,10 +201,14 @@ def _parse_schedaAvvenimento(
         # ── 1X2 (full-time result only) ───────────────────────────────
         # Match "1X2 ESITO FINALE" / "ESITO FINALE 1X2" / "TESTA A TESTA RISULTATO"
         # Exclude half-time, corners, handicap, combo (MARCATORE, SCARTO, HANDICAP, ANGOLO, CORNER)
+        # Tennis market names: "VINCENTE INCONTRO", "ESITO INCONTRO" (2-outcome, no X)
         _is_1x2 = (
             ("ESITO FINALE" in _mname_up and "TEMPO" not in _mname_up)
             or _mname_up in ("TESTA A TESTA RISULTATO", "TESTA A TESTA")
             or (_mname_up == "ESITO INCONTRO 1X2 SENZA SCARTO")
+            or ("VINCENTE INCONTRO" in _mname_up and "HANDICAP" not in _mname_up)
+            or (_mname_up in ("ESITO INCONTRO", "VINCENTE MATCH", "ESITO MATCH",
+                              "MATCH WINNER", "WINNER", "RESULT"))
         )
         if _is_1x2:
             odds_dict: dict[str, float] = {}
@@ -458,7 +462,10 @@ class SnaiScraper:
                             kw_markets = {}
                             for k, v in (s_map.items() if isinstance(s_map, dict) else []):
                                 desc = str(v.get("descrizione") or "").upper()
-                                if (("ESITO FINALE" in desc and "TEMPO" not in desc)
+                                # For tennis log all markets; for others only known-useful ones
+                                if sk == "tennis":
+                                    kw_markets[k] = {"cod": v.get("codiceScommessa"), "desc": v.get("descrizione"), "stato": v.get("stato")}
+                                elif (("ESITO FINALE" in desc and "TEMPO" not in desc)
                                         or "TESTA A TESTA RISULTATO" in desc
                                         or ("DOPPIA CHANCE" in desc and "TEMPO" not in desc and "COMBO" not in desc)
                                         or ("OVER/UNDER" in desc and "COMBO" not in desc and "QUARTO" not in desc)
