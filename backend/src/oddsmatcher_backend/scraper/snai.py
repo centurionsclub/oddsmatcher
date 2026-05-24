@@ -498,7 +498,12 @@ class SnaiScraper:
     def _find_competitions(
         self, alberatura: dict, sport_filter: str | None
     ) -> list[tuple[str, str, int, int]]:
-        """Parse manifestazioneMap to find competitions we want."""
+        """Parse manifestazioneMap to find competitions we want.
+
+        For calcio and basket we use LEAGUE_PATTERNS keyword matching (whitelist).
+        For tennis we accept ALL tournaments with disc=3 — static name lists break
+        when Snai has Challengers or tournaments with slightly different descriptions.
+        """
         out: list[tuple[str, str, int, int]] = []
         if not isinstance(alberatura, dict):
             return out
@@ -508,7 +513,9 @@ class SnaiScraper:
             logger.warning("[Snai] manifestazioneMap missing or wrong type")
             return out
 
-        seen_leagues: set[str] = set()
+        seen_calcio_basket: set[str] = set()   # dedup by league_name for whitelist sports
+        seen_tennis_manif: set[int] = set()    # dedup by manif_id for tennis
+
         for key, entry in manif_map.items():
             if not isinstance(entry, dict):
                 continue
@@ -522,11 +529,24 @@ class SnaiScraper:
                 continue
             if sport_filter and sport_key != sport_filter:
                 continue
-            league_name = _match_league(descrizione, sport_key)
-            if league_name and league_name not in seen_leagues:
-                out.append((league_name, sport_key, int(disc_id), int(manif_id)))
-                seen_leagues.add(league_name)
-                logger.info("[Snai] Matched: %r → %r (disc=%s manif=%s)",
-                            descrizione, league_name, disc_id, manif_id)
+
+            if sport_key == "tennis":
+                # Accept every tennis tournament — no keyword filter needed.
+                # Skip specials / antepost / tavolo.
+                if any(w in descrizione.lower() for w in ("special", "antepost", "tavolo")):
+                    continue
+                mid = int(manif_id)
+                if mid not in seen_tennis_manif:
+                    seen_tennis_manif.add(mid)
+                    out.append((descrizione, sport_key, int(disc_id), mid))
+                    logger.info("[Snai] Tennis: %r (disc=%s manif=%s)", descrizione, disc_id, manif_id)
+            else:
+                # Calcio / basket: keyword whitelist matching
+                league_name = _match_league(descrizione, sport_key)
+                if league_name and league_name not in seen_calcio_basket:
+                    out.append((league_name, sport_key, int(disc_id), int(manif_id)))
+                    seen_calcio_basket.add(league_name)
+                    logger.info("[Snai] Matched: %r → %r (disc=%s manif=%s)",
+                                descrizione, league_name, disc_id, manif_id)
 
         return out
