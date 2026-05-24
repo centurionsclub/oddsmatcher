@@ -29,7 +29,7 @@ const Login = () => {
           alt="Centurion Club"
           className="mx-auto mb-3 w-40 md:w-52"
         />
-        <h1 className="text-3xl md:text-4xl font-bold text-[#c8922d]" style={{ fontFamily: "'Cinzel', serif", letterSpacing: "0.15em" }}>
+        <h1 className="text-3xl md:text-4xl font-bold text-[#d4a847]" style={{ fontFamily: "'Cinzel', serif", letterSpacing: "0.15em" }}>
           ODDSMATCHER
         </h1>
         <p className="text-slate-400 text-sm mt-1">Accedi con le tue credenziali</p>
@@ -45,7 +45,7 @@ const Login = () => {
             required
             autoFocus
             placeholder="email@esempio.com"
-            className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/40 placeholder-slate-500"
+            className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#d4a847]/40 placeholder-slate-500"
           />
         </div>
         <div className="mb-6">
@@ -56,14 +56,14 @@ const Login = () => {
             onChange={e => setPassword(e.target.value)}
             required
             placeholder="••••••••"
-            className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922d]/40 placeholder-slate-500"
+            className="w-full bg-[#1a2535] border border-[#253347] text-white rounded px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#d4a847]/40 placeholder-slate-500"
           />
         </div>
         {error && <p className="text-red-400 text-xs mb-4 text-center">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 rounded font-bold text-sm bg-[#c8922d] text-white hover:bg-[#b07a24] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-3 rounded font-bold text-sm bg-[#d4a847] text-white hover:bg-[#b8902f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? "Accesso in corso…" : "ACCEDI"}
         </button>
