@@ -45,8 +45,9 @@ TOURNAMENTS: list[tuple[int, str, str, str, str, str]] = [
     (890160,  "Serie A Basket",    "basket", "serie-a",               "italia",       "/scommesse/sport/basket/italia/serie-a?did=2&nid=7606&eid=890160"),
     (26064,   "A2 Basket",         "basket", "a2",                    "italia",       "/scommesse/sport/basket/italia/a2?did=2&nid=7606&eid=26064"),
     (155272,  "WNBA",              "basket", "wnba",                  "usa",          "/scommesse/sport/basket/usa/wnba?did=2&nid=8455&eid=155272"),
-    # Tennis — /tennis/ ora redirecta alla homepage; URL corretto è primo-piano
-    (0,       "ATP",               "tennis", "tennis",                "internazionale", "/scommesse/sport/tennis/primo-piano/eventi-oggi-domani"),
+    # Tennis — pagine specifiche dei tornei attivi (ognuna triggera il proprio XHR)
+    (161046, "Roland Garros M",   "tennis", "slam-maschile",  "internazionale", "/scommesse/sport/tennis/slam-maschile/roland-garros-m?did=5&nid=2541018&eid=161046"),
+    (161035, "Roland Garros F",   "tennis", "slam-femminile", "internazionale", "/scommesse/sport/tennis/slam-femminile/roland-garros-f?did=5&nid=2541021&eid=161035"),
 ]
 # fmt: on
 
