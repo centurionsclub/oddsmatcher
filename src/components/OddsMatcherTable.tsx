@@ -751,7 +751,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         if (hasDrawKey && outcomes.length === 3) {
           if (bmEvent.market !== "1X2") return;
 
-          const dcCounters = findMatchingEvents(bmEvent, allPool).filter(e => e.market === "DC");
+          const dcCounters = findMatchingEvents(bmEvent, exchangeSide).filter(e => e.market === "DC");
           const sameMarket1x2 = matchingCounters.filter(e => e.market === "1X2");
 
           outcomes.forEach(outcome => {
