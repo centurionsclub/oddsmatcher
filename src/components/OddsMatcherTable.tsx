@@ -1253,10 +1253,20 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     if (committedFilters.bookmaker.length > 0) {
       result = result.filter(opp => {
         const book = (opp as any).bookmaker || (opp as any).bestBookmaker || "";
-        return committedFilters.bookmaker.some(bm =>
+        const bookMatches = committedFilters.bookmaker.some(bm =>
           book.toLowerCase().includes(bm.toLowerCase()) ||
           bm.toLowerCase().includes(book.toLowerCase())
         );
+        if (!bookMatches) return false;
+        // In punta-punta mode, also check the counter side (opp.exchange)
+        const exchange = (opp as any).exchange || "";
+        if ((opp as any).isBookVsBook && exchange) {
+          return committedFilters.bookmaker.some(bm =>
+            exchange.toLowerCase().includes(bm.toLowerCase()) ||
+            bm.toLowerCase().includes(exchange.toLowerCase())
+          );
+        }
+        return true;
       });
     }
     const qMin = parseFloat((committedFilters.quotaMinima || "0").replace(",", "."));
