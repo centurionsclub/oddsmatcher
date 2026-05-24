@@ -31,7 +31,7 @@ def main():
     )
     scrape_parser.add_argument(
         "--bookmaker",
-        choices=["lottomatica", "sisal", "eurobet", "snai", "bwin", "betsson", "williamhill", "bet365", "betfair", "oddsapi"],
+        choices=["lottomatica", "sisal", "eurobet", "snai", "bwin", "betsson", "williamhill", "betfair"],
         default=None,
         help="Scrape only this bookmaker (default: all)",
     )

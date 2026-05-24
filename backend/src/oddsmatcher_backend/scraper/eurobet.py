@@ -1010,15 +1010,3 @@ class EurobetScraper:
             seen[(r.event_name, r.market)] = r
         return list(seen.values())
 
-    # ── odds-api.io (tennis + basket) ────────────────────────────────────────
-
-    async def _run_playwright(self, sport_filter: str | None) -> list[MatchOdds]:
-        """Fetch tennis + basket odds from odds-api.io (replaces Playwright scraper)."""
-        from oddsmatcher_backend.scraper.oddsapi import EurobetApiScraper
-        scraper = EurobetApiScraper()
-        if sport_filter:
-            if sport_filter == "calcio":
-                # calcio is fully covered by webeb — no need to call oddsapi
-                return []
-            return await scraper.scrape_sport(sport_filter)
-        return await scraper.scrape_all()
