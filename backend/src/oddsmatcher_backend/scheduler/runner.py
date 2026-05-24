@@ -92,7 +92,29 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
     betsson_rows  = await _run_direct("Betsson",       BetssonScraper,     "betsson")
     wh_rows       = await _run_direct("William Hill",  WilliamHillScraper, "williamhill")
     bet365_rows        = await _run_direct("Bet365",        Bet365Scraper,      "bet365")
-    sportmonks_rows    = await _run_direct("Bet365",        SportmonksScraper,  "sportmonks")
+
+    # ── SportMonks (Bet365 football via API) ──────────────────────────────────
+    # Writes as "Bet365" so the data merges with other Bet365 sources in the app.
+    # Guard: only write when ≥ 5 rows are returned.  The free plan returns only
+    # 1-3 fixtures; writing that would delete all existing Bet365/calcio rows
+    # from centroquote and oddsapi, leaving almost nothing.  With a paid plan
+    # SportMonks covers major leagues and the write is valuable.
+    sportmonks_rows = 0
+    if bookmaker in (None, "sportmonks"):
+        try:
+            sm = SportmonksScraper()
+            sm_results = await (sm.scrape_sport(sport) if sport else sm.scrape_all())
+            if len(sm_results) >= 5:
+                w = SupabaseWriter()
+                sportmonks_rows = w.write_direct_live_odds("Bet365", sm_results)
+                logger.info("SportMonks done: %d results → %d rows", len(sm_results), sportmonks_rows)
+            else:
+                logger.info(
+                    "SportMonks skipped: only %d results (free plan covers too few leagues)",
+                    len(sm_results),
+                )
+        except Exception as exc:
+            logger.error("SportMonks scrape failed: %s", exc, exc_info=True)
 
     # ── odds-api.io combined (Bet365 + Eurobet tennis/basket) ─────────────────
     # Run as "--bookmaker oddsapi" in a dedicated hourly GitHub Actions job.
