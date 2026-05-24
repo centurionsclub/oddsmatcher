@@ -723,12 +723,15 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
     // Punta-punta only when the user explicitly selects bookmakers as counter side.
     const effectivePuntaPunta = isPuntaPuntaMode;
-    // In punta-punta, ENTRAMBI i lati usano rawExchangeSide (i bookmaker selezionati
-    // nel dropdown exchange). Rimuovere un bookmaker dal dropdown lo esclude da entrambi
-    // i lati — primo e secondo punta. filters.bookmaker può restringere ulteriormente
-    // il primo punta via applyFilters.
-    // In back-lay: allPool = tutti i dati, exchangeSide = exchange selezionati (Betfair ecc.)
-    const allPool = effectivePuntaPunta ? rawExchangeSide : data.data;
+    // I due lati sono INDIPENDENTI:
+    //   allPool (primo punta)    = tutti i bookmaker non-exchange
+    //                              → ulteriormente filtrato da filters.bookmaker in applyFilters
+    //   exchangeSide (secondo punta) = solo rawExchangeSide = bookmaker scelti nel dropdown
+    //                              → rimuovere dal dropdown li toglie SOLO dal secondo lato
+    // In back-lay: allPool = tutti i dati, exchangeSide = exchange reali selezionati
+    const allPool = effectivePuntaPunta
+      ? data.data.filter(odd => !isRealExchange(odd.bookmaker))
+      : data.data;
     const exchangeSide = rawExchangeSide;
 
     if (exchangeSide.length === 0) return [];
