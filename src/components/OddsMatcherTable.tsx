@@ -227,18 +227,44 @@ function matchTennisNames(a: string, b: string): boolean {
   return surnames.every(s => s.length >= 3 && otherLetters.includes(s));
 }
 
+/** Build a Set<string> of significant words (length > 2) from an event name.
+ *  Same normalization pipeline as normalizeEventName but returns the set
+ *  instead of a sorted joined string, so we can do subset comparisons. */
+function _eventWordSet(name: string): Set<string> {
+  let base = name
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[.\-–—']/g, " ")
+    .replace(/\b(v|vs|versus|fc|ac|sc|rc|cf|afc|bfc|vfb|rb|sl|sv)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  base = applyTeamAliases(base);
+  return new Set(base.split(" ").filter(w => w.length > 2));
+}
+
 function eventNamesMatch(a: string, b: string): boolean {
   // Tennis cross-format: handles "Lastname, Firstname - Lastname, Firstname" vs "Lastname I - Lastname I"
   // Require at least one name to have a comma (Lottomatica format) AND the match to be confirmed.
-  // Using OR (not AND) allows matching comma-format against initial-format, but we skip entirely
-  // if neither name has a comma (prevents football "Team A - Team B" from triggering tennis logic).
   if ((a.includes(',') || b.includes(',')) && matchTennisNames(a, b)) return true;
 
   const na = normalizeEventName(a);
   const nb = normalizeEventName(b);
   if (na === nb) return true;
-  // Partial match: one is a subset of the other (handles truncated names)
+  // Partial string match: handles truncated names (e.g. "Chels" vs "Chelsea")
   if (na.length >= 6 && nb.length >= 6 && (na.includes(nb) || nb.includes(na))) return true;
+
+  // Word-set subset match: handles Betfair "Surname Initial" format vs bookmakers with full first names.
+  // Betfair stores "Djokovic N - Alcaraz C" → words {djokovic, alcaraz}
+  // Sisal stores   "Alcaraz Carlos - Djokovic Novak" → words {alcaraz, carlos, djokovic, novak}
+  // The Betfair set is a strict subset → same match.
+  // Guard: smaller set ≥ 2 words AND larger ≤ 2× smaller (avoids over-broad matches).
+  const wsA = _eventWordSet(a);
+  const wsB = _eventWordSet(b);
+  if (wsA.size >= 2 && wsB.size >= 2) {
+    const [sm, lg] = wsA.size <= wsB.size ? [wsA, wsB] : [wsB, wsA];
+    if (lg.size <= sm.size * 2 && [...sm].every(w => lg.has(w))) return true;
+  }
+
   return false;
 }
 
@@ -1581,8 +1607,8 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
       // Calcio market: filter by outcome and exclude other sports
       filtered = filtered.filter(r => r.sport === "calcio" && r.outcome.toLowerCase() === selectedMarket.toLowerCase());
     } else {
-      // No market selected: exclude tennis and basket
-      filtered = filtered.filter(r => r.sport === "calcio");
+      // No market selected: show all sports (tennis, basket, calcio)
+      // Nothing to filter here — all rows are already included
     }
     const filteredRows = applyFilters(filtered);
 
