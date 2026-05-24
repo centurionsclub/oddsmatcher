@@ -417,16 +417,59 @@ class SnaiScraper:
 
         # Filter events for our leagues
         our_events: dict[int, list[dict]] = {}
+        disc_counts: dict[str, int] = {}
         for ev in all_events:
             if not isinstance(ev, dict):
                 continue
+            ev_disc = str(ev.get("codiceDisciplina") or ev.get("disciplina") or "?")
+            disc_counts[ev_disc] = disc_counts.get(ev_disc, 0) + 1
             mid = ev.get("codiceManifestazione")
             if mid and int(mid) in manif_to_league:
                 our_events.setdefault(int(mid), []).append(ev)
 
+        # Log what disciplines avvenimentiPrematch returned (helps debug missing sports)
+        logger.info("[Snai] avvenimenti disc breakdown: %s", disc_counts)
+        logger.info("[Snai] manif_to_league keys (sample): %s",
+                    list(manif_to_league.keys())[:10])
+
         for mid, evs in our_events.items():
             lg, _ = manif_to_league[mid]
             logger.info("[Snai] %s: %d events", lg, len(evs))
+
+        # If tennis competitions found but no tennis events matched from avvenimentiPrematch,
+        # it means avvenimentiPrematch doesn't include tennis. Try per-competition URL.
+        tennis_manifs = [(lg, mid) for mid, (lg, sk) in manif_to_league.items()
+                         if sk == "tennis" and mid not in our_events]
+        if tennis_manifs:
+            logger.info("[Snai] %d tennis competitions have no events in avvenimentiPrematch, "
+                        "trying per-competition avvenimentiList…", len(tennis_manifs))
+            async with httpx.AsyncClient(
+                headers=_SNAI_HEADERS, timeout=20, follow_redirects=True, proxy=proxy_url,
+            ) as client:
+                for lg, mid in tennis_manifs[:20]:  # cap to avoid timeout
+                    # Try known per-competition event list URL patterns
+                    for url_tmpl in [
+                        f"{API_BASE}/palinsesto/prematch/avvenimentiList/{mid}",
+                        f"{API_BASE}/palinsesto/prematch/avvenimentiPrematch?manifestazione={mid}",
+                        f"{API_BASE}/palinsesto/prematch/avvenimentiPrematch?disc=3&manifestazione={mid}",
+                    ]:
+                        try:
+                            r = await client.get(url_tmpl)
+                            logger.info("[Snai] Tennis %s %s → %d", lg, url_tmpl.split("/")[-1], r.status_code)
+                            if r.status_code == 200:
+                                d = r.json()
+                                avm2 = d.get("avvenimentoFeMap") or {}
+                                evs2 = list(avm2.values()) if isinstance(avm2, dict) else []
+                                if evs2:
+                                    our_events.setdefault(mid, []).extend(evs2)
+                                    # Update manif_to_league with disc=3 sport_key if not already
+                                    if mid not in manif_to_league:
+                                        manif_to_league[mid] = (lg, "tennis")
+                                    logger.info("[Snai] Tennis %s: got %d events via %s",
+                                                lg, len(evs2), url_tmpl.split("/")[-1])
+                                    break
+                        except Exception as e2:
+                            logger.debug("[Snai] Tennis %s probe failed: %s", lg, e2)
 
         # ── Phase 3: Fetch odds per event via schedaAvvenimento ──────────
         logger.info("[Snai] Fetching odds per event via schedaAvvenimento…")
