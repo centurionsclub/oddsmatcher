@@ -11,7 +11,7 @@ import { getBetfairUrl } from "@/lib/utils";
 
 const BOOKMAKERS = [
   "Bet365", "BetFlag Bookmaker", "Betsson", "Bwin",
-  "Eurobet", "GoldBet", "Lottomatica", "NetWin",
+  "Eurobet", "GoldBet", "Lottomatica",
   "Planetwin365", "Sisal", "Snai", "William Hill",
 ];
 // Note: Bet365, BetFlag Bookmaker scraped from centroquote.it

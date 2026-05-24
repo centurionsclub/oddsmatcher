@@ -23,7 +23,6 @@ BOOKMAKERS: list[str] = [
     "MarathonBet",
     "MyLotteriesPlay",
     "NetBet",
-    "NetWin",
     "Planetwin365",
     "PokerStars",
     "QuiGioco",

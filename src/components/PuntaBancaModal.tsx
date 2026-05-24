@@ -60,7 +60,6 @@ const BOOKMAKER_URLS: Record<string, string> = {
   "eurobet": "https://www.eurobet.it",
   "goldbet": "https://www.goldbet.it",
   "lottomatica": "https://www.lottomatica.it/scommesse/sport/",
-  "netwin": "https://www.netwin.it",
   "planetwin365": "https://www.planetwin365.it",
   "sisal": "https://www.sisal.it",
   "snai": "https://www.snai.it",

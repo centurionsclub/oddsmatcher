@@ -26,7 +26,6 @@ const bookmakers = [
   { value: "betflag", label: "BetFlag" },
   { value: "bettson", label: "Bettson" },
   { value: "planetwin", label: "PlanetWin365" },
-  { value: "netwin", label: "NetWin" },
   { value: "bwin", label: "Bwin" },
   { value: "williamhill", label: "William Hill" },
 ];

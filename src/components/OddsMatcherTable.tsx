@@ -265,7 +265,6 @@ const BOOK_COLORS: Record<string, { bg: string; text: string }> = {
   "william": { bg: "#1a3a5c", text: "#fff" },
   "gioco digitale": { bg: "#00a850", text: "#fff" },
   "netbet": { bg: "#1a8a1a", text: "#fff" },
-  "netwin": { bg: "#000000", text: "#fff" },
   "dazn": { bg: "#0d0f14", text: "#f8f8f5" },
   "domusbet": { bg: "#1a1a1a", text: "#e88a00" },
   "admiral": { bg: "#003366", text: "#fff" },
@@ -296,7 +295,6 @@ const BOOKMAKER_LOCAL_LOGOS: Array<[string, string]> = [
   ["lotto",        "/bookmakers/lottomatica.svg"],
   ["marathonbet",  "/bookmakers/marathonbet.svg"],
   ["planetwin",    "/bookmakers/planetwin365.svg"],
-  ["netwin",       "/bookmakers/netwin.png"],
   ["sisal",        "/bookmakers/sisal.svg"],
   ["snai",         "/bookmakers/snai.svg"],
   ["william",      "/bookmakers/williamhill.svg"],
@@ -330,7 +328,7 @@ function BookLogo({ bookmaker }: { bookmaker: string }) {
       <img
         src={logoPath}
         alt={label}
-        className={`${getBookLocalLogo(bookmaker)?.includes("netwin.png") ? "h-[29px]" : "h-5"} w-auto max-w-[120px] object-contain`}
+        className="h-5 w-auto max-w-[120px] object-contain"
         onError={() => setFailed(true)}
       />
     </div>
