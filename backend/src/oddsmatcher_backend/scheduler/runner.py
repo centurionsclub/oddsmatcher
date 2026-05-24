@@ -14,6 +14,7 @@ from oddsmatcher_backend.scraper.eurobet import EurobetScraper
 from oddsmatcher_backend.scraper.lottomatica import LottomaticaScraper
 from oddsmatcher_backend.scraper.sisal import SisalScraper
 from oddsmatcher_backend.scraper.snai import SnaiScraper
+from oddsmatcher_backend.scraper.sportmonks import SportmonksScraper
 from oddsmatcher_backend.scraper.williamhill import WilliamHillScraper
 
 logger = logging.getLogger(__name__)
@@ -90,7 +91,8 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
     bwin_rows     = await _run_direct("Bwin",          BwinScraper,        "bwin")
     betsson_rows  = await _run_direct("Betsson",       BetssonScraper,     "betsson")
     wh_rows       = await _run_direct("William Hill",  WilliamHillScraper, "williamhill")
-    bet365_rows   = await _run_direct("Bet365",        Bet365Scraper,      "bet365")
+    bet365_rows        = await _run_direct("Bet365",        Bet365Scraper,      "bet365")
+    sportmonks_rows    = await _run_direct("Bet365",        SportmonksScraper,  "sportmonks")
 
     # ── odds-api.io combined (Bet365 + Eurobet tennis/basket) ─────────────────
     # Run as "--bookmaker oddsapi" in a dedicated hourly GitHub Actions job.
@@ -138,6 +140,7 @@ async def run_scrape_cycle(sport: str | None = None, bookmaker: str | None = Non
         "betsson_live_rows":         betsson_rows,
         "wh_live_rows":              wh_rows,
         "bet365_live_rows":          bet365_rows,
+        "sportmonks_live_rows":      sportmonks_rows,
         "betfair_live_rows":         betfair_rows,
         "oddsapi_bet365_live_rows":  oddsapi_bet365_rows,
         "oddsapi_eurobet_live_rows": oddsapi_eurobet_rows,

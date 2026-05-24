@@ -293,3 +293,28 @@ jobs:
 
   # ── Bet365 ────────────────────────────────────────────────────────────
   # Bet365 is now handled by scrape_oddsapi.yml (odds-api.io, hourly, no playwright).
+
+  # ── SportMonks (Bet365 football odds via API) ─────────────────────────
+  scrape-sportmonks:
+    if: ${{ github.event.inputs.bookmaker == '' || github.event.inputs.bookmaker == 'sportmonks' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -e .
+
+      - name: Scrape Bet365 via SportMonks
+        working-directory: backend
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SPORTMONKS_KEY: ${{ secrets.SPORTMONKS_KEY }}
+        run: python -m oddsmatcher_backend.main scrape --bookmaker sportmonks
