@@ -719,12 +719,14 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
     // Punta-punta only when the user explicitly selects bookmakers as counter side.
     const effectivePuntaPunta = isPuntaPuntaMode;
-    // In punta-punta, escludiamo i veri exchange (Betfair Exchange ecc.) dall'allPool:
-    // hanno quote lay, non back — non sono confrontabili con i bookmaker.
+    // In punta-punta, sia il lato punta sia il lato counter usano rawExchangeSide
+    // (= i bookmaker selezionati nel dropdown exchange).
+    // Così rimuovere un bookmaker dal dropdown lo esclude da entrambi i lati.
+    // In back-lay: allPool = tutti i dati, exchangeSide = solo i veri exchange selezionati.
     const allPool = effectivePuntaPunta
-      ? data.data.filter(odd => !isRealExchange(odd.bookmaker))
+      ? rawExchangeSide
       : data.data;
-    const exchangeSide = effectivePuntaPunta ? allPool : rawExchangeSide;
+    const exchangeSide = rawExchangeSide;
 
     if (exchangeSide.length === 0) return [];
 
@@ -1253,20 +1255,10 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     if (committedFilters.bookmaker.length > 0) {
       result = result.filter(opp => {
         const book = (opp as any).bookmaker || (opp as any).bestBookmaker || "";
-        const bookMatches = committedFilters.bookmaker.some(bm =>
+        return committedFilters.bookmaker.some(bm =>
           book.toLowerCase().includes(bm.toLowerCase()) ||
           bm.toLowerCase().includes(book.toLowerCase())
         );
-        if (!bookMatches) return false;
-        // In punta-punta mode, also check the counter side (opp.exchange)
-        const exchange = (opp as any).exchange || "";
-        if ((opp as any).isBookVsBook && exchange) {
-          return committedFilters.bookmaker.some(bm =>
-            exchange.toLowerCase().includes(bm.toLowerCase()) ||
-            bm.toLowerCase().includes(exchange.toLowerCase())
-          );
-        }
-        return true;
       });
     }
     const qMin = parseFloat((committedFilters.quotaMinima || "0").replace(",", "."));
