@@ -672,19 +672,23 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
   }, [multiplaSelected, onMultiplaSelectedChange]);
 
   // ── Snapshot "committed" filters ──────────────────────────────────────────
-  // selectedExchanges e filters vengono aggiornati in tempo reale dalla UI,
-  // ma i calcoli pesanti (singolaOpps ecc.) devono girare SOLO quando arrivano
-  // nuovi dati (= l'utente ha cliccato Aggiorna). Usiamo uno snapshot che si
-  // congela fino alla prossima fetch.
+  // committedFilters: snapshot dei filtri (quota min/max, partita ecc.) — si aggiorna
+  //   solo quando arrivano nuovi dati (= l'utente ha cliccato Aggiorna).
+  // committedExchanges: LIVE — si aggiorna immediatamente quando l'utente cambia il
+  //   dropdown exchange. Non richiede re-fetch: è un semplice filtro lato client.
   const [committedExchanges, setCommittedExchanges] = useState<string[]>(selectedExchanges ?? []);
   const [committedFilters, setCommittedFilters] = useState(filters);
 
   useEffect(() => {
-    // data cambia solo quando Aggiorna viene cliccato → aggiorna snapshot
-    setCommittedExchanges(selectedExchanges ?? []);
+    // data cambia solo quando Aggiorna viene cliccato → aggiorna snapshot filtri
     setCommittedFilters(filters);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
+
+  useEffect(() => {
+    // Exchange selection è live: si applica subito senza attendere nuovi dati
+    setCommittedExchanges(selectedExchanges ?? []);
+  }, [selectedExchanges]);
   // ─────────────────────────────────────────────────────────────────────────
 
   const REAL_EXCHANGE_NAMES = ["betfair exchange", "betflag exchange", "smarkets", "betdaq", "matchbook"];
