@@ -194,8 +194,10 @@ const Index = () => {
     setStakeError(null);
     setFiltersOpen(false); // nascondi i filtri subito
     setMultiplaResetKey(k => k + 1); // reset selezione multipla
+    // Best odds needs data for all sports (user picks sport via market selector, not sport filter)
+    const sportForSearch = activeSubTab === "bestodds" ? "tutti" : selectedSport;
     searchOdds({
-      sport: selectedSport,
+      sport: sportForSearch,
       mercato: "tutti",
       partita,
       campionato,
@@ -217,6 +219,17 @@ const Index = () => {
     if (oddsLoading) return;
     const hasCalcio = oddsData?.data?.some((d: any) => d.sport === "calcio");
     if (!hasCalcio) {
+      searchOdds({ sport: "tutti", mercato: "tutti", partita: "", campionato: "" });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSubTab]);
+
+  // Quando si entra nella tab best odds, assicura che ci siano dati per tutti gli sport.
+  // Best odds può mostrare qualsiasi sport — se mancano dati fa un fetch silenzioso con "tutti".
+  useEffect(() => {
+    if (activeSubTab !== "bestodds") return;
+    if (oddsLoading) return;
+    if (!oddsData?.data?.length) {
       searchOdds({ sport: "tutti", mercato: "tutti", partita: "", campionato: "" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
