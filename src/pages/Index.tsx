@@ -95,6 +95,7 @@ const Index = () => {
   const [quotaMinima, setQuotaMinima] = useState("");
   const [quotaMassima, setQuotaMassima] = useState("");
   const [partita, setPartita] = useState("");
+  const [committedPartita, setCommittedPartita] = useState(""); // snapshot per filtro client-side
   const [campionato, setCampionato] = useState("");
   const [commission, setCommission] = useState(4.5);
 
@@ -196,11 +197,13 @@ const Index = () => {
     setMultiplaResetKey(k => k + 1); // reset selezione multipla
     // Best odds needs data for all sports (user picks sport via market selector, not sport filter)
     // Partita filter searches across all sports so "sinner" finds tennis even if sport=calcio
-    const sportForSearch = (activeSubTab === "bestodds" || partita.trim()) ? "tutti" : selectedSport;
+    const currentPartita = partita.trim();
+    const sportForSearch = (activeSubTab === "bestodds" || currentPartita) ? "tutti" : selectedSport;
+    setCommittedPartita(currentPartita); // salva per filtro client-side nella tabella
     searchOdds({
       sport: sportForSearch,
       mercato: "tutti",
-      partita,
+      partita: "", // NON filtrare server-side: evita che Betfair venga escluso se usa formato nome diverso
       campionato,
     });
     setPartita(""); // resetta il campo partita dopo la ricerca
@@ -1198,7 +1201,7 @@ const Index = () => {
               stakePunta,
               quotaMinima,
               quotaMassima,
-              partita,
+              partita: committedPartita,
               campionato,
               freebet: freeBet,
               rimborso,
