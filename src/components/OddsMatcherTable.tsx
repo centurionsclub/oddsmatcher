@@ -406,6 +406,47 @@ function findMatchingEvents(sourceEvent: OddsData, pool: OddsData[]): OddsData[]
   return pool.filter(ev => eventNamesMatch(sourceEvent.eventName, ev.eventName));
 }
 
+/**
+ * Split an event name into [firstTeam, secondTeam].
+ * Handles "Team A - Team B" and "Team A presso Team B" (NBA US format).
+ */
+function splitEventTeams(name: string): [string, string] | null {
+  const pressoIdx = name.toLowerCase().indexOf(" presso ");
+  if (pressoIdx !== -1) return [name.slice(0, pressoIdx).trim(), name.slice(pressoIdx + 8).trim()];
+  const parts = name.split(/\s+[-–—]\s+/);
+  if (parts.length === 2) return [parts[0].trim(), parts[1].trim()];
+  return null;
+}
+
+const _normTeam = (s: string) =>
+  s.toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[.\-']/g, " ")
+    .replace(/\b(fc|ac|sc|rc|cf|afc|bfc|vfb|rb|sl|sv)\b/g, " ")
+    .replace(/\s+/g, " ").trim();
+
+const _teamWords = (s: string) => new Set(_normTeam(s).split(" ").filter(w => w.length > 2));
+
+/**
+ * Returns true when two matched event names list teams in REVERSED order.
+ * e.g. "Cleveland Cavaliers - NY Knicks" vs "NY Knicks presso Cleveland Cavaliers"
+ * Requires BOTH cross-matches: A1↔B2 AND A2↔B1.
+ */
+function areEventsReversed(nameA: string, nameB: string): boolean {
+  const teamsA = splitEventTeams(nameA);
+  const teamsB = splitEventTeams(nameB);
+  if (!teamsA || !teamsB) return false;
+  const [wA1, wA2] = [_teamWords(teamsA[0]), _teamWords(teamsA[1])];
+  const [wB1, wB2] = [_teamWords(teamsB[0]), _teamWords(teamsB[1])];
+  if (wA1.size === 0 || wA2.size === 0 || wB1.size === 0 || wB2.size === 0) return false;
+  const a1MatchesB2 = [...wA1].some(w => wB2.has(w));
+  const a2MatchesB1 = [...wA2].some(w => wB1.has(w));
+  return a1MatchesB2 && a2MatchesB1;
+}
+
+/** Swap "1"↔"2" outcome key (for reversed events); all other keys unchanged. */
+function swap12(key: string): string { return key === "1" ? "2" : key === "2" ? "1" : key; }
+
 // ─── Shared helper functions (used by both modal and table) ──────────────────
 function formatDate(dateString: string): string {
   try {
@@ -869,7 +910,11 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
 
           matchingCounters.forEach(exEvent => {
             if (exEvent.market !== bmEvent.market) return; // same market only
-            const counterOdds = exEvent.odds[oppositeKey];
+            // Reversed event: both books use the same key for the same outcome,
+            // so the counter to look up is swap12(oppositeKey) = outcome.key
+            const exKey = areEventsReversed(bmEvent.eventName, exEvent.eventName)
+              ? swap12(oppositeKey) : oppositeKey;
+            const counterOdds = exEvent.odds[exKey];
             if (!counterOdds || counterOdds <= 1) return;
             if (bmEvent.bookmaker === exEvent.bookmaker) return;
 
@@ -927,11 +972,14 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             let bestEventId: string | undefined;
             let bestExLeague: string | undefined;
             matchingExchanges.forEach(exEvent => {
-              const layOdds = exEvent.odds[outcome.key];
+              // If event teams are listed in reversed order, swap 1↔2 to avoid false arb
+              const exKey = areEventsReversed(bmEvent.eventName, exEvent.eventName)
+                ? swap12(outcome.key) : outcome.key;
+              const layOdds = exEvent.odds[exKey];
               if (layOdds && layOdds > 1 && layOdds < bestLayOdds) {
                 bestLayOdds = layOdds;
                 bestExchange = exEvent.bookmaker;
-                bestVolume = exEvent.volume?.[outcome.key];
+                bestVolume = exEvent.volume?.[exKey];
                 bestMarketId = exEvent.marketId;
                 bestEventId = exEvent.eventId;
                 bestExLeague = exEvent.league;
@@ -1047,11 +1095,13 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
         let bestMarketId: string | undefined;
         let bestEventId: string | undefined;
         matchingExchanges.forEach(exEvent => {
-          const layOdds = exEvent.odds[outcome.key];
+          const exKey = areEventsReversed(bmEvent.eventName, exEvent.eventName)
+            ? swap12(outcome.key) : outcome.key;
+          const layOdds = exEvent.odds[exKey];
           if (layOdds && layOdds > 1 && layOdds < bestLayOdds) {
             bestLayOdds = layOdds;
             bestExchange = exEvent.bookmaker;
-            bestVolume = exEvent.volume?.[outcome.key];
+            bestVolume = exEvent.volume?.[exKey];
             bestMarketId = exEvent.marketId;
             bestEventId = exEvent.eventId;
           }
