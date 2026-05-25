@@ -262,11 +262,15 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                 home = pname
             elif ha in ("away", "2") and not away:
                 away = pname
+        presso_swap = False  # set True when "presso" detected: need to swap 1↔2 outcomes
         if not home:
             # Handle "Away presso Home" (Italian NBA format) — swap to get Home first
             presso_m = re.match(r"^(.+?)\s+presso\s+(.+)$", str(name_raw), re.IGNORECASE)
             if presso_m:
                 home, away = presso_m.group(2).strip(), presso_m.group(1).strip()
+                # API assigns sourceName "1" to the first team in the raw name (= Away).
+                # After swapping home/away we must also swap outcome keys 1↔2.
+                presso_swap = True
             else:
                 parts = re.split(r"\s+v[s]?\s+|\s+-\s+", str(name_raw))
                 home = parts[0].strip() if len(parts) >= 2 else str(name_raw).strip()
@@ -328,6 +332,10 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
                     if f and lbl:
                         odds_dict[lbl] = f
                 if odds_dict:
+                    # "presso" format: API ordered selections by original name (Away first).
+                    # Swap "1"↔"2" so outcome "1" = home team (consistent with Betfair).
+                    if presso_swap and "1" in odds_dict and "2" in odds_dict:
+                        odds_dict["1"], odds_dict["2"] = odds_dict["2"], odds_dict["1"]
                     results.append(MatchOdds(
                         sport=fix_sport, league=fix_league,
                         home_team=home, away_team=away,
@@ -392,6 +400,7 @@ def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchO
                     ev.get("description") or ev.get("EventName") or "")
         name = re.sub(r"\s+v\s+", " - ", str(name_raw)).strip()
         # Normalize "Away presso Home" → "Home - Away" (Italian NBA format)
+        presso_swap_fb = bool(re.search(r"\bpresso\b", name, re.IGNORECASE))
         name = re.sub(r"^(.+?)\s+presso\s+(.+)$", r"\2 - \1", name, flags=re.IGNORECASE)
         if not name:
             continue
@@ -430,6 +439,8 @@ def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchO
                     except (TypeError, ValueError):
                         pass
                 if odds_dict:
+                    if presso_swap_fb and "1" in odds_dict and "2" in odds_dict:
+                        odds_dict["1"], odds_dict["2"] = odds_dict["2"], odds_dict["1"]
                     results.append(MatchOdds(
                         sport=sport_key, league=league_name,
                         home_team=home, away_team=away,
