@@ -411,9 +411,11 @@ function findMatchingEvents(sourceEvent: OddsData, pool: OddsData[]): OddsData[]
  * Handles "Team A - Team B" and "Team A presso Team B" (NBA US format).
  */
 function splitEventTeams(name: string): [string, string] | null {
-  const pressoIdx = name.toLowerCase().indexOf(" presso ");
+  const lower = name.toLowerCase();
+  const pressoIdx = lower.indexOf(" presso ");
   if (pressoIdx !== -1) return [name.slice(0, pressoIdx).trim(), name.slice(pressoIdx + 8).trim()];
-  const parts = name.split(/\s+[-–—]\s+/);
+  // Split on " - ", " – ", " — ", " v ", " vs ", " vs. " (word-boundary safe)
+  const parts = name.split(/\s+(?:[-–—]|vs?\.?)\s+/i);
   if (parts.length === 2) return [parts[0].trim(), parts[1].trim()];
   return null;
 }
