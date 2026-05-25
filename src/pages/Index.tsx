@@ -195,7 +195,8 @@ const Index = () => {
     setFiltersOpen(false); // nascondi i filtri subito
     setMultiplaResetKey(k => k + 1); // reset selezione multipla
     // Best odds needs data for all sports (user picks sport via market selector, not sport filter)
-    const sportForSearch = activeSubTab === "bestodds" ? "tutti" : selectedSport;
+    // Partita filter searches across all sports so "sinner" finds tennis even if sport=calcio
+    const sportForSearch = (activeSubTab === "bestodds" || partita.trim()) ? "tutti" : selectedSport;
     searchOdds({
       sport: sportForSearch,
       mercato: "tutti",
