@@ -263,9 +263,14 @@ def _parse_cds_fixtures(data: Any, league_name: str, sport_key: str) -> list[Mat
             elif ha in ("away", "2") and not away:
                 away = pname
         if not home:
-            parts = re.split(r"\s+v[s]?\s+|\s+-\s+", name_raw)
-            home = parts[0].strip() if len(parts) >= 2 else name_raw.strip()
-            away = parts[1].strip() if len(parts) >= 2 else ""
+            # Handle "Away presso Home" (Italian NBA format) — swap to get Home first
+            presso_m = re.match(r"^(.+?)\s+presso\s+(.+)$", str(name_raw), re.IGNORECASE)
+            if presso_m:
+                home, away = presso_m.group(2).strip(), presso_m.group(1).strip()
+            else:
+                parts = re.split(r"\s+v[s]?\s+|\s+-\s+", str(name_raw))
+                home = parts[0].strip() if len(parts) >= 2 else str(name_raw).strip()
+                away = parts[1].strip() if len(parts) >= 2 else ""
         if not home:
             continue
 
@@ -386,6 +391,8 @@ def _parse_events(events: list, league_name: str, sport_key: str) -> list[MatchO
         name_raw = (ev.get("name") or ev.get("Name") or ev.get("eventDescription") or
                     ev.get("description") or ev.get("EventName") or "")
         name = re.sub(r"\s+v\s+", " - ", str(name_raw)).strip()
+        # Normalize "Away presso Home" → "Home - Away" (Italian NBA format)
+        name = re.sub(r"^(.+?)\s+presso\s+(.+)$", r"\2 - \1", name, flags=re.IGNORECASE)
         if not name:
             continue
         raw_time = (ev.get("startDate") or ev.get("StartDate") or ev.get("eventDate") or
