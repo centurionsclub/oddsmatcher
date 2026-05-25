@@ -1358,8 +1358,13 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     if (qMin > 0) result = result.filter(o => qField(o) >= qMin);
     if (qMax > 0) result = result.filter(o => qField(o) <= qMax);
     if (committedFilters.partita) {
-      const search = committedFilters.partita.toLowerCase();
-      result = result.filter(o => o.eventName.toLowerCase().includes(search));
+      const words = committedFilters.partita.toLowerCase()
+        .normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .split(/\s+/).filter(w => w.length > 0);
+      result = result.filter(o => {
+        const name = o.eventName.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        return words.every(w => name.includes(w));
+      });
     }
     if (committedFilters.campionato) {
       const search = committedFilters.campionato.toLowerCase();
@@ -1460,8 +1465,13 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
     // Apply filters
     let tvFiltered = trevieOpps;
     if (committedFilters.partita) {
-      const search = committedFilters.partita.toLowerCase();
-      tvFiltered = tvFiltered.filter(g => g.eventName.toLowerCase().includes(search));
+      const words = committedFilters.partita.toLowerCase()
+        .normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .split(/\s+/).filter(w => w.length > 0);
+      tvFiltered = tvFiltered.filter(g => {
+        const name = g.eventName.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        return words.every(w => name.includes(w));
+      });
     }
     if (committedFilters.daData) {
       const from = new Date(committedFilters.daData).getTime();
