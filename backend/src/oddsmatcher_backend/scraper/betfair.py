@@ -283,9 +283,7 @@ def _extract_rows(
     except Exception:
         event_time = datetime.now(timezone.utc).isoformat()
 
-    # Normalise "Team A v Team B" → "Team A - Team B" to match other bookmakers
     raw_name   = event.get("name", "Unknown")
-    event_name = re.sub(r"\s+v\s+", " - ", raw_name)
     event_id   = str(event.get("id", ""))
     league     = _normalise_league(competition.get("name", "Unknown"))
 
@@ -296,6 +294,20 @@ def _extract_rows(
             rd.get("runnerName", "Unknown"),
             rd.get("sortPriority", 99),
         )
+
+    # Build event_name from runner sort_priority so home team is always listed first.
+    # Betfair uses US convention for NBA (Away v Home in raw name) but sort_priority=1
+    # is always the home team. Reconstructing from sort order ensures "Home - Away"
+    # format consistent with Italian bookmakers, avoiding false arb from name reversal.
+    _by_priority = sorted(
+        [(name, prio) for name, prio in runner_map.values() if name != "The Draw"],
+        key=lambda x: x[1],
+    )
+    if len(_by_priority) >= 2:
+        event_name = f"{_by_priority[0][0]} - {_by_priority[1][0]}"
+    else:
+        # Fallback: normalise raw name separator only
+        event_name = re.sub(r"\s+v\s+", " - ", raw_name)
 
     mn = market_name.lower()
     for runner in book.get("runners", []):

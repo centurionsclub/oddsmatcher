@@ -974,9 +974,7 @@ export function OddsMatcherTable({ data, loading, activeTab, selectedExchanges, 
             let bestEventId: string | undefined;
             let bestExLeague: string | undefined;
             matchingExchanges.forEach(exEvent => {
-              // If event teams are listed in reversed order, swap 1↔2 to avoid false arb
-              const exKey = areEventsReversed(bmEvent.eventName, exEvent.eventName)
-                ? swap12(outcome.key) : outcome.key;
+              const exKey = outcome.key;
               const layOdds = exEvent.odds[exKey];
               if (layOdds && layOdds > 1 && layOdds < bestLayOdds) {
                 bestLayOdds = layOdds;
